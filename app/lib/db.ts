@@ -9,6 +9,12 @@ import { Pool, type PoolClient } from 'pg';
  *
  * `set_config(..., true)` leagă valoarea de tranzacție: la întoarcerea conexiunii
  * în pool nu rămâne nimic setat pentru următoarea cerere.
+ *
+ * În interiorul lui `caFirma`, interogările se scriu una după alta, cu `await`,
+ * niciodată în `Promise.all` pe același client: o conexiune execută o singură
+ * interogare odată. pg le pune azi la coadă cu un avertisment și le va refuza
+ * de la versiunea 9. Pentru paralelism adevărat, apeluri `caFirma` separate —
+ * fiecare își ia conexiunea ei din pool.
  */
 
 const pool = new Pool({

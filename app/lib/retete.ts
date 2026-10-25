@@ -113,25 +113,25 @@ export async function detaliiModel(id: string): Promise<DetaliiModel | null> {
       [id],
     );
     if (!model) return null;
-    const [componente, produse, alocari, libere, mat] = await Promise.all([
-      c.query<Componenta>(
-        `SELECT id, nume, tip::text AS tip, unitate::text AS unitate, consum::text AS consum
-           FROM model_componenta WHERE model_id = $1 ORDER BY ordine, nume`, [id]),
-      c.query<Omit<ProdusModel, 'materiale'>>(
-        `SELECT p.id, p.denumire, p.cod_sku, cu.nume AS culoare
-           FROM produs p LEFT JOIN culoare cu ON cu.id = p.culoare_id
-          WHERE p.model_id = $1 ORDER BY p.denumire`, [id]),
-      c.query<{ produs_id: string; componenta_id: string; material_id: string }>(
-        `SELECT produs_id, componenta_id, material_id FROM produs_material WHERE model_id = $1`, [id]),
-      c.query<DetaliiModel['libere'][number]>(
-        `SELECT id, denumire, cod_sku FROM produs
-          WHERE brand_id = $1 AND model_id IS NULL AND activ ORDER BY denumire`, [model.brand_id]),
-      c.query<Material>(
-        `SELECT m.id, m.tip::text AS tip, m.cod, m.denumire, cu.nume AS culoare,
-                m.unitate::text AS unitate, m.furnizor
-           FROM material m LEFT JOIN culoare cu ON cu.id = m.culoare_id
-          WHERE m.activ ORDER BY m.denumire`),
-    ]);
+    // Una după alta, nu Promise.all: o conexiune execută o singură interogare
+    // odată, iar toate stau în aceeași tranzacție (vezi caFirma).
+    const componente = await c.query<Componenta>(
+      `SELECT id, nume, tip::text AS tip, unitate::text AS unitate, consum::text AS consum
+         FROM model_componenta WHERE model_id = $1 ORDER BY ordine, nume`, [id]);
+    const produse = await c.query<Omit<ProdusModel, 'materiale'>>(
+      `SELECT p.id, p.denumire, p.cod_sku, cu.nume AS culoare
+         FROM produs p LEFT JOIN culoare cu ON cu.id = p.culoare_id
+        WHERE p.model_id = $1 ORDER BY p.denumire`, [id]);
+    const alocari = await c.query<{ produs_id: string; componenta_id: string; material_id: string }>(
+      `SELECT produs_id, componenta_id, material_id FROM produs_material WHERE model_id = $1`, [id]);
+    const libere = await c.query<DetaliiModel['libere'][number]>(
+      `SELECT id, denumire, cod_sku FROM produs
+        WHERE brand_id = $1 AND model_id IS NULL AND activ ORDER BY denumire`, [model.brand_id]);
+    const mat = await c.query<Material>(
+      `SELECT m.id, m.tip::text AS tip, m.cod, m.denumire, cu.nume AS culoare,
+              m.unitate::text AS unitate, m.furnizor
+         FROM material m LEFT JOIN culoare cu ON cu.id = m.culoare_id
+        WHERE m.activ ORDER BY m.denumire`);
     return {
       model,
       componente: componente.rows,

@@ -10,16 +10,15 @@ export type Nomenclatoare = {
   marimi: MarimeOptiune[];
 };
 
-/** Tot ce trebuie formularului de comandă, într-un singur drum la bază. */
+/** Tot ce trebuie formularului de comandă, într-o singură tranzacție. */
 export async function nomenclatoareComanda(): Promise<Nomenclatoare> {
   return caFirma(firmaCurenta(), async (c) => {
-    const [branduri, produse, marimi] = await Promise.all([
-      c.query<Optiune>(`SELECT id, nume FROM brand WHERE activ ORDER BY nume`),
-      c.query<ProdusOptiune>(
-        `SELECT id, denumire AS nume, cod_sku, brand_id FROM produs WHERE activ ORDER BY denumire`,
-      ),
-      c.query<MarimeOptiune>(`SELECT id, cod, cod_numeric FROM marime ORDER BY ordine`),
-    ]);
+    // Una după alta: o conexiune execută o singură interogare odată.
+    const branduri = await c.query<Optiune>(`SELECT id, nume FROM brand WHERE activ ORDER BY nume`);
+    const produse = await c.query<ProdusOptiune>(
+      `SELECT id, denumire AS nume, cod_sku, brand_id FROM produs WHERE activ ORDER BY denumire`,
+    );
+    const marimi = await c.query<MarimeOptiune>(`SELECT id, cod, cod_numeric FROM marime ORDER BY ordine`);
     return { branduri: branduri.rows, produse: produse.rows, marimi: marimi.rows };
   });
 }
