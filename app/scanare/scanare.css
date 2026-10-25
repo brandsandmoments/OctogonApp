@@ -1,0 +1,119 @@
+/* Telefon, în depozit, cu o mână ocupată de colet: butoane mari, cifre mari,
+   nimic de nimerit cu precizie. */
+
+.scanare { max-width: 30rem; padding-top: 1rem; }
+.scanare h1 { font-size: 1.25rem; }
+.scanare p { margin: .25rem 0; }
+
+.camera {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: .5rem;
+  overflow: hidden;
+  margin: .75rem 0;
+}
+.camera video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vizor {
+  position: absolute;
+  inset: 20% 10%;
+  border: 2px solid rgba(255, 255, 255, .8);
+  border-radius: .5rem;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .35);
+}
+
+.cod-manual { display: flex; gap: .5rem; margin: .75rem 0; }
+.cod-manual input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 1.1rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.scanare input[type="number"],
+.cod-manual input {
+  padding: .75rem;
+  border: 1px solid var(--linie);
+  border-radius: .5rem;
+  background: transparent;
+  color: inherit;
+}
+
+.scanare button {
+  font: inherit;
+  font-weight: 600;
+  min-height: 3rem;
+  padding: 0 1.25rem;
+  border: 1px solid var(--linie);
+  border-radius: .5rem;
+  background: transparent;
+  color: inherit;
+}
+.scanare button:disabled { opacity: .4; }
+
+.antet { margin: .5rem 0 1rem; }
+
+.cifre { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: 0 0 1.25rem; }
+.cifre div { border: 1px solid var(--linie); border-radius: .5rem; padding: .5rem; text-align: center; }
+.cifre dt { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--slab); }
+.cifre dd { margin: 0; font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cifre .lipsa dd { color: #b3401a; }
+.cifre .plus dd { color: #8a6100; }
+
+.eticheta-camp { font-size: .75rem; letter-spacing: .05em; text-transform: uppercase; color: var(--slab); }
+
+.cantitate { display: grid; grid-template-columns: 4rem 1fr 4rem; gap: .5rem; margin: .25rem 0 1rem; }
+.cantitate button { font-size: 1.5rem; padding: 0; }
+.cantitate input { font: inherit; font-size: 1.75rem; font-weight: 700; text-align: center; width: 100%; }
+
+.motive { border: 0; padding: 0; margin: 0 0 1rem; }
+.motive legend { font-weight: 600; margin-bottom: .5rem; }
+.motive label {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  min-height: 3rem;
+  padding: .5rem .75rem;
+  border: 1px solid var(--linie);
+  border-radius: .5rem;
+  margin-bottom: .4rem;
+}
+.motive label.ales { border-color: currentColor; font-weight: 600; }
+.motive input { width: 1.25rem; height: 1.25rem; margin: 0; }
+.motive .inchide { margin-top: .75rem; border-style: dashed; }
+
+.observatii { display: block; margin: 0 0 1rem; }
+.observatii textarea {
+  display: block;
+  width: 100%;
+  margin-top: .25rem;
+  padding: .75rem;
+  font: inherit;
+  border: 1px solid var(--linie);
+  border-radius: .5rem;
+  background: transparent;
+  color: inherit;
+}
+
+.scanare .confirma {
+  width: 100%;
+  min-height: 3.5rem;
+  font-size: 1.1rem;
+  background: var(--text);
+  color: var(--fundal);
+  border-color: var(--text);
+}
+.scanare .secundar { width: 100%; margin-top: .75rem; }
+
+.eroare { color: #b3401a; font-weight: 600; }
+.ok { color: #2f7a3a; font-weight: 600; }
+.atentie { color: #8a6100; font-weight: 600; }
+.ok.mare { font-size: 1.2rem; margin-bottom: .75rem; }
+
+@media (prefers-color-scheme: dark) {
+  .cifre .lipsa dd, .eroare { color: #f08a5d; }
+  .ok { color: #7fcf8a; }
+  .cifre .plus dd, .atentie { color: #e0b34a; }
+}

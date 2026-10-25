@@ -100,4 +100,20 @@ LEFT JOIN receptie r  ON r.eticheta_id = e.id
 GROUP BY c.numar, p.denumire, m.cod, cc.cantitate;
 
 \echo ''
+\echo '--- 10. inchidere pe zero fara observatii (asteptat: EROARE, CHECK)'
+INSERT INTO motiv (id, firma_id, cod, nume, contexte)
+VALUES ('dddddddd-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+        'extern_intarziere', 'Producator extern in intarziere', ARRAY['receptie']::context_motiv[]);
+\set ON_ERROR_STOP off
+INSERT INTO receptie (firma_id, eticheta_id, cantitate, motiv_id, inchide_pozitia)
+VALUES ('11111111-1111-1111-1111-111111111111', 'ffffffff-0000-0000-0000-000000000001', 0,
+        'dddddddd-0000-0000-0000-000000000001', true);
+\set ON_ERROR_STOP on
+
+\echo '--- 11. inchidere pe zero cu motiv si observatii (asteptat: INSERT 0 1)'
+INSERT INTO receptie (firma_id, eticheta_id, cantitate, motiv_id, inchide_pozitia, observatii)
+VALUES ('11111111-1111-1111-1111-111111111111', 'ffffffff-0000-0000-0000-000000000001', 0,
+        'dddddddd-0000-0000-0000-000000000001', true, 'Atelierul a renuntat la rest');
+
+\echo ''
 \echo '=== gata'

@@ -231,12 +231,12 @@ Goods receipt. One scan of one label. Quantities are summed from here, never sto
 |---|---|
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `eticheta_id` | Label scanned |
-| `cantitate` | Pieces received in this scan |
+| `cantitate` | Pieces received in this scan. Zero only when the row closes the position and carries notes. |
 | `scanat_de` | Scanned by |
 | `scanat_la` | Scanned at |
 | `motiv_id` | Reason, required when the position is closed short |
 | `inchide_pozitia` | Closes the position short: the rest is not coming |
-| `observatii` | Notes |
+| `observatii` | Notes. Required when the position is closed with zero pieces. |
 
 ## `utilizator`
 
