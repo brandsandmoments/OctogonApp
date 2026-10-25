@@ -15,6 +15,7 @@ se poate schimba ieftin mai târziu.
 |---|---|
 | `db/migrations/0001_structura.sql` | lanțul comandă → linie → planificare → lot → etichetă → recepție |
 | `db/migrations/0002_izolare.sql` | izolarea între firme, impusă de Postgres |
+| `db/test_izolare.sql` | nouă verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -57,6 +58,18 @@ SET app.firma_id = '<uuid-ul firmei>';
 ```
 
 Fără asta, toate interogările întorc zero rânduri. Intenționat.
+
+## Verificare
+
+```sh
+psql octogon -f db/test_izolare.sql
+```
+
+Testul nu verifică doar că migrările rulează, ci că structura se poartă corect:
+aplicația nu vede nimic fără firmă setată, nu vede și nu poate scrie datele altei
+firme, nu poate crea un lot fără planificare, nu poate șterge o comandă care are
+linii în producție, nu poate refolosi un cod de etichetă, nu poate înregistra o
+recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipsesc 3*.
 
 ## Ce urmează
 
