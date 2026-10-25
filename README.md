@@ -79,7 +79,7 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Migrarea 0003: mărimi numerice și lista de motive
 - [x] Primul ecran: pozițiile deschise cu progresul lor
 - [ ] Autentificare și roluri (acum firma vine din `FIRMA_ID`, din mediu)
-- [ ] Generarea etichetelor: Code 128 + QR, pe coală A4
+- [x] Generarea etichetelor: Code 128 + QR, pe coală A4
 - [ ] Ecranul de scanare, pe telefon
 - [ ] Import din Google Sheets, ca oglindă read-only
 
@@ -102,6 +102,7 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | Ecran | Ce arată |
 |---|---|
 | `/comenzi` | pozițiile deschise cu progresul lor: cerut, intrat, lipsesc, motiv |
+| `/etichete/<comanda>` | coala A4 de etichete a comenzii, gata de tipărit |
 
 ## Limba schemei
 
@@ -128,3 +129,22 @@ Grila principală e XXS–2XL. Denumirea numerică EU stă alături, pe aceeași
 Nu sunt mărimi separate. Dacă ar fi rânduri distincte, cele 7 ar deveni 14 și
 fiecare cantitate s-ar împărți în două. `marime_alias` acoperă și cum le scriu
 alte sisteme — Shopify Sleevy trimite `2XS` unde noi scriem `XXS`.
+
+## Etichetele
+
+Zece pe coală A4, 105 x 59,4 mm — A4 împărțit exact în două pe lățime și în cinci
+pe înălțime, deci se taie cu rigla fără rest. Totul e dimensionat în milimetri:
+ce se taie cu rigla nu se măsoară în pixeli.
+
+Pe fiecare etichetă: denumirea produsului, **SKU-ul**, mărimea cu echivalentul
+numeric, **numărul comenzii** și poziția, un QR în colț și un Code 128 lat jos.
+Numărul comenzii și SKU-ul sunt tipărite cu litere; în codul de bare stă doar
+serialul.
+
+**Se tipărește la 100%**, fără „scale to fit". Redimensionarea strică raportul
+dintre bare și codurile nu se mai citesc.
+
+Verificarea nu s-a făcut privind pagina, ci decodând-o: cele șase coduri de pe
+coala unei comenzi reale au fost extrase din HTML, randate ca imagini și citite
+înapoi cu un cititor de coduri de bare. Așa s-a descoperit și că fără zona liberă
+din jurul codului nu se citește niciunul.
