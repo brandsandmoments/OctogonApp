@@ -17,6 +17,8 @@ export type RandNecesar = {
   culoare: string | null;
   unitate: string;
   necesar: string; // numeric vine ca text din pg: fără pierderi de zecimale
+  cu_pierderi: string;
+  disponibil: string; // stoc minus tot ce e rezervat de planificările active
   produse: string[];
 };
 
@@ -52,13 +54,20 @@ export async function necesarComanda(numar: string): Promise<Necesar | null> {
     if (!antet) return null;
 
     const { rows: randuri } = await c.query<RandNecesar>(
-      `SELECT m.tip::text AS tip, m.id AS material_id, m.cod, m.denumire,
+      `WITH pierderi AS (
+           SELECT 1 + coalesce(sum(valoare), 0) AS factor FROM parametru
+            WHERE cheie IN ('pierderi_tehnologice', 'defecte_material', 'neconformitati_productie'))
+       SELECT m.tip::text AS tip, m.id AS material_id, m.cod, m.denumire,
               cu.nume AS culoare, m.unitate::text AS unitate,
               sum(n.necesar)::text AS necesar,
+              (sum(n.necesar) * (SELECT factor FROM pierderi))::numeric(12,3)::text AS cu_pierderi,
+              (min(s.stoc) - coalesce((SELECT sum(r.rezervat) FROM rezervare_material r
+                                        WHERE r.material_id = m.id), 0))::numeric(12,3)::text AS disponibil,
               array_agg(DISTINCT p.denumire ORDER BY p.denumire) AS produse
          FROM necesar_comanda n
-         JOIN material m ON m.id = n.material_id
-         JOIN produs p   ON p.id = n.produs_id
+         JOIN material m      ON m.id = n.material_id
+         JOIN stoc_material s ON s.material_id = m.id
+         JOIN produs p        ON p.id = n.produs_id
          LEFT JOIN culoare cu ON cu.id = m.culoare_id
         WHERE n.comanda = $1
         GROUP BY m.tip, m.id, m.cod, m.denumire, cu.nume, m.unitate

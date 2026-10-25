@@ -4,6 +4,8 @@ const ECRANE: [string, string, string][] = [
   ['/centralizator', 'Centralizator', 'toate liniile PSF și PSC: cerut, planificat, croit, intrat'],
   ['/comenzi/noua', 'Comandă nouă', 'PSF sau PSC, cu grila de mărimi'],
   ['/modele', 'Modele și rețete', 'consumul pe bucată și materialul fiecărei culori'],
+  ['/stoc', 'Stoc materiale', 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor'],
+  ['/inventar', 'Inventar', 'numărătoare fizică; diferențele devin ajustări'],
   ['/materiale', 'Materiale', 'materii prime și accesorii'],
   ['/comenzi', 'Poziții deschise', 'progresul fiecărei poziții'],
   ['/scanare', 'Recepție', 'scanează o etichetă, pe telefon'],

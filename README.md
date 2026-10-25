@@ -20,8 +20,9 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0005_inchidere_pe_zero.sql` | o poziție se poate închide cu zero bucăți, cu motiv și observații |
 | `db/migrations/0006_modele_materiale_retete.sql` | modele, materiale, rețete și necesarul pe comandă |
 | `db/migrations/0007_campuri_din_dashboard.sql` | familia și prețul materialului, stofa principală a modelului |
+| `db/migrations/0008_stoc_si_inventar.sql` | fișa de magazie, rezervarea din planificări, inventarul, parametrii de pierderi |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
-| `db/test_izolare.sql` | paisprezece verificări de purtare, rulate pe Postgres 16 |
+| `db/test_izolare.sql` | nouăsprezece verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -86,7 +87,7 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Generarea etichetelor: Code 128 + QR, pe coală A4
 - [x] Ecranul de scanare, pe telefon
 - [x] Introducerea PSF/PSC, centralizatorul, rețete pe model, necesarul pe comandă
-- [ ] Stoc și inventar pe materii prime și accesorii: rezervare la planificare, scădere la croit
+- [x] Stoc și inventar pe materii prime și accesorii: rezervare la planificare, scădere la croit (butonul de consum vine cu ecranele de croit)
 - [ ] Planificarea, croitul (de croit / croite / rămas de croit), alimentarea benzii
 - [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
 - [ ] Import din cele trei magazine Shopify; planificarea, croitul și recepțiile din dashboard
@@ -117,6 +118,8 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | `/necesar/<comanda>` | materia primă și accesoriile unei comenzi, plus ce lipsește din rețete |
 | `/modele`, `/modele/<id>` | modelele, consumul pe bucată, materialul fiecărei culori |
 | `/materiale` | nomenclatorul de materii prime și accesorii |
+| `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
+| `/inventar`, `/inventar/<id>` | numărătoarea fizică; la închidere, diferențele devin ajustări |
 
 ## Limba schemei
 
@@ -179,6 +182,35 @@ Necesarul unei comenzi = bucăți cerute × consum, adunat pe material, calculat
 vederea `necesar_comanda`. Un produs fără model, un model fără rețetă sau o
 componentă fără material **nu dispar din sumă**: ecranul le arată deasupra
 tabelului, pentru că un necesar care tace despre ele pare complet și nu e.
+
+## Stocul de materiale
+
+Stocul nu e o coloană, e suma fișei de magazie (`miscare_stoc`): fiecare intrare
+de la furnizor, consum la croit, ieșire sau ajustare de inventar e un rând, cu
+dată, document și semn. Baza verifică semnul după tip (o intrare nu poate scădea
+stocul) și cere documentul potrivit (consumul spune lotul, ajustarea spune
+inventarul). Aplicația poate **adăuga** rânduri, nu le poate schimba: o greșeală
+se corectează cu o mișcare inversă, care rămâne vizibilă.
+
+**Rezervarea se calculează, nu se scrie.** Cât timp o planificare e activă,
+materialul pentru ce a rămas de croit din ea e rezervat: rest de croit × consumul
+din rețetă. Pe măsură ce croitul înregistrează bucățile croite, rezervarea scade
+singură — nu există rezervări uitate.
+
+| | |
+|---|---|
+| **Stoc** | suma fișei de magazie |
+| **Rezervat** | rest de croit din planificările active × consum |
+| **Disponibil** | stoc − rezervat |
+| **Neplanificat** | ce cer comenzile deschise și n-a intrat încă în planificare × consum |
+| **De aprovizionat** | (rezervat + neplanificat) × (1 + pierderi) − stoc |
+
+Pierderile sunt parametri ai firmei (`parametru`), nu numere în cod: 5% tehnologic,
+8% defecte de material, 7% neconformități, ca în fila TINTE din dashboard.
+
+**Inventarul** se numără pe o listă; un câmp gol înseamnă nenumărat, nu zero, deci
+un inventar parțial (doar stofele) nu golește restul stocului. La închidere,
+diferența dintre numărat și fișa de magazie de atunci devine o ajustare.
 
 ## Importul din dashboard
 

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { cantitate } from '../../lib/format';
 import { necesarComanda, type Gol, type RandNecesar } from '../../lib/necesar';
 
 export const dynamic = 'force-dynamic';
@@ -9,11 +10,6 @@ const PROBLEME: Record<Gol['problema'], string> = {
   fara_reteta: 'modelul nu are rețetă',
   material_nealocat: 'material nealocat',
 };
-
-/** 14.700 → „14,7"; 42.000 → „42". Zecimalele inutile doar încurcă la citit. */
-function cantitate(text: string): string {
-  return Number(text).toLocaleString('ro-RO', { maximumFractionDigits: 3 });
-}
 
 function Tabel({ titlu, randuri }: { titlu: string; randuri: RandNecesar[] }) {
   if (randuri.length === 0) return null;
@@ -26,6 +22,8 @@ function Tabel({ titlu, randuri }: { titlu: string; randuri: RandNecesar[] }) {
             <th>Material</th>
             <th>Pentru</th>
             <th className="nr">Necesar</th>
+            <th className="nr">Cu pierderi</th>
+            <th className="nr">Disponibil</th>
           </tr>
         </thead>
         <tbody>
@@ -38,6 +36,11 @@ function Tabel({ titlu, randuri }: { titlu: string; randuri: RandNecesar[] }) {
               </td>
               <td className="slab">{r.produse.join(', ')}</td>
               <td className="nr"><strong>{cantitate(r.necesar)}</strong> {r.unitate}</td>
+              <td className="nr">{cantitate(r.cu_pierderi)}</td>
+              {/* Disponibilul e al întregului depozit, nu al comenzii: alte comenzi îl pot cere și ele. */}
+              <td className={`nr ${Number(r.disponibil) < Number(r.cu_pierderi) ? 'lipsa' : ''}`}>
+                {cantitate(r.disponibil)}
+              </td>
             </tr>
           ))}
         </tbody>

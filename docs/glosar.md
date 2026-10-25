@@ -111,6 +111,30 @@ Tenant. One garment company. Every other table carries firma_id and is isolated 
 | `activa` | Active |
 | `creat_la` | Created at |
 
+## `inventar`
+
+Physical stock count. Closing it writes the differences to the ledger as adjustments.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `data` | Count date |
+| `descriere` | Description: full count, fabrics only |
+| `deschis_la` | Opened at |
+| `inchis_la` | Closed at; once closed, the count is final |
+| `inchis_de` | Closed by |
+
+## `inventar_linie`
+
+One counted material in a stock count.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `cantitate_numarata` | Quantity physically counted |
+| `stoc_scriptic` | Book stock at closing time; the adjustment is counted minus this |
+| `numarat_la` | Counted at |
+
 ## `lot_croit`
 
 Cutting batch. Cannot exist without a planning batch: that constraint is what prevents the orphan batches the spreadsheet accumulated.
@@ -188,6 +212,25 @@ Raw material (fabric, lining) or accessory (zip, button, label) kept in stock.
 | `familie` | Material family as purchasing groups it: fabric, buttons, haberdashery, elastic |
 | `pret_referinta` | Reference unit price, RON, per unit of measure |
 
+## `miscare_stoc`
+
+Stock ledger for raw materials and accessories. Stock is the sum of this table, never a stored figure. Rows are append-only: mistakes are corrected with a reversing row.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `tip` | Movement kind: intrare (receipt from supplier), consum_croit (used in cutting), ajustare_inventar (stock count correction), iesire (other issue), retur_furnizor (return to supplier) |
+| `cantitate` | Signed quantity in the material's unit: positive in, negative out. The sign must match the kind. |
+| `data` | Movement date |
+| `furnizor` | Supplier, on receipts and returns |
+| `document` | Supporting document: invoice, delivery note, receiving report |
+| `pret_unitar` | Unit price, RON, on receipts |
+| `lot_id` | Cutting batch that consumed it. Required on consumption. |
+| `inventar_id` | Stock count that produced the adjustment. Required on adjustments. |
+| `observatii` | Notes |
+| `creat_de` | Recorded by |
+| `creat_la` | Recorded at |
+
 ## `model`
 
 Garment model, shared by all its colours: Trening Echo. The recipe belongs here, so a new colour needs no new recipe.
@@ -225,6 +268,17 @@ Reason, from a fixed list. Free text here means nothing can be counted, and coun
 | `nume` | Reason as shown to the user, in Romanian |
 | `contexte` | Where this reason may be picked: croit (cutting), receptie (goods receipt) |
 | `activ` | Active |
+
+## `parametru`
+
+Company operating parameters: loss percentages and the like. Data, not code.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `cheie` | Parameter key |
+| `valoare` | Value; percentages as fractions (0.05 = 5%) |
+| `descriere` | What the parameter means |
 
 ## `planificare`
 

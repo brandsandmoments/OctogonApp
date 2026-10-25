@@ -81,3 +81,16 @@
 .lista-bife { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .25rem 1rem; }
 .lista-bife label { display: flex; align-items: center; gap: .5rem; }
 .lista-bife input { width: auto; }
+
+.caseta { border: 1px solid var(--linie); border-radius: .5rem; padding: .5rem 1rem; margin: 1rem 0; }
+.caseta summary { cursor: pointer; font-weight: 600; padding: .25rem 0; }
+.formular .numar-scurt { width: 7rem; text-align: right; }
+.ok { color: #2f7a3a; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .ok { color: #7fcf8a; } }
+
+.cifre-birou { display: grid; grid-template-columns: repeat(3, minmax(0, 12rem)); gap: .75rem; margin: 1rem 0; }
+.cifre-birou div { border: 1px solid var(--linie); border-radius: .5rem; padding: .5rem .75rem; }
+.cifre-birou dt { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--slab); }
+.cifre-birou dd { margin: 0; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cifre-birou dd span { font-size: .9rem; font-weight: 400; color: var(--slab); }
+.cifre-birou .lipsa dd { color: #b3401a; }

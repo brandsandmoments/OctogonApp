@@ -107,6 +107,14 @@ LOOP
     ON CONFLICT (firma_id, cod) DO NOTHING;
 END LOOP;
 
+-- ---- parametri: pierderile din TINTE!B17:B19. Necesarul de aprovizionat le
+--      adaugă peste necesarul brut, ca în dashboard (5% + 8% + 7% = 20%).
+INSERT INTO parametru (firma_id, cheie, valoare, descriere) VALUES
+    (f, 'pierderi_tehnologice',     0.05, 'Pierderi tehnologice la croit'),
+    (f, 'defecte_material',         0.08, 'Defecte de material'),
+    (f, 'neconformitati_productie', 0.07, 'Neconformitati in productie')
+ON CONFLICT (firma_id, cheie) DO NOTHING;
+
 END $seed$;
 
 COMMIT;

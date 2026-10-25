@@ -151,4 +151,49 @@ SELECT componenta || ' | ' || coalesce(material_id::text, 'MATERIAL NEALOCAT')
   FROM necesar_comanda WHERE comanda = 'psc-sep-26-1' ORDER BY componenta DESC;
 
 \echo ''
+\echo '--- 15. intrare cu cantitate negativa (asteptat: EROARE, semnul tine de tip)'
+\set ON_ERROR_STOP off
+INSERT INTO miscare_stoc (firma_id, material_id, tip, cantitate)
+VALUES ('11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-0000000000a1', 'intrare', -5);
+
+\echo '--- 16. consum fara lot de croit (asteptat: EROARE, consumul spune lotul)'
+INSERT INTO miscare_stoc (firma_id, material_id, tip, cantitate)
+VALUES ('11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-0000000000a1', 'consum_croit', -5);
+\set ON_ERROR_STOP on
+
+\echo '--- 17. intrare de 100 m jerseu, apoi fisa nu se poate rescrie (asteptat: EROARE de permisiune)'
+INSERT INTO miscare_stoc (id, firma_id, material_id, tip, cantitate, furnizor, document) VALUES
+  ('99999999-0000-0000-0000-0000000000f1', '11111111-1111-1111-1111-111111111111',
+   '99999999-0000-0000-0000-0000000000a1', 'intrare', 100, 'Textila SRL', 'FCT 123');
+\set ON_ERROR_STOP off
+UPDATE miscare_stoc SET cantitate = 1000 WHERE id = '99999999-0000-0000-0000-0000000000f1';
+\set ON_ERROR_STOP on
+
+\echo '--- 18. planificare de 7 buc M: rezervat 7 x 2,1 = 14,7 m'
+INSERT INTO planificare (id, firma_id, linie_id, numar_transa, stadiu) VALUES
+  ('99999999-0000-0000-0000-0000000000b1', '11111111-1111-1111-1111-111111111111',
+   'eeeeeeee-0000-0000-0000-000000000001', 1, 'gata_de_lansat');
+INSERT INTO planificare_cantitate (firma_id, planificare_id, marime_id, cantitate) VALUES
+  ('11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-0000000000b1',
+   'bbbbbbbb-0000-0000-0000-000000000001', 7);
+SELECT 'stoc ' || s.stoc || ' | rezervat ' || coalesce(r.rezervat, 0) || ' | disponibil ' || (s.stoc - coalesce(r.rezervat, 0))
+  FROM stoc_material s LEFT JOIN rezervare_material r ON r.material_id = s.material_id
+ WHERE s.material_id = '99999999-0000-0000-0000-0000000000a1';
+
+\echo '--- 19. croite 4 din 7, consumate 8,6 m: stoc 91,4, rezervat 3 x 2,1 = 6,3'
+UPDATE planificare SET stadiu = 'in_croit' WHERE id = '99999999-0000-0000-0000-0000000000b1';
+INSERT INTO lot_croit (id, firma_id, planificare_id) VALUES
+  ('99999999-0000-0000-0000-0000000000d1', '11111111-1111-1111-1111-111111111111',
+   '99999999-0000-0000-0000-0000000000b1');
+INSERT INTO lot_croit_efectiv (firma_id, lot_id, marime_id, cantitate) VALUES
+  ('11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-0000000000d1',
+   'bbbbbbbb-0000-0000-0000-000000000001', 4);
+INSERT INTO miscare_stoc (firma_id, material_id, tip, cantitate, lot_id) VALUES
+  ('11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-0000000000a1',
+   'consum_croit', -8.6, '99999999-0000-0000-0000-0000000000d1');
+SELECT 'stoc ' || s.stoc || ' | rezervat ' || coalesce(r.rezervat, 0) || ' | disponibil ' || (s.stoc - coalesce(r.rezervat, 0))
+  FROM stoc_material s LEFT JOIN rezervare_material r ON r.material_id = s.material_id
+ WHERE s.material_id = '99999999-0000-0000-0000-0000000000a1';
+
+\echo ''
 \echo '=== gata'
