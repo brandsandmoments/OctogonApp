@@ -19,6 +19,8 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0004_traduceri.sql` | descrierea în engleză a fiecărui tabel și a fiecărei coloane |
 | `db/migrations/0005_inchidere_pe_zero.sql` | o poziție se poate închide cu zero bucăți, cu motiv și observații |
 | `db/migrations/0006_modele_materiale_retete.sql` | modele, materiale, rețete și necesarul pe comandă |
+| `db/migrations/0007_campuri_din_dashboard.sql` | familia și prețul materialului, stofa principală a modelului |
+| `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
 | `db/test_izolare.sql` | paisprezece verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
@@ -86,7 +88,8 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Introducerea PSF/PSC, centralizatorul, rețete pe model, necesarul pe comandă
 - [ ] Stoc și inventar pe materii prime și accesorii: rezervare la planificare, scădere la croit
 - [ ] Planificarea, croitul (de croit / croite / rămas de croit), alimentarea benzii
-- [ ] Import din Google Sheets și din cele trei magazine Shopify
+- [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
+- [ ] Import din cele trei magazine Shopify; planificarea, croitul și recepțiile din dashboard
 
 ## Aplicația
 
@@ -176,6 +179,30 @@ Necesarul unei comenzi = bucăți cerute × consum, adunat pe material, calculat
 vederea `necesar_comanda`. Un produs fără model, un model fără rețetă sau o
 componentă fără material **nu dispar din sumă**: ecranul le arată deasupra
 tabelului, pentru că un necesar care tace despre ele pare complet și nu e.
+
+## Importul din dashboard
+
+```sh
+npm run import:dashboard -- dashboard.xlsx   # File → Download → Microsoft Excel
+```
+
+Aduce brandurile, categoriile, culorile, materialele (NOM_MATERIALE), modelele cu
+rețetele lor (RETETE), produsele (NOM_PRODUSE) și comenzile PSF și PSC. Coloanele se
+caută după antet, nu după literă: o coloană inserată în sheet nu mută datele în
+câmpul greșit.
+
+- **Totul sau nimic**, într-o singură tranzacție.
+- **Se poate rula din nou.** Nomenclatoarele se actualizează după cheia lor; o
+  comandă care există deja nu se rescrie, iar materialul ales în aplicație pentru
+  o culoare nu se înlocuiește — din clipa în care au intrat, aplicația e sursa lor.
+- **Nimic nu se pierde în tăcere.** La final, raportul spune rând cu rând ce n-a
+  putut fi potrivit: un produs care nu e în catalog, o comandă fără dată de lansare,
+  o culoare scrisă altfel decât în listă.
+
+Primul import, pe sheet-ul din 24 octombrie 2026: 690 de produse, 107 modele cu
+1.809 componente de rețetă, 134 de materiale, 227 de comenzi (182 PSF, 45 PSC) cu
+9.962 de bucăți. Față de sheet lipsesc exact 20 de bucăți: linia „antoniq turqoise",
+al cărei produs nu există în catalog.
 
 ## Recepția
 

@@ -185,6 +185,8 @@ Raw material (fabric, lining) or accessory (zip, button, label) kept in stock.
 | `furnizor` | Supplier |
 | `activ` | Active |
 | `creat_la` | Created at |
+| `familie` | Material family as purchasing groups it: fabric, buttons, haberdashery, elastic |
+| `pret_referinta` | Reference unit price, RON, per unit of measure |
 
 ## `model`
 
@@ -210,6 +212,7 @@ Recipe line of a model: which component, how much per finished piece. The materi
 | `unitate` | Unit the consumption is expressed in |
 | `consum` | Consumption per finished piece, in that unit |
 | `ordine` | Display order |
+| `principal` | Main fabric of the model: the one cutting depends on. At most one per model. |
 
 ## `motiv`
 

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "db:reset": "./scripts/db-reset.sh"
+    "db:reset": "./scripts/db-reset.sh",
+    "import:dashboard": "node --env-file=.env scripts/import-dashboard.mts"
   },
   "dependencies": {
     "bwip-js": "^4.11.4",
@@ -20,6 +21,7 @@
     "@types/node": "22.10.2",
     "@types/pg": "8.11.10",
     "@types/react": "19.0.2",
+    "exceljs": "^4.4.0",
     "typescript": "5.7.2"
   }
 }
