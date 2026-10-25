@@ -15,6 +15,8 @@ se poate schimba ieftin mai târziu.
 |---|---|
 | `db/migrations/0001_structura.sql` | lanțul comandă → linie → planificare → lot → etichetă → recepție |
 | `db/migrations/0002_izolare.sql` | izolarea între firme, impusă de Postgres |
+| `db/migrations/0003_marimi_numerice_si_motive.sql` | grila numerică EU și lista de motive |
+| `db/migrations/0004_traduceri.sql` | descrierea în engleză a fiecărui tabel și a fiecărei coloane |
 | `db/test_izolare.sql` | nouă verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
@@ -100,6 +102,20 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | Ecran | Ce arată |
 |---|---|
 | `/comenzi` | pozițiile deschise cu progresul lor: cerut, intrat, lipsesc, motiv |
+
+## Limba schemei
+
+Numele sunt în română — asta vorbește echipa, iar „PSF" și „croit" n-au echivalent
+curat în engleză. Dar **fiecare tabel și fiecare coloană poartă o descriere în
+engleză**, stocată în baza de date, nu într-un fișier care se desincronizează:
+
+```sql
+SELECT * FROM glosar;
+```
+
+Se vede și din `\d+ comanda` în psql, și în orice unealtă de baze de date. Un
+dezvoltator din afară citește schema fără dicționar. `docs/glosar.md` e aceeași
+informație, generată din bază, pentru citit pe hârtie.
 
 ## Mărimile
 
