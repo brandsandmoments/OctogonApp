@@ -116,4 +116,39 @@ VALUES ('11111111-1111-1111-1111-111111111111', 'ffffffff-0000-0000-0000-0000000
         'dddddddd-0000-0000-0000-000000000001', true, 'Atelierul a renuntat la rest');
 
 \echo ''
+\echo '--- 12. reteta pe model: Sophie consuma 2,1 m stofa si 6 nasturi pe bucata'
+INSERT INTO model (id, firma_id, brand_id, cod, denumire) VALUES
+  ('99999999-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'aaaaaaaa-0000-0000-0000-000000000001', 'sophie', 'Rochie Sophie');
+UPDATE produs SET model_id = '99999999-0000-0000-0000-000000000001'
+ WHERE id = 'cccccccc-0000-0000-0000-000000000001';
+INSERT INTO model_componenta (id, firma_id, model_id, nume, tip, unitate, consum) VALUES
+  ('99999999-0000-0000-0000-0000000000c1', '11111111-1111-1111-1111-111111111111',
+   '99999999-0000-0000-0000-000000000001', 'Stofa principala', 'materie_prima', 'm', 2.1),
+  ('99999999-0000-0000-0000-0000000000c2', '11111111-1111-1111-1111-111111111111',
+   '99999999-0000-0000-0000-000000000001', 'Nasture', 'accesoriu', 'buc', 6);
+INSERT INTO material (id, firma_id, tip, cod, denumire, unitate) VALUES
+  ('99999999-0000-0000-0000-0000000000a1', '11111111-1111-1111-1111-111111111111',
+   'materie_prima', 'JRS-NEG', 'Jerseu negru', 'm'),
+  ('99999999-0000-0000-0000-0000000000a2', '11111111-1111-1111-1111-111111111111',
+   'accesoriu', 'NST-NEG', 'Nasture negru 12mm', 'buc');
+INSERT INTO produs_material (firma_id, produs_id, model_id, componenta_id, material_id, tip, unitate) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'cccccccc-0000-0000-0000-000000000001',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-0000000000c1',
+   '99999999-0000-0000-0000-0000000000a1', 'materie_prima', 'm');
+
+\echo '--- 13. nasture pus in locul stofei (asteptat: EROARE, cheie compusa tip/unitate)'
+\set ON_ERROR_STOP off
+INSERT INTO produs_material (firma_id, produs_id, model_id, componenta_id, material_id, tip, unitate) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'cccccccc-0000-0000-0000-000000000001',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-0000000000c2',
+   '99999999-0000-0000-0000-0000000000a1', 'accesoriu', 'buc');
+\set ON_ERROR_STOP on
+
+\echo '--- 14. necesarul comenzii: 7 buc x 2,1 m = 14,7 m; nasturii fara material raman vizibili'
+SELECT componenta || ' | ' || coalesce(material_id::text, 'MATERIAL NEALOCAT')
+       || ' | ' || bucati || ' buc x ' || consum || ' = ' || necesar || ' ' || unitate
+  FROM necesar_comanda WHERE comanda = 'psc-sep-26-1' ORDER BY componenta DESC;
+
+\echo ''
 \echo '=== gata'

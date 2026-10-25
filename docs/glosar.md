@@ -171,6 +171,46 @@ Size alias. How an external system spells a size we already have: Shopify sends 
 | `sursa` | Source system: shopify, easyscan, partener |
 | `alias` | Spelling used by that source |
 
+## `material`
+
+Raw material (fabric, lining) or accessory (zip, button, label) kept in stock.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `tip` | Kind: materie_prima (raw material, fabric) or accesoriu (accessory, trim) |
+| `cod` | Material code, internal or supplier's |
+| `denumire` | Material name |
+| `unitate` | Unit of measure: m, kg, buc (pieces), set, m2 |
+| `furnizor` | Supplier |
+| `activ` | Active |
+| `creat_la` | Created at |
+
+## `model`
+
+Garment model, shared by all its colours: Trening Echo. The recipe belongs here, so a new colour needs no new recipe.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `cod` | Model code, as in the Shopify tag model:echo |
+| `denumire` | Model name |
+| `activ` | Active |
+| `creat_la` | Created at |
+
+## `model_componenta`
+
+Recipe line of a model: which component, how much per finished piece. The material that fills it is chosen per product.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `nume` | Component name: main fabric, lining, zip |
+| `tip` | Raw material or accessory |
+| `unitate` | Unit the consumption is expressed in |
+| `consum` | Consumption per finished piece, in that unit |
+| `ordine` | Display order |
+
 ## `motiv`
 
 Reason, from a fixed list. Free text here means nothing can be counted, and counting is the point: how many pieces did we lose to short fabric this year?
@@ -222,6 +262,17 @@ Product. One row per model and colour, matching one Shopify product.
 | `categorie_id` | References categorie. |
 | `activ` | Active |
 | `creat_la` | Created at |
+| `model_id` | Model this product is a colour of. Optional while products are being mapped; without it the product has no recipe. |
+
+## `produs_material`
+
+Which material fills each recipe component for one product (model + colour). Composite keys keep model, kind and unit consistent.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `tip` | Copied from the component; the composite key keeps it equal to the material's |
+| `unitate` | Copied from the component; the composite key keeps it equal to the material's |
 
 ## `receptie`
 
@@ -246,7 +297,7 @@ User. Belongs to exactly one company.
 |---|---|
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `nume` | Full name |
+| `email` | Email, unique within the company; used to sign in |
 | `roluri` | Roles: kam (key account manager), planificator (planner), croit (cutting), banda (assembly line), depozit (warehouse), admin |
 | `activ` | Active |
 | `creat_la` | Created at |
-

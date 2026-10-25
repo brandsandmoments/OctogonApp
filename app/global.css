@@ -35,3 +35,29 @@ th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--
 th { font-weight: 600; font-size: .75rem; letter-spacing: .03em; text-transform: uppercase; color: var(--slab); }
 .nr { text-align: right; font-variant-numeric: tabular-nums; }
 code { font-size: .85em; }
+
+h2 { font-size: 1rem; margin: 1.75rem 0 .5rem; }
+.goluri { border: 1px solid var(--linie); border-left: 3px solid #b3401a; border-radius: .35rem; padding: .25rem 1rem .75rem; margin: 1rem 0; }
+.goluri h2 { margin-top: .75rem; }
+.goluri ul { margin: .5rem 0 0; padding-left: 1.1rem; }
+.lipsa { color: #b3401a; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .lipsa { color: #f08a5d; } .goluri { border-left-color: #f08a5d; } }
+
+main.lat { max-width: 90rem; }
+.tabel-derulant { overflow-x: auto; }
+.filtre { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 1rem 0; }
+.filtre input, .filtre select, .filtre button, .buton {
+  font: inherit; font-size: .9rem; padding: .4rem .6rem; border: 1px solid var(--linie);
+  border-radius: .35rem; background: transparent; color: inherit; text-decoration: none;
+}
+.filtre select option { background: var(--fundal); }
+.filtre input[name="cauta"] { min-width: 14rem; }
+.filtre .bifa { font-size: .85rem; color: var(--slab); }
+.filtre button, .buton { font-weight: 600; cursor: pointer; }
+.centralizator { font-size: .85rem; white-space: nowrap; }
+.centralizator td { padding: .35rem .5rem; }
+.centralizator tr.prima td { border-top: 2px solid var(--linie); }
+
+.meniu { list-style: none; padding: 0; margin: 1rem 0; }
+.meniu li { padding: .5rem 0; border-bottom: 1px solid var(--linie); }
+.meniu a { font-weight: 600; }

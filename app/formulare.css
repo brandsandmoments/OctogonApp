@@ -1,0 +1,83 @@
+/* Formularele de birou: comenzi, rețete, materiale. Pe ecran mare, dar trebuie
+   să se poată folosi și de pe o tabletă în atelier. */
+
+.formular { max-width: 72rem; }
+
+.formular label > span,
+.formular legend {
+  display: block;
+  font-size: .75rem;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--slab);
+  margin-bottom: .2rem;
+}
+
+.formular input,
+.formular select,
+.formular textarea {
+  font: inherit;
+  padding: .45rem .55rem;
+  border: 1px solid var(--linie);
+  border-radius: .35rem;
+  background: transparent;
+  color: inherit;
+  width: 100%;
+}
+.formular select option { background: var(--fundal); }
+
+.antet-comanda {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: .75rem 1rem;
+  margin: 1rem 0 1.5rem;
+}
+.antet-comanda .lat { grid-column: 1 / -1; }
+
+.comutator { border: 0; padding: 0; margin: 0; }
+.comutator label {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .45rem .9rem;
+  border: 1px solid var(--linie);
+  border-radius: .35rem;
+  margin-right: .35rem;
+  cursor: pointer;
+}
+.comutator label.ales { border-color: currentColor; font-weight: 600; }
+.comutator input { width: auto; }
+
+.tabel-derulant { overflow-x: auto; }
+.grila td { padding: .3rem .25rem; vertical-align: middle; }
+.grila td:first-child { min-width: 16rem; }
+.grila .bucati { width: 3.6rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+.formular button {
+  font: inherit;
+  font-weight: 600;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 1px solid var(--linie);
+  border-radius: .35rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.formular button:disabled { opacity: .4; cursor: default; }
+.formular button.mic { min-height: 2rem; padding: 0 .6rem; }
+.formular button.principal { background: var(--text); color: var(--fundal); border-color: var(--text); }
+.formular .secundar { margin-top: .5rem; }
+
+.actiuni { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+.actiuni .secundar { margin-top: 0; }
+
+.eroare { color: #b3401a; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .eroare { color: #f08a5d; } }
+
+.in-linie { display: inline-flex; align-items: center; gap: .35rem; justify-content: flex-end; }
+.in-linie input { width: 5.5rem; text-align: right; }
+.formular select.gol { border-color: #b3401a; }
+.lista-bife { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .25rem 1rem; }
+.lista-bife label { display: flex; align-items: center; gap: .5rem; }
+.lista-bife input { width: auto; }

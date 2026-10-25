@@ -18,7 +18,8 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0003_marimi_numerice_si_motive.sql` | grila numerică EU și lista de motive |
 | `db/migrations/0004_traduceri.sql` | descrierea în engleză a fiecărui tabel și a fiecărei coloane |
 | `db/migrations/0005_inchidere_pe_zero.sql` | o poziție se poate închide cu zero bucăți, cu motiv și observații |
-| `db/test_izolare.sql` | unsprezece verificări de purtare, rulate pe Postgres 16 |
+| `db/migrations/0006_modele_materiale_retete.sql` | modele, materiale, rețete și necesarul pe comandă |
+| `db/test_izolare.sql` | paisprezece verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -82,7 +83,10 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [ ] Autentificare și roluri (acum firma vine din `FIRMA_ID`, din mediu)
 - [x] Generarea etichetelor: Code 128 + QR, pe coală A4
 - [x] Ecranul de scanare, pe telefon
-- [ ] Import din Google Sheets, ca oglindă read-only
+- [x] Introducerea PSF/PSC, centralizatorul, rețete pe model, necesarul pe comandă
+- [ ] Stoc și inventar pe materii prime și accesorii: rezervare la planificare, scădere la croit
+- [ ] Planificarea, croitul (de croit / croite / rămas de croit), alimentarea benzii
+- [ ] Import din Google Sheets și din cele trei magazine Shopify
 
 ## Aplicația
 
@@ -105,6 +109,11 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | `/comenzi` | pozițiile deschise cu progresul lor: cerut, intrat, lipsesc, motiv |
 | `/etichete/<comanda>` | coala A4 de etichete a comenzii, gata de tipărit |
 | `/scanare` | recepția pe telefon: scanezi eticheta, confirmi ce a intrat |
+| `/centralizator` | toate liniile PSF și PSC: cerut, planificat, croit, intrat, lipsesc |
+| `/comenzi/noua` | PSF sau PSC nouă, cu grila de mărimi |
+| `/necesar/<comanda>` | materia primă și accesoriile unei comenzi, plus ce lipsește din rețete |
+| `/modele`, `/modele/<id>` | modelele, consumul pe bucată, materialul fiecărei culori |
+| `/materiale` | nomenclatorul de materii prime și accesorii |
 
 ## Limba schemei
 
@@ -150,6 +159,23 @@ Verificarea nu s-a făcut privind pagina, ci decodând-o: cele șase coduri de p
 coala unei comenzi reale au fost extrase din HTML, randate ca imagini și citite
 înapoi cu un cititor de coduri de bare. Așa s-a descoperit și că fără zona liberă
 din jurul codului nu se citește niciunul.
+
+## Rețete și necesar
+
+Rețeta e a **modelului**, nu a produsului. „Trening Echo" consumă la fel în roșu,
+bleu sau negru; culoarea schimbă doar *ce* stofă și *ce* fermoar intră, nu *cât*.
+Shopify o spune deja: fiecare produs Sleevy poartă un tag `model:echo`.
+
+Așa că rețeta are două jumătăți: `model_componenta` spune cât consumă o bucată
+(„stofă principală, 2,1 m"), iar `produs_material` spune ce material concret umple
+componenta pentru o culoare anume („Jerseu negru"). Cheile compuse fac imposibil
+un nasture pus în locul stofei, o stofă socotită în bucăți sau componenta altui
+model — fără nicio linie de cod.
+
+Necesarul unei comenzi = bucăți cerute × consum, adunat pe material, calculat în
+vederea `necesar_comanda`. Un produs fără model, un model fără rețetă sau o
+componentă fără material **nu dispar din sumă**: ecranul le arată deasupra
+tabelului, pentru că un necesar care tace despre ele pare complet și nu e.
 
 ## Recepția
 

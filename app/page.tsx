@@ -1,19 +1,25 @@
 import Link from 'next/link';
 
+const ECRANE: [string, string, string][] = [
+  ['/centralizator', 'Centralizator', 'toate liniile PSF și PSC: cerut, planificat, croit, intrat'],
+  ['/comenzi/noua', 'Comandă nouă', 'PSF sau PSC, cu grila de mărimi'],
+  ['/modele', 'Modele și rețete', 'consumul pe bucată și materialul fiecărei culori'],
+  ['/materiale', 'Materiale', 'materii prime și accesorii'],
+  ['/comenzi', 'Poziții deschise', 'progresul fiecărei poziții'],
+  ['/scanare', 'Recepție', 'scanează o etichetă, pe telefon'],
+];
+
 export default function Acasa() {
   return (
     <main>
       <h1>OctogonApp</h1>
-      <p>
-        Deocamdată: pozițiile deschise cu progresul lor, coala de etichete a
-        unei comenzi și recepția pe telefon.
-      </p>
-      <p>
-        <Link href="/comenzi">Poziții deschise</Link>
-      </p>
-      <p>
-        <Link href="/scanare">Recepție — scanează o etichetă</Link>
-      </p>
+      <ul className="meniu">
+        {ECRANE.map(([href, nume, ce]) => (
+          <li key={href}>
+            <Link href={href}>{nume}</Link> <span className="slab">— {ce}</span>
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }
