@@ -73,8 +73,42 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 
 ## Ce urmează
 
-- [ ] Stabilit stack-ul aplicației (vezi conversația — e singura decizie care blochează)
-- [ ] Migrarea 0003: motive de diferență, legate de `lot_croit_efectiv` și `receptie`
-- [ ] Import din Google Sheets, ca oglindă read-only
-- [ ] Ecranul de croit, pe telefon
+- [x] Stack: Next.js 16 + TypeScript + Postgres
+- [x] Migrarea 0003: mărimi numerice și lista de motive
+- [x] Primul ecran: pozițiile deschise cu progresul lor
+- [ ] Autentificare și roluri (acum firma vine din `FIRMA_ID`, din mediu)
 - [ ] Generarea etichetelor: Code 128 + QR, pe coală A4
+- [ ] Ecranul de scanare, pe telefon
+- [ ] Import din Google Sheets, ca oglindă read-only
+
+## Aplicația
+
+Next.js 16 + TypeScript + Postgres, fără ORM — interogările sunt SQL, ca să nu
+depindă de o bibliotecă anume dacă proiectul schimbă stack-ul sau mâinile.
+
+```sh
+npm install
+cp .env.example .env     # și completează DATABASE_URL
+npm run db:reset         # migrări + nomenclatoarele Octogon
+npm run dev
+```
+
+`app/lib/db.ts` e singurul drum către bază. Fiecare interogare rulează într-o
+tranzacție care începe prin `set_config('app.firma_id', …, true)` — legat de
+tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
+
+| Ecran | Ce arată |
+|---|---|
+| `/comenzi` | pozițiile deschise cu progresul lor: cerut, intrat, lipsesc, motiv |
+
+## Mărimile
+
+Grila principală e XXS–2XL. Denumirea numerică EU stă alături, pe aceeași mărime:
+
+| XXS | XS | S | M | L | XL | 2XL |
+|---|---|---|---|---|---|---|
+| 32 | 34 | 36 | 38 | 40 | 42 | 44 |
+
+Nu sunt mărimi separate. Dacă ar fi rânduri distincte, cele 7 ar deveni 14 și
+fiecare cantitate s-ar împărți în două. `marime_alias` acoperă și cum le scriu
+alte sisteme — Shopify Sleevy trimite `2XS` unde noi scriem `XXS`.
