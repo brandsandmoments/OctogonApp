@@ -92,6 +92,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     nume: 'Eficiență',
     ecrane: [
       { href: '/kam', nume: 'KAM', ce: 'PSF-urile fiecărui KAM față de vânzările din Shopify: săptămână, lună, trimestru, an', zona: 'kam' },
+      { href: '/eficienta/asigura-stoc', nume: 'Asigură stoc', ce: 'livrat la timp, mai devreme, cu întârziere; bucăți la termen și ce nu mai vine', zona: ['centralizator', 'kam'] },
     ],
   },
   {

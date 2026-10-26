@@ -145,6 +145,7 @@ vede doar secțiunile la care are drept.
 | `/materiale` | nomenclatorul de materii prime și accesorii |
 | `/planificare`, `/planificare/<id>` | de planificat pe model; trimiterea la croit și ordinea de croit; o planificare |
 | `/croit`, `/croit/taiere/<id>`, `/croit/<lot>` | toate, croite, rămas de croit (de unde se fac taierile, pe mărimi), taieri, pe perioade; fișa taierii cu operațiile, metrii și croitul; o comandă din taiere |
+| `/eficienta/asigura-stoc` | livrările producției față de data cerută: la timp, mai devreme, întârziate, restante |
 | `/kam`, `/kam/<kam>` | eficiența KAM pe săptămână, lună, trimestru sau an: ritmul și acuratețea la zi a fiecărui PSF |
 | `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
@@ -388,6 +389,22 @@ domeniul și tokenul din `.env` (`SHOPIFY_SHOP_<COD>`, `SHOPIFY_TOKEN_<COD>` —
 aplicație custom cu acces `read_orders`); baza nu le ține. Brandul unei vânzări
 vine din produs, nu din magazin. Istoricul de până acum vine din fila VANZARI;
 aceeași comandă adusă apoi din Shopify o înlocuiește, nu se adaugă.
+
+## Eficiența Asigură stoc
+
+`/eficienta/asigura-stoc`, pe săptămână, lună, trimestru sau an: livrează producția
+ce a cerut KAM-ul, la data cerută? Se măsoară pe linia de comandă, față de data
+cerută de KAM. Linia e livrată în ziua în care s-a stins ultima ei poziție — a
+intrat tot în depozit sau s-a închis. Pentru liniile fără nicio recepție încă
+(istoricul din dashboard), contează predarea de pe bandă la depozit.
+
+| | |
+|---|---|
+| **La timp** | livrate până la data cerută, inclusiv, din cele livrate |
+| **Mai devreme · întârziate** | câte, și cu câte zile în medie |
+| **Restante** | încă nelivrate, cu data cerută trecută |
+| **Bucăți la termen** | câte bucăți au intrat până la data cerută, din cât s-a cerut |
+| **Nu mai vin** | bucăți din pozițiile închise, cu motivele lor (rebut, defect de țesătură…) |
 
 ## Stocul de materiale
 
