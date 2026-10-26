@@ -137,6 +137,7 @@ A model in development: pattern to make, sample, approval. Replaces the Situatie
 | `model_id` | Catalogue model created on approval |
 | `creat_de` | Created by |
 | `creat_la` | Created at |
+| `manopera` | Labour cost per piece, on the product sheet |
 
 ## `dezvoltare_pas`
 
@@ -149,6 +150,22 @@ Step log of a model in development. Append-only; the status is derived from it.
 | `la` | When |
 | `de` | By whom |
 | `observatii` | Notes; required for corrections |
+
+## `dezvoltare_referinta`
+
+References attached to a pattern request: Drive links, notes, photos. Photos marked with a colour appear on the product sheet.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `tip` | Kind: link, nota (note), poza (photo) |
+| `text` | Note text, or the description of a link or photo |
+| `url` | Link (Drive folder, video) |
+| `fisier` | Photo bytes, up to 8 MB |
+| `mime` | Photo media type |
+| `culoare` | Colour the photo shows; such photos go on the product sheet |
+| `creat_de` | Added by |
+| `creat_la` | Added at |
 
 ## `dispozitiv`
 
@@ -207,6 +224,49 @@ Tenant. One garment company. Every other table carries firma_id and is isolated 
 | `slug` | URL-safe short name |
 | `activa` | Active |
 | `creat_la` | Created at |
+
+## `fisa_componenta`
+
+Product sheet line: a material or accessory of the model, with supplier, code, consumption and price. Becomes the model recipe on approval.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `ordine` | Order on the sheet |
+| `nume` | Component name: base fabric 1, contrast, lining, buttons |
+| `tip` | Raw material or accessory |
+| `unitate` | Unit |
+| `consum` | Consumption per piece |
+| `principal` | Main fabric |
+| `se_croieste` | Spread and cut on the table |
+| `furnizor` | Supplier |
+| `cod` | Supplier code, when the same for every colour |
+| `material_id` | Catalogue material, when the same for every colour |
+| `pret` | Price per unit |
+
+## `fisa_culoare_material`
+
+Material of a product sheet component in one colour, when it differs by colour
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `culoare` | Colour, as on the request |
+| `material_id` | Catalogue material, if it exists |
+| `cod` | Supplier code of a new material |
+| `denumire` | Name of a new material; created in the catalogue on approval |
+| `pret` | Price per unit for this colour, if different |
+
+## `fisa_masura`
+
+Size chart line on the product sheet: bust, waist, hip, length, per size
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `ordine` | Order on the sheet |
+| `nume` | Measurement name |
+| `valori` | Value per size code |
 
 ## `inventar`
 

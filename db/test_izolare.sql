@@ -386,5 +386,18 @@ UPDATE planificare SET stadiu = 'incheiat', motiv_incheiere_id = (SELECT id FROM
 \set ON_ERROR_STOP on
 RESET app.firma_id;
 
+\echo '--- 39. referinte la tiparul Melissa: link fara https si poza care nu e imagine (asteptat: 2 x EROARE)'
+SET app.firma_id = '11111111-1111-1111-1111-111111111111';
+INSERT INTO dezvoltare_referinta (firma_id, dezvoltare_id, tip, url, text) VALUES
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'link', 'https://drive.google.com/x', 'clip');
+\set ON_ERROR_STOP off
+INSERT INTO dezvoltare_referinta (firma_id, dezvoltare_id, tip, url) VALUES
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'link', 'drive/x');
+INSERT INTO dezvoltare_referinta (firma_id, dezvoltare_id, tip, fisier, mime) VALUES
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'poza', '\x00', 'video/mp4');
+\set ON_ERROR_STOP on
+SELECT 'referinte: ' || count(*) FROM dezvoltare_referinta WHERE dezvoltare_id = '55555555-0000-0000-0000-000000000001';
+RESET app.firma_id;
+
 \echo ''
 \echo '=== gata'

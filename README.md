@@ -28,13 +28,14 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
 | `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
 | `db/migrations/0015_taiere.sql` | taierea: mai multe PSF și PSC pe același model, tăiate împreună |
+| `db/migrations/0017_fisa_de_produs.sql` | referințele cererii de tipar (linkuri, observații, poze) și fișa de produs |
 | `db/migrations/0016_croit_pe_taiere.sql` | taierile le face croitul; întins, tăiat, termocolat, împerecheat, metri și defecte pe culoare; operatorii de croit |
 | `db/oameni_octogon.sql` | oamenii Octogon și drepturile lor, cum le-a dat conducerea |
 | `db/modele_din_denumire.sql` | modele pentru produsele fără rețetă, din denumire („Trench Melissa Crem” → Melissa) |
 | `scripts/sync-shopify.mts` | sincronizarea vânzărilor din cele trei magazine Shopify |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
 | `scripts/import-tipare.mts` | importul din „Situație Tipare" |
-| `db/test_izolare.sql` | treizeci și opt de verificări de purtare, rulate pe Postgres 16 |
+| `db/test_izolare.sql` | treizeci și nouă de verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -150,6 +151,7 @@ vede doar secțiunile la care are drept.
 | `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
 | `/inventar`, `/inventar/<id>` | numărătoarea fizică; la închidere, diferențele devin ajustări |
+| `/dezvoltare/<id>/fisa`, `…/fisa/excel`, `…/fisa/tipar` | fișa de produs: componente, culori, dimensiuni, cost; Excel și PDF |
 | `/dezvoltare`, `/dezvoltare/<id>` | tipare de făcut, în lucru, mostre de aprobat, aprobate; drumul fiecărui model |
 
 ## Limba schemei
@@ -355,6 +357,19 @@ denumire propuse și modificabile, gata de rețetă.
 ```sh
 npm run import:tipare -- situatie_tipare.xlsx
 ```
+
+**Referințele cererii**: linkuri de Drive (clipuri, foldere), observații și poze.
+Pozele stau în aplicație (până la 8 MB fiecare); o poză cu o culoare aleasă e poza
+produsului în culoarea aceea și intră în fișa de produs. Clipurile rămân pe Drive.
+
+**Fișa de produs** (`/dezvoltare/<id>/fisa`) o completează dezvoltarea și contul
+master, ca „Palton Eloria.xlsx": materiile prime (material de bază 1, 2, contrast,
+căptușeală…) și accesoriile, fiecare cu furnizor, cod, consum pe bucată și preț;
+materialul fiecărei culori, din nomenclator sau unul nou; tabelul de dimensiuni;
+manopera pe bucată. Costul pe bucată, pe culoare, se calculează. Fișa se descarcă
+în **Excel** (cu pozele și formulele) sau se tipărește / salvează ca **PDF**. La
+aprobarea mostrei, fișa devine **rețeta modelului**: componentele, consumurile și
+materialul fiecărei culori; materialele noi intră în nomenclator.
 
 Importul citește statusul și bifele din foaie, le face pași și raportează
 rândurile care se contrazic. Se poate rula de mai multe ori.

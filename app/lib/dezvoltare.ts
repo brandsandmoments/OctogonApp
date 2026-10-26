@@ -1,5 +1,6 @@
 import { esteAdmin, poate } from './acces';
 import { caFirma } from './db';
+import { fisaInReteta } from './fisa';
 import { cere, firmaCurenta, interogare } from './sesiune';
 
 /**
@@ -212,6 +213,7 @@ export async function aproba(
          VALUES (firma_curenta(), $1, $2, $3, $4)
          ON CONFLICT (firma_id, brand_id, cod) DO UPDATE SET categorie_id = coalesce(model.categorie_id, EXCLUDED.categorie_id)
          RETURNING id`, [d.brand_id, cod, d.model, d.categorie_id]);
+      const produse: { culoare: string; produs_id: string }[] = [];
       for (const p of alese) {
         // Culoarea din listă, dacă există (fără majuscule); altfel una nouă.
         const { rows: [cul] } = await c.query<{ id: string }>(
@@ -219,17 +221,21 @@ export async function aproba(
                 noua AS (INSERT INTO culoare (firma_id, nume) SELECT firma_curenta(), $1
                           WHERE NOT EXISTS (SELECT 1 FROM gasita) RETURNING id)
            SELECT id FROM gasita UNION ALL SELECT id FROM noua`, [p.culoare.trim()]);
-        await c.query(
+        const { rows: [pr] } = await c.query<{ id: string }>(
           `INSERT INTO produs (firma_id, cod_sku, denumire, brand_id, culoare_id, categorie_id, model_id)
-           VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6)`,
+           VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6) RETURNING id`,
           [p.sku.trim().toUpperCase(), p.denumire.trim(), d.brand_id, cul.id, d.categorie_id, m.id]);
+        produse.push({ culoare: p.culoare.trim(), produs_id: pr.id });
       }
+      // Fișa de produs devine rețeta modelului: componente, consumuri, materialul fiecărei culori.
+      await fisaInReteta(c, id, m.id, produse);
       await c.query(`UPDATE dezvoltare SET model_id = $2 WHERE id = $1`, [id, m.id]);
       await c.query(`INSERT INTO dezvoltare_pas (firma_id, dezvoltare_id, pas) VALUES (firma_curenta(), $1, 'aprobat')`, [id]);
       return null;
     });
   } catch (e) {
     if ((e as { code?: string }).code === '23505') return 'Un SKU sau o denumire există deja în catalog.';
+    if ((e as { code?: string }).code === '23503') return 'Pe fișă, un material ales nu se potrivește ca tip sau unitate cu componenta lui.';
     throw e;
   }
 }

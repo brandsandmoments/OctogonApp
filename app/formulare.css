@@ -137,3 +137,11 @@
 .marimi-croit label { display: inline-flex; flex-direction: column; align-items: flex-start; gap: .15rem; }
 .formular .in-rand input { font: inherit; font-size: .85rem; padding: .2rem .4rem; border: 1px solid var(--linie); border-radius: .3rem; background: transparent; color: inherit; }
 .formular .in-rand .bifa { font-size: .85rem; display: inline-flex; gap: .25rem; align-items: center; }
+.poze { display: flex; flex-wrap: wrap; gap: .75rem; margin: .5rem 0; }
+.poze figure { margin: 0; width: 9rem; }
+.poze img { width: 9rem; height: 12rem; object-fit: cover; border: 1px solid var(--linie); border-radius: .35rem; display: block; }
+.poze figcaption { font-size: .8rem; margin-top: .25rem; }
+.referinte { padding-left: 1.1rem; }
+.referinte li { margin: .25rem 0; }
+.componenta-fisa { border-top: 1px solid var(--linie); padding: .5rem 0 .75rem; }
+.fara-poza { width: 9rem; height: 12rem; border: 1px dashed var(--linie); border-radius: .35rem; display: flex; align-items: center; justify-content: center; color: var(--slab); font-size: .8rem; }

@@ -4,6 +4,7 @@ import { esteAdmin, poate } from '../../lib/acces';
 import { actualizeaza, adaugaPas, aproba, detalii, nomenclatoare, PASI, propuneri, STARI, TIPURI } from '../../lib/dezvoltare';
 import { cere } from '../../lib/sesiune';
 import CampuriCerere, { cerereDinFormular } from '../CampuriCerere';
+import Referinte from '../Referinte';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -76,13 +77,21 @@ export default async function DezvoltarePagina({
         {d.link_fisa && <> · <a href={d.link_fisa} target="_blank" rel="noreferrer">fișă</a></>}
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
+      <p>
+        <Link href={`/dezvoltare/${id}/fisa`} className="buton">Fișa de produs</Link>{' '}
+        <a href={`/dezvoltare/${id}/fisa/excel`} className="buton">Descarcă Excel</a>{' '}
+        <Link href={`/dezvoltare/${id}/fisa/tipar`} className="buton" target="_blank">PDF</Link>
+      </p>
+
+      <Referinte id={id} culori={d.culori} poateAdauga={atelier || poate(u, 'comenzi', 'modifica')} />
 
       {deAprobat && (
         <section className="caseta">
           <h2>Aprobă mostra</h2>
           <p className="slab">
             Fiecare culoare intră în catalog ca produs. Denumirea și SKU-ul trebuie să fie exact cele din Shopify,
-            ca vânzările să se lege de produs.
+            ca vânzările să se lege de produs. Fișa de produs devine rețeta modelului: componentele, consumurile și
+            materialul fiecărei culori.
           </p>
           <form action={aprobaMostra}>
             <table className="grila">

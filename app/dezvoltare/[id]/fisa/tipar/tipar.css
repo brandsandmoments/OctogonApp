@@ -1,0 +1,14 @@
+.fisa-tipar { max-width: 50rem; }
+.fisa-tipar h1 { text-align: center; font-size: 1.6rem; letter-spacing: .05em; }
+.fisa-tipar table { margin: 1rem 0; font-size: .8rem; }
+.fisa-tipar th, .fisa-tipar td { border: 1px solid var(--linie); padding: .3rem .4rem; }
+.poze-tipar { display: flex; gap: .75rem; justify-content: center; margin: 1rem 0; }
+.poze-tipar figure { margin: 0; text-align: center; font-weight: 700; font-size: .8rem; }
+.poze-tipar img, .poze-tipar .fara-poza { width: 12rem; height: 16rem; object-fit: cover; border: 1px solid var(--linie); }
+@media print {
+  @page { size: A4; margin: 12mm; }
+  .nu-tipari { display: none; }
+  body { background: #fff; color: #000; }
+  .fisa-tipar { max-width: none; padding: 0; }
+  .fisa-tipar table { break-inside: avoid; }
+}
