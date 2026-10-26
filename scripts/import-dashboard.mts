@@ -4,7 +4,8 @@
  *   npm run import:dashboard -- <fisier.xlsx>
  *
  * Ce aduce: branduri, categorii, culori, materiale, modele cu rețetele lor,
- * produsele, apoi comenzile PSF și PSC cu liniile și cantitățile pe mărimi.
+ * produsele, comenzile PSF și PSC cu liniile și cantitățile pe mărimi, apoi
+ * istoricul de producție: planificările, loturile croite și tranșele de pe bandă.
  *
  * Trei reguli:
  *
@@ -305,6 +306,14 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
                    prioritati: number[]; stari: string[]; observatii: Set<string>; linii: Map<string, Linie> };
   const comenzi = new Map<string, Comanda>();
 
+  // Rândurile marcate „Exemplu - se poate sterge" se sar — dar nu și cele pe care
+  // istoricul le folosește: psc-sep-26-1 / Rochie Sophie Olive e marcat exemplu și
+  // are planificare, lot croit și tranșă pe bandă. Ce s-a croit nu e un exemplu.
+  const folositeInIstoric = new Set(
+    randuri(wb, 'PLANIFICARE')
+      .map((r) => `${text(r.c('Comanda (PSF/PSC)'))?.toLowerCase()}|${text(r.c('Produs / Model'))?.toLowerCase()}`),
+  );
+
   function citesteComenzi(fila: 'PSF' | 'PSC') {
     const col = fila === 'PSF'
       ? { id: 'ID PSF', data: 'Data lansare', cine: 'KAM', produs: 'Produs / Model', ceruta: 'Data ceruta in stoc',
@@ -317,8 +326,11 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       const numeProdus = text(r.c(col.produs));
       const obs = text(r.c(col.obs));
       if ([numeProdus, obs, text(r.c(col.cine))].some((v) => v && /exemplu/i.test(v))) {
-        numara('rânduri exemplu sărite');
-        continue;
+        if (!folositeInIstoric.has(`${id}|${numeProdus?.toLowerCase()}`)) {
+          numara('rânduri exemplu sărite');
+          continue;
+        }
+        semnaleaza(`${fila} ${id}, rândul ${r.nr}: marcat „exemplu", dar are planificare în sheet — importat ca rând real`);
       }
       const cmd: Comanda = comenzi.get(id) ?? {
         numar: id, tip: fila, date: [], ceruteLa: [], branduri: [], prioritati: [], stari: [],
@@ -439,6 +451,374 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
   }
 }
 
+// ---------------------------------------------------------------- istoric
+
+/**
+ * Istoricul de producție: planificările (PLANIFICARE), loturile croite (CROIT) și
+ * tranșele de pe bandă (ALIMENTARE_BANDA), legate prin ID-urile din sheet:
+ * psf-ms-sep-1/P1 → /P1/C1 → /P1/C1/B1.
+ *
+ * Ce NU face: nu scrie mișcări în fișa de magazie. Stocul de materiale n-a fost
+ * ținut niciodată, deci un consum istoric ar duce stocul pe minus fără sens. Stocul
+ * pornește din inventar și din intrările de acum; rezervările, în schimb, ies
+ * corect din ce e planificat și necroit sau croit și încă nedat pe bandă.
+ *
+ * Datele din sheet se importă cum sunt, și când încalcă regulile pe care aplicația
+ * le impune de acum (croit peste cerut, bandă peste croit): istoria s-a întâmplat.
+ * Fiecare astfel de caz apare în raport.
+ */
+async function importaIstoric(c: PoolClient, wb: ExcelJS.Workbook) {
+  const marimi = new Map((await c.query<{ id: string; cod: string }>(`SELECT id, cod FROM marime`)).rows
+    .map((m) => [m.cod, m.id]));
+  const motive = new Map((await c.query<{ id: string; nume: string }>(
+    `SELECT id, nume FROM motiv WHERE 'croit' = ANY (contexte)`)).rows.map((m) => [m.nume.toLowerCase(), m.id]));
+  const etape = (await c.query<{ id: string; ordine: number }>(`SELECT id, ordine FROM etapa_croit ORDER BY ordine`)).rows;
+
+  /** Linia comenzii pentru un produs, după numărul comenzii și denumirea produsului. */
+  async function linie(comanda: string, produs: string): Promise<{ id: string; comanda_id: string } | null> {
+    const { rows: [l] } = await c.query<{ id: string; comanda_id: string }>(
+      `SELECT cl.id, cl.comanda_id FROM comanda_linie cl
+         JOIN comanda c ON c.id = cl.comanda_id JOIN produs p ON p.id = cl.produs_id
+        WHERE c.numar = $1 AND lower(p.denumire) = lower($2)`, [comanda, produs]);
+    return l ?? null;
+  }
+  const peMarimi = (r: Rand, prefix: string) => {
+    const m = new Map<string, number>();
+    for (const cod of MARIMI) {
+      const q = numar(r.c(`${prefix} ${cod}`));
+      if (q && q > 0) m.set(marimi.get(cod)!, Math.round(q));
+    }
+    return m;
+  };
+  const da = (v: Celula) => text(v)?.toLowerCase() === 'da';
+
+  // -- planificări
+  type Plan = { id: string; linie: string; existent: boolean };
+  const planuri = new Map<string, Plan>(); // 'comanda/pN' → planificare
+  const planDupaId = async (cod: string) => {
+    const [comanda, p] = cod.split('/');
+    const n = Number(p.slice(1));
+    const { rows: [x] } = await c.query<{ id: string; linie_id: string }>(
+      `SELECT pl.id, pl.linie_id FROM planificare pl JOIN comanda_linie cl ON cl.id = pl.linie_id
+         JOIN comanda c ON c.id = cl.comanda_id WHERE c.numar = $1 AND pl.numar_transa = $2`, [comanda, n]);
+    return x;
+  };
+
+  async function creeazaPlan(cod: string, l: { id: string }, cant: Map<string, number>, data: string | null,
+                             observatii: string | null): Promise<Plan | null> {
+    const existent = await planDupaId(cod);
+    if (existent) { numara('planificări existente, neatinse'); return { id: existent.id, linie: existent.linie_id, existent: true }; }
+    if (cant.size === 0) { semnaleaza(`planificarea ${cod}: fără cantități — sărită`); return null; }
+    const { rows: [p] } = await c.query<{ id: string }>(
+      `INSERT INTO planificare (firma_id, linie_id, numar_transa, data_planificare, stadiu, observatii)
+       VALUES (firma_curenta(), $1, $2, coalesce($3::date, CURRENT_DATE), 'gata_de_lansat', $4) RETURNING id`,
+      [l.id, Number(cod.split('/')[1].slice(1)), data, observatii]);
+    for (const [m, q] of cant) {
+      await c.query(`INSERT INTO planificare_cantitate (firma_id, planificare_id, marime_id, cantitate)
+                     VALUES (firma_curenta(), $1, $2, $3)`, [p.id, m, q]);
+    }
+    numara('planificări importate');
+    return { id: p.id, linie: l.id, existent: false };
+  }
+
+  for (const r of randuri(wb, 'PLANIFICARE')) {
+    const brut = text(r.c('ID Planificare'));
+    if (!brut) continue;
+    const comanda = text(r.c('Comanda (PSF/PSC)'))?.toLowerCase();
+    let cod = brut.toLowerCase();
+    if (!/^[a-z0-9-]+\/p\d+$/.test(cod)) {
+      // ID stricat în sheet: îl refacem din coloana comenzii, doar dacă e neechivoc.
+      if (!comanda) { semnaleaza(`PLANIFICARE rândul ${r.nr}: ID „${brut}" fără comandă — sărit`); continue; }
+      const refacut = `${comanda}/p1`;
+      semnaleaza(`PLANIFICARE rândul ${r.nr}: ID „${brut}" refăcut ca ${refacut}`);
+      cod = refacut;
+    }
+    const produs = text(r.c('Produs / Model'));
+    const nrComanda = cod.split('/')[0];
+    const l = produs ? await linie(nrComanda, produs) : null;
+    if (!l) {
+      semnaleaza(`planificarea ${cod}: comanda sau produsul („${produs}") nu există în aplicație — sărită`);
+      numara('planificări fără comandă');
+      continue;
+    }
+    const cant = peMarimi(r, 'PLANIFICAT');
+    const cerut = peMarimi(r, 'CERUT');
+    if ([...cant].some(([m, q]) => q > (cerut.get(m) ?? 0))) numara('planificări peste cerut (importate cum sunt)');
+    const obs = ['Import din dashboard.', text(r.c('ID vechi (fisa tiparita)')) && `ID vechi: ${text(r.c('ID vechi (fisa tiparita)'))}`,
+                 text(r.c('Observatii'))].filter(Boolean).join(' ');
+    const p = await creeazaPlan(cod, l, cant, data(r.c('Data planificare')), obs);
+    if (p) planuri.set(cod, p);
+  }
+
+  // -- loturi croite
+  type Lot = { id: string; plan: string; croit: Map<string, number> };
+  const loturi = new Map<string, Lot>();
+  const atinse = new Set<string>(); // planificări cu loturi noi, pentru stadiu
+  for (const r of randuri(wb, 'CROIT')) {
+    const brut = text(r.c('ID Croit'));
+    if (!brut) continue;
+    const cod = brut.toLowerCase();
+    if (!/^[a-z0-9-]+\/p\d+\/c\d+$/.test(cod)) {
+      semnaleaza(`CROIT rândul ${r.nr}: ID „${brut}" nu e de forma comanda/Pn/Cn — sărit`);
+      numara('loturi sărite');
+      continue;
+    }
+    const codPlan = cod.replace(/\/c\d+$/, '');
+    const cerut = peMarimi(r, 'CERUT');
+    const croit = peMarimi(r, 'CROIT EFECTIV');
+    let plan = planuri.get(codPlan);
+    if (!plan) {
+      const x = await planDupaId(codPlan);
+      if (x) plan = { id: x.id, linie: x.linie_id, existent: true };
+    }
+    if (!plan) {
+      // Lot croit fără planificare în sheet: planificarea se reface din ce i s-a cerut lotului.
+      const produs = text(r.c('Produs / Model'));
+      const l = produs ? await linie(codPlan.split('/')[0], produs) : null;
+      if (!l) {
+        semnaleaza(`lotul ${cod}: nici planificarea, nici linia comenzii nu există — sărit`);
+        numara('loturi sărite');
+        continue;
+      }
+      const p = await creeazaPlan(codPlan, l, cerut.size ? cerut : croit, data(r.c('Data primire comanda croit (auto)')),
+        'Import din dashboard. Planificare refăcută: lotul croit exista fără planificare în sheet.');
+      if (!p) continue;
+      plan = p;
+      planuri.set(codPlan, p);
+      semnaleaza(`lotul ${cod}: planificarea ${codPlan} lipsea din sheet — refăcută din cantitățile lotului`);
+    }
+    const n = Number(cod.split('/c')[1]);
+    const { rows: [exista] } = await c.query<{ id: string }>(
+      `SELECT id FROM lot_croit WHERE planificare_id = $1 AND numar_lot = $2`, [plan.id, n]);
+    if (exista) { numara('loturi existente, neatinse'); loturi.set(cod, { id: exista.id, plan: plan.id, croit }); continue; }
+
+    const eCroit = [...croit.values()].some((q) => q > 0);
+    const primit = data(r.c('Data primire comanda croit (auto)'));
+    const croitLa = eCroit ? data(r.c('Data croire (auto)')) ?? primit : null;
+    const responsabil = text(r.c('Responsabil croit'));
+    const { rows: [lot] } = await c.query<{ id: string }>(
+      `INSERT INTO lot_croit (firma_id, planificare_id, numar_lot, data_primire, croit_la, observatii)
+       VALUES (firma_curenta(), $1, $2, coalesce($3::date, CURRENT_DATE), $4::date, $5) RETURNING id`,
+      [plan.id, n, primit, eCroit ? croitLa ?? primit ?? new Date().toISOString().slice(0, 10) : null,
+       ['Import din dashboard.', responsabil && `Responsabil: ${responsabil}`,
+        text(r.c('ID vechi (fisa tiparita)')) && `ID vechi: ${text(r.c('ID vechi (fisa tiparita)'))}`,
+        text(r.c('Observatii'))].filter(Boolean).join(' ')]);
+    for (const [m, q] of cerut) {
+      await c.query(`INSERT INTO lot_croit_cantitate (firma_id, lot_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)`,
+        [lot.id, m, q]);
+    }
+    if (eCroit) {
+      const motivText = text(r.c('Motiv diferenta croit'))?.toLowerCase();
+      const motivId = motivText ? motive.get(motivText) ?? null : null;
+      if (motivText && !motivId) semnaleaza(`lotul ${cod}: motivul „${motivText}" nu e în listă — importat fără motiv`);
+      // Toate mărimile cerute primesc un rând, și cele necroite (zero): „cerut 8, croit 0" e o informație.
+      const toate = new Set([...cerut.keys(), ...croit.keys()]);
+      let peste = false;
+      for (const m of toate) {
+        const q = croit.get(m) ?? 0;
+        if (q > (cerut.get(m) ?? 0)) peste = true;
+        await c.query(
+          `INSERT INTO lot_croit_efectiv (firma_id, lot_id, marime_id, cantitate, motiv_id) VALUES (firma_curenta(), $1, $2, $3, $4)`,
+          [lot.id, m, q, q !== (cerut.get(m) ?? 0) ? motivId : null]);
+      }
+      if (peste) numara('loturi croite peste cerut (importate cum sunt)');
+      numara('loturi croite importate');
+    } else {
+      numara('loturi necroite importate');
+    }
+    // Etapele bifate în sheet. Sheet-ul nu ține ora fiecărei etape, doar a croirii.
+    const coloaneEtape = ['1. Comanda primita', '2. Necesar efectuat', '3. Materie prima disponibila', '4. Accesorii disponibile',
+      '5. Model trasat', '6. Intins', '7. Croit', '8. Separat', '9. Dat spre Asambleaza comanda'];
+    for (const [i, col] of coloaneEtape.entries()) {
+      if (!da(r.c(col)) || !etape[i]) continue;
+      await c.query(
+        `INSERT INTO lot_etapa (firma_id, lot_id, etapa_id, bifat_la)
+         VALUES (firma_curenta(), $1, $2, coalesce($3::date, $4::date, now())) ON CONFLICT DO NOTHING`,
+        [lot.id, etape[i].id, i >= 6 ? croitLa : primit, primit]);
+    }
+    loturi.set(cod, { id: lot.id, plan: plan.id, croit });
+    atinse.add(plan.id);
+  }
+
+  /** Lot (și, la nevoie, planificare) refăcut din ce a intrat pe bandă. */
+  async function refaLot(codLot: string, produs: string | null, cant: Map<string, number>,
+                         zi: string | null): Promise<Lot | null> {
+    const codPlan = codLot.replace(/\/c\d+$/, '');
+    let plan = planuri.get(codPlan);
+    if (!plan) {
+      const x = await planDupaId(codPlan);
+      if (x) plan = { id: x.id, linie: x.linie_id, existent: true };
+    }
+    if (!plan) {
+      const l = produs ? await linie(codPlan.split('/')[0], produs) : null;
+      if (!l) return null;
+      const p = await creeazaPlan(codPlan, l, cant, zi,
+        'Import din dashboard. Planificare refăcută: tranșa de pe bandă exista fără lot și planificare în sheet.');
+      if (!p) return null;
+      plan = p;
+      planuri.set(codPlan, p);
+    }
+    const n = Number(codLot.split('/c')[1]);
+    // La o rulare repetată lotul refăcut există deja: nu e în CROIT, deci nu e în harta loturilor.
+    const { rows: [exista] } = await c.query<{ id: string }>(
+      `SELECT id FROM lot_croit WHERE planificare_id = $1 AND numar_lot = $2`, [plan.id, n]);
+    if (exista) {
+      const { rows } = await c.query<{ marime_id: string; cantitate: number }>(
+        `SELECT marime_id, cantitate FROM lot_croit_efectiv WHERE lot_id = $1`, [exista.id]);
+      return { id: exista.id, plan: plan.id, croit: new Map(rows.map((x) => [x.marime_id, x.cantitate])) };
+    }
+    const { rows: [lot] } = await c.query<{ id: string }>(
+      `INSERT INTO lot_croit (firma_id, planificare_id, numar_lot, data_primire, croit_la, observatii)
+       VALUES (firma_curenta(), $1, $2, coalesce($3::date, CURRENT_DATE), coalesce($3::date, CURRENT_DATE), $4)
+       RETURNING id`,
+      [plan.id, n, zi, 'Import din dashboard. Lot refăcut: tranșa de pe bandă exista fără lot croit în sheet.']);
+    for (const [m, q] of cant) {
+      await c.query(`INSERT INTO lot_croit_cantitate (firma_id, lot_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)`,
+        [lot.id, m, q]);
+      await c.query(`INSERT INTO lot_croit_efectiv (firma_id, lot_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)`,
+        [lot.id, m, q]);
+    }
+    atinse.add(plan.id);
+    return { id: lot.id, plan: plan.id, croit: new Map(cant) };
+  }
+
+  // -- tranșe pe bandă
+  const alimentatPeLot = new Map<string, Map<string, number>>();
+  // Întâi tranșele cu număr explicit (…/B2), apoi cele fără: altfel o tranșă fără
+  // număr ar putea lua B1 înaintea rândului care chiar e B1 în sheet.
+  const cuNumar = (r: Rand) => /\/b\d+$/i.test(text(r.c('ID Plan')) ?? '');
+  const randuriBanda = randuri(wb, 'ALIMENTARE_BANDA');
+  // Numărul unei tranșe fără /Bn vine din sheet, nu din bază: după cel mai mare /Bn
+  // explicit al lotului, în ordinea rândurilor. Așa fiecare rulare dă același număr,
+  // iar una repetată îl găsește și nu-l mai creează o dată.
+  const maxExplicit = new Map<string, number>();
+  for (const r of randuriBanda) {
+    const m = /^(.+)\/b(\d+)$/.exec((text(r.c('ID Plan')) ?? '').toLowerCase());
+    if (m) maxExplicit.set(m[1], Math.max(maxExplicit.get(m[1]) ?? 0, Number(m[2])));
+  }
+  const faraNumar = new Map<string, number>();
+  for (const r of [...randuriBanda.filter(cuNumar), ...randuriBanda.filter((x) => !cuNumar(x))]) {
+    const brut = text(r.c('ID Plan'));
+    if (!brut) continue;
+    const ESTE_LOT = /^[a-z0-9-]+\/p\d+\/c\d+$/;
+    let cod = brut.toLowerCase();
+    let codLot = (text(r.c('ID Croit (alege din lista)')) ?? '').toLowerCase();
+    if (!ESTE_LOT.test(codLot)) codLot = '';
+    let numarTransa: number | null = null;
+    if (/^[a-z0-9-]+\/p\d+\/c\d+\/b\d+$/.test(cod)) {
+      numarTransa = Number(cod.split('/b')[1]);
+      codLot ||= cod.replace(/\/b\d+$/, '');
+    } else if (ESTE_LOT.test(cod) && (!codLot || codLot === cod)) {
+      // ID-ul e chiar lotul (fără /Bn): prima tranșă liberă a lotului.
+      codLot = cod;
+      semnaleaza(`ALIMENTARE_BANDA rândul ${r.nr}: ID „${brut}" fără tranșă — importat ca tranșă a lotului ${cod}`);
+    } else if (codLot) {
+      // ID scris greșit (psf-ms-sep0/P1), dar coloana lotului e validă: ea decide.
+      semnaleaza(`ALIMENTARE_BANDA rândul ${r.nr}: ID „${brut}" stricat — importat după lotul din coloană, ${codLot}`);
+    } else {
+      semnaleaza(`ALIMENTARE_BANDA rândul ${r.nr}: ID „${brut}" nu se poate lega de un lot — sărit`);
+      numara('tranșe sărite');
+      continue;
+    }
+    const lotCod = codLot;
+    const cant = peMarimi(r, 'LANSAT');
+    if (cant.size === 0) { numara('tranșe fără bucăți, sărite'); continue; }
+    let lot = loturi.get(lotCod);
+    if (!lot) {
+      // Bucăți date pe bandă dintr-un lot care lipsește din CROIT (rând stricat sau
+      // necompletat): ce a intrat pe bandă a fost croit, deci lotul se reface din
+      // tranșă — cerut = croit = ce a intrat pe bandă. Planificarea, la fel, dacă lipsește.
+      lot = await refaLot(lotCod, text(r.c('Produs / Model')), cant,
+        data(r.c('Data intrare productie')) ?? data(r.c('Data prioritizare'))) ?? undefined;
+      if (!lot) {
+        semnaleaza(`tranșa ${cod}: lotul ${lotCod} nu există și nu se poate reface (comanda sau produsul lipsesc) — sărită`);
+        numara('tranșe sărite');
+        continue;
+      }
+      loturi.set(lotCod, lot);
+      semnaleaza(`tranșa ${cod}: lotul ${lotCod} lipsea din CROIT — refăcut din cantitățile tranșei`);
+    }
+    let n = numarTransa;
+    if (n !== null) {
+      const { rows: [exista] } = await c.query<{ id: string }>(
+        `SELECT id FROM alimentare_banda WHERE lot_id = $1 AND numar = $2`, [lot.id, n]);
+      if (exista) { numara('tranșe existente, neatinse'); continue; }
+    } else {
+      const k = (faraNumar.get(lotCod) ?? 0) + 1;
+      faraNumar.set(lotCod, k);
+      n = (maxExplicit.get(lotCod) ?? 0) + k;
+      const { rows: [exista] } = await c.query<{ id: string }>(
+        `SELECT id FROM alimentare_banda WHERE lot_id = $1 AND numar = $2`, [lot.id, n]);
+      if (exista) { numara('tranșe existente, neatinse'); continue; }
+    }
+
+    // Etapele: o etapă bifată le implică pe cele dinainte, cu aceeași dată dacă lipsește a lor.
+    const fl = { intrat: da(r.c('Intrat in productie')), iesit: da(r.c('Iesit din productie')),
+                 ctc: da(r.c('La ambalare-CTC')), predat: da(r.c('Livrat depozit')) };
+    const dIntrare = data(r.c('Data intrare productie'));
+    const dIesire = data(r.c('Data iesire productie'));
+    const dDepozit = data(r.c('Data iesire spre depozit'));
+    const predat = fl.predat ? dDepozit ?? dIesire ?? dIntrare : null;
+    const ctc = fl.ctc || fl.predat ? dIesire ?? predat ?? dIntrare : null;
+    const iesit = fl.iesit || ctc ? dIesire ?? ctc ?? dIntrare : null;
+    const intrat = fl.intrat || iesit ? dIntrare ?? iesit : null;
+    const lipsaData = (fl.intrat || fl.iesit || fl.ctc || fl.predat) && !(dIntrare || dIesire || dDepozit);
+    const zi = (d: string | null) => d ?? (lipsaData ? new Date().toISOString().slice(0, 10) : null);
+    if ((fl.predat && !fl.ctc) || (fl.ctc && !fl.iesit) || (fl.iesit && !fl.intrat)) numara('tranșe cu etape completate (lipseau în sheet)');
+
+    const timp = numar(r.c('Timp productie (min/buc)'));
+    const pers = numar(r.c('Nr. persoane alocate'));
+    const { rows: [ab] } = await c.query<{ id: string }>(
+      `INSERT INTO alimentare_banda (firma_id, lot_id, numar, alimentat_la, responsabil, persoane, timp_min_buc,
+                                     intrat_productie_la, iesit_productie_la, ctc_la, predat_depozit_la, observatii)
+       VALUES (firma_curenta(), $1, $2, coalesce($3::date, $4::date, now()), $5, $6, $7,
+               $8::date, $9::date, $10::date, $11::date, $12) RETURNING id`,
+      [lot.id, n, data(r.c('Data prioritizare')), dIntrare, text(r.c('Responsabil banda')),
+       pers && pers > 0 ? Math.round(pers) : null, timp && timp > 0 ? timp : null,
+       zi(intrat), zi(iesit), zi(ctc), zi(predat),
+       ['Import din dashboard.', text(r.c('ID vechi (fisa tiparita)')) && `ID vechi: ${text(r.c('ID vechi (fisa tiparita)'))}`,
+        text(r.c('Observatii'))].filter(Boolean).join(' ')]);
+    const peLot = alimentatPeLot.get(lot.id) ?? new Map<string, number>();
+    for (const [m, q] of cant) {
+      await c.query(`INSERT INTO alimentare_cantitate (firma_id, alimentare_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)`,
+        [ab.id, m, q]);
+      peLot.set(m, (peLot.get(m) ?? 0) + q);
+    }
+    alimentatPeLot.set(lot.id, peLot);
+    numara('tranșe importate');
+  }
+  for (const [lotId, pe] of alimentatPeLot) {
+    const lot = [...loturi.entries()].find(([, l]) => l.id === lotId);
+    if (lot && [...pe].some(([m, q]) => q > (lot[1].croit.get(m) ?? 0))) {
+      semnaleaza(`lotul ${lot[0]}: pe bandă ${[...pe.values()].reduce((a, b) => a + b, 0)} buc, croite ${[...lot[1].croit.values()].reduce((a, b) => a + b, 0)} — importat cum e`);
+      numara('loturi cu bandă peste croit (importate cum sunt)');
+    }
+  }
+
+  // -- stadiul planificărilor importate, din loturile lor
+  for (const p of planuri.values()) {
+    if (p.existent) continue;
+    const { rows: [s] } = await c.query<{ loturi: number; necroite: number; rest: number }>(
+      `SELECT (SELECT count(*) FROM lot_croit WHERE planificare_id = $1)::int AS loturi,
+              (SELECT count(*) FROM lot_croit WHERE planificare_id = $1 AND croit_la IS NULL)::int AS necroite,
+              (SELECT coalesce(sum(greatest(pc.cantitate - coalesce(
+                  (SELECT sum(le.cantitate) FROM lot_croit lc JOIN lot_croit_efectiv le ON le.lot_id = lc.id
+                    WHERE lc.planificare_id = pc.planificare_id AND le.marime_id = pc.marime_id), 0), 0)), 0)
+                 FROM planificare_cantitate pc WHERE pc.planificare_id = $1)::int AS rest`, [p.id]);
+    // Fără lot: planificatorul o lansează din aplicație. Cu lot necroit: e la croit.
+    // Toate croite: încheiată dacă nu mai e nimic de croit, altfel în croit — restul
+    // apare la „Rămas de croit", unde cineva decide dacă se mai croiește.
+    const stadiu = s.loturi === 0 ? 'gata_de_lansat'
+      : s.necroite > 0 ? (s.necroite < s.loturi ? 'in_croit' : 'lansat_spre_croit')
+      : s.rest === 0 ? 'incheiat' : 'in_croit';
+    await c.query(
+      `UPDATE planificare SET stadiu = $2::stadiu_planificare,
+              incheiat_la = CASE WHEN $2::text = 'incheiat' THEN now() END WHERE id = $1`,
+      [p.id, stadiu]);
+    numara(`planificări: ${stadiu}`);
+  }
+}
+
 // ---------------------------------------------------------------- pornire
 
 const fisier = process.argv[2];
@@ -448,7 +828,10 @@ if (!fisier) {
 }
 const wb = new ExcelJS.Workbook();
 await wb.xlsx.readFile(fisier);
-await caFirma(firmaCurenta(), (c) => importa(c, wb));
+await caFirma(firmaCurenta(), async (c) => {
+  await importa(c, wb);
+  await importaIstoric(c, wb);
+});
 
 console.log('\nImport terminat.\n');
 for (const [k, v] of Object.entries(contor)) console.log(`  ${String(v).padStart(6)}  ${k}`);

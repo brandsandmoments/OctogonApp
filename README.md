@@ -93,7 +93,8 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Planificarea și croitul (tot ce e în croit / de croit / croite / rămas de croit)
 - [x] Alimentarea benzii: loturile croite intră pe bandă, accesoriile scad din stoc
 - [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
-- [ ] Import din cele trei magazine Shopify; planificarea, croitul și recepțiile din dashboard
+- [x] Import din dashboard al istoricului: planificări, loturi croite, tranșe pe bandă
+- [ ] Import din cele trei magazine Shopify; intrările în depozit din dashboard
 
 ## Aplicația
 
@@ -266,7 +267,9 @@ npm run import:dashboard -- dashboard.xlsx   # File → Download → Microsoft E
 ```
 
 Aduce brandurile, categoriile, culorile, materialele (NOM_MATERIALE), modelele cu
-rețetele lor (RETETE), produsele (NOM_PRODUSE) și comenzile PSF și PSC. Coloanele se
+rețetele lor (RETETE), produsele (NOM_PRODUSE), comenzile PSF și PSC, apoi istoricul
+de producție: planificările (PLANIFICARE), loturile croite (CROIT) și tranșele de pe
+bandă (ALIMENTARE_BANDA), legate prin ID-urile din sheet. Coloanele se
 caută după antet, nu după literă: o coloană inserată în sheet nu mută datele în
 câmpul greșit.
 
@@ -278,10 +281,20 @@ câmpul greșit.
   putut fi potrivit: un produs care nu e în catalog, o comandă fără dată de lansare,
   o culoare scrisă altfel decât în listă.
 
+**Istoricul nu scrie în fișa de magazie.** Stocul de materiale n-a fost ținut
+niciodată, deci un consum istoric ar duce stocul pe minus fără sens; stocul
+pornește din inventar. Datele se importă cum sunt, și când încalcă regulile de acum
+(croit peste cerut, bandă peste croit) — istoria s-a întâmplat — dar fiecare caz e
+în raport. Un lot care lipsește din CROIT, dar are bucăți pe bandă, se reface din
+tranșă; o planificare care lipsește, dar are lot, se reface din lot.
+
 Primul import, pe sheet-ul din 24 octombrie 2026: 690 de produse, 107 modele cu
 1.809 componente de rețetă, 134 de materiale, 227 de comenzi (182 PSF, 45 PSC) cu
 9.962 de bucăți. Față de sheet lipsesc exact 20 de bucăți: linia „antoniq turqoise",
-al cărei produs nu există în catalog.
+al cărei produs nu există în catalog. Istoricul: 353 de planificări, 351 de loturi
+(7.097 buc croite), 198 de tranșe (5.603 buc pe bandă). Planificat, cerut la loturi
+și croit se potrivesc la bucată cu sheet-ul, după rândurile raportate ca sărite;
+banda la fel, după tranșele de pe comenzi sau produse care nu există.
 
 ## Recepția
 
