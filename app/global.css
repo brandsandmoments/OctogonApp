@@ -95,8 +95,15 @@ main.lat { max-width: 90rem; }
 .navigare .file-sectiune { border-top: 1px solid var(--linie); font-size: .85rem; }
 .navigare .file-sectiune a.activ { color: var(--text); font-weight: 600; }
 @media print { .navigare { display: none; } }
-.centralizator tr.grupa-model td { border-top: 2px solid var(--text); background: color-mix(in srgb, var(--linie) 35%, transparent); }
+tr.grupa-model td { border-top: 2px solid var(--text); background: color-mix(in srgb, var(--linie) 35%, transparent); }
 .in-rand { margin: 0; display: inline-flex; }
 .in-rand fieldset { display: inline-flex; gap: .25rem; }
 .in-rand button, .in-rand select { font: inherit; font-size: .8rem; padding: .2rem .5rem; border: 1px solid var(--linie); border-radius: .3rem; background: transparent; color: inherit; cursor: pointer; }
 .in-rand button:disabled { opacity: .35; cursor: default; }
+.marimi-croit { display: flex; flex-wrap: wrap; gap: .35rem .75rem; }
+.marimi-croit label { display: inline-flex; flex-direction: column; align-items: flex-start; gap: .15rem; }
+.marimi-croit input.bucati { width: 3.5rem; font: inherit; font-size: .85rem; padding: .2rem .35rem; border: 1px solid var(--linie); border-radius: .3rem; background: transparent; color: inherit; text-align: right; }
+.marimi-croit .bifa-tot { align-items: center; }
+tr.grupa-model.pliabil { cursor: pointer; }
+tr.grupa-model.pliabil td:first-child::before { content: '▸'; display: inline-block; width: 1.1em; color: var(--slab); }
+tr.grupa-model.pliabil.deschis td:first-child::before { content: '▾'; }

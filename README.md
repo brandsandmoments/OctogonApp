@@ -28,11 +28,13 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
 | `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
 | `db/migrations/0015_taiere.sql` | taierea: mai multe PSF și PSC pe același model, tăiate împreună |
+| `db/migrations/0016_croit_pe_taiere.sql` | taierile le face croitul; întins, tăiat, termocolat, împerecheat, metri și defecte pe culoare; operatorii de croit |
 | `db/oameni_octogon.sql` | oamenii Octogon și drepturile lor, cum le-a dat conducerea |
+| `db/modele_din_denumire.sql` | modele pentru produsele fără rețetă, din denumire („Trench Melissa Crem” → Melissa) |
 | `scripts/sync-shopify.mts` | sincronizarea vânzărilor din cele trei magazine Shopify |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
 | `scripts/import-tipare.mts` | importul din „Situație Tipare" |
-| `db/test_izolare.sql` | treizeci și șase de verificări de purtare, rulate pe Postgres 16 |
+| `db/test_izolare.sql` | treizeci și opt de verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -134,14 +136,15 @@ vede doar secțiunile la care are drept.
 |---|---|
 | `/comenzi` | comenzile date, pe file PSF și PSC: cerut, croit, intrat, stadiul liniilor |
 | `/etichete/<comanda>` | coala A4 de etichete a comenzii, gata de tipărit |
+| `/depozit`, `/depozit/<comanda>` | comenzile de stins, finalizate, toate; intrarea de mână și stingerea cu observații |
 | `/scanare` | recepția pe telefon: scanezi eticheta, confirmi ce a intrat |
 | `/centralizator` | toate liniile PSF și PSC, pe stadii (necroite, croite, în lucru, gata); necroitele grupate pe model |
 | `/comenzi/noua` | PSF sau PSC nouă, cu grila de mărimi |
 | `/necesar/<comanda>` | materia primă și accesoriile unei comenzi, plus ce lipsește din rețete |
 | `/modele`, `/modele/<id>` | modelele, consumul pe bucată, materialul fiecărei culori |
 | `/materiale` | nomenclatorul de materii prime și accesorii |
-| `/planificare`, `/planificare/taiere/<id>`, `/planificare/<id>` | de planificat pe model; taierile, ordinea lor și trimiterea la croit; o planificare cu încheierea ei |
-| `/croit`, `/croit/<lot>` | tot ce e în croit, de croit, croite, rămas de croit; fișa lotului cu etapele și croitul efectiv |
+| `/planificare`, `/planificare/<id>` | de planificat pe model; trimiterea la croit și ordinea de croit; o planificare |
+| `/croit`, `/croit/taiere/<id>`, `/croit/<lot>` | toate, croite, rămas de croit (de unde se fac taierile, pe mărimi), taieri, pe perioade; fișa taierii cu operațiile, metrii și croitul; o comandă din taiere |
 | `/kam`, `/kam/<kam>` | eficiența KAM pe săptămână, lună, trimestru sau an: ritmul și acuratețea la zi a fiecărui PSF |
 | `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
@@ -213,35 +216,55 @@ tabelului, pentru că un necesar care tace despre ele pare complet și nu e.
 ## Planificare și croit
 
 Lanțul e cel din dashboard: comanda → planificarea (`psf-ms-sep-1/P1`) → lotul de
-croit (`psf-ms-sep-1/P1/C1`). Peste el stă **taierea** (`T12`): una sau mai multe
-planificări de pe același model, întinse și tăiate împreună, apoi împărțite înapoi
-pe comenzi — fiecare comandă își păstrează planificarea și lotul ei.
+croit (`psf-ms-sep-1/P1/C1`). Lotul e bucata unei comenzi dintr-o **taiere** (`T12`):
+ce se întinde și se taie odată.
 
-**Planificarea** arată ce mai e de planificat grupat pe model. Planificatorul
-bifează comenzile care se taie împreună și face din ele o taiere (sau le adaugă la
-una existentă); baza refuză o taiere cu două modele. Taierile stau într-o coadă pe
-care planificatorul o ordonează și din care le trimite la croit, cu necesarul de
-materii prime și accesorii adunat pe taiere. Trimiterea e toată sau nimic: o
-comandă fără stofă oprește toată taierea. Ce se croiește efectiv hotărăște croitul.
-
-Pentru fiecare planificare se vede pe loc dacă stofa ajunge. Stocul se împarte în ordinea
+**Planificarea** arată ce mai e de planificat grupat pe model; planifică tot ce a
+rămas pe comenzile bifate, sau alte cantități pe una singură. Pentru fiecare
+planificare se vede pe loc dacă stofa ajunge, apoi se trimite la croit, iar
+planificatorul ține ordinea în care vrea să fie croite. Stocul se împarte în ordinea
 priorității comenzii, apoi a datei planificării: când stofa nu ajunge pentru toți,
 urgentele trec primele. **Doar stofa principală oprește lansarea**; restul
 materialelor dau avertisment — ca în dashboard, unde statusul materiei prime și
-cel al accesoriilor sunt separate. Trimiterea creează, pe fiecare comandă, lotul cu tot ce i-a rămas de croit.
+cel al accesoriilor sunt separate.
 
-**Croitul** vede loturile în patru feluri: tot ce e în croit, de croit, croite și
-rămas de croit (pe mărimi, inclusiv diferențele loturilor croite incomplet). Pe
-fișa lotului bifează cele nouă etape și, la final, scrie cât s-a croit pe mărimi —
-cu motiv din listă dacă diferă de cerut. Într-o singură tranzacție:
+**Taierile le face croitul.** Din „rămas de croit" — ce a trimis planificarea și
+n-a intrat încă în nicio taiere, grupat pe model — șefa de croit hotărăște ce taie
+odată: o parte dintr-un PSF, un PSF cu alt PSF, un PSF cu un PSC de pe același
+model, scriind direct în listă câte bucăți taie din fiecare mărime — doar unele mărimi, sau doar o parte dintr-o mărime. Un PSF se poate împărți în mai multe taieri; ce nu
+intră rămâne de croit. Baza refuză o taiere cu două modele. Cât n-a început, se
+pot scoate comenzi din ea sau adăuga altele.
 
-- **materia primă scade din stoc**: teoretic, iar pentru stofa principală metrii
-  măsurați, dacă s-au scris; **accesoriile scad abia la alimentarea benzii**;
+**Croitul** are patru file — toate, croite, rămas de croit, taieri (cele în
+lucru) — iar taierile se pot grupa pe săptămâni, luni sau ani. Pe **fișa taierii**, pentru fiecare material care
+se întinde și se taie (stofa de bază, căptușeala, paietele, mesh-ul, termoul — în
+rețetă, „se croiește"):
+
+| | |
+|---|---|
+| **Întins** | cine, de la ce oră la ce oră; nu se termină fără „am verificat fața materialului" |
+| **Tăiat** | cine, de la ce oră la ce oră |
+| **Termocolat** | dacă e cazul: cine, de la ce oră la ce oră |
+| **Metri și defecte** | pe fiecare culoare (o taiere cu trei culori întinde stofa de bază din trei materiale) |
+
+La final, **împerecheat** (piesele separate pe culori și pregătite pentru lucru) și
+**croitul efectiv** pe fiecare comandă și mărime, cu motiv din listă dacă diferă de
+cerut. Operatorii de croit (rolul „Operator croit", cu croitul la *vede*) bifează
+operațiile, metrii și defectele, de pe tableta atelierului; șefa de croit le
+corectează, înregistrează croitul și închide comenzile. Într-o singură tranzacție,
+pentru toate comenzile taierii:
+
+- **materia primă scade din stoc**: metrii scriși pe o culoare, împărțiți pe
+  comenzile culorii (un PSF și un PSC pe Negru) după bucățile croite, iar unde nu
+  s-au scris, consumul teoretic; **accesoriile scad abia la alimentarea benzii**;
 - planificarea trece în croit sau se încheie — singură când nu mai e nimic de
   croit, ori la cerere, cu motiv, când restul nu mai vine.
 
-O planificare încheiată **contează doar cu ce a croit**: restul redevine de
-planificat, pentru că comanda tot îl cere. Rezervarea ei de material se eliberează.
+Ce iese mai puțin decât s-a cerut se întoarce în „rămas de croit". De acolo, doar
+șefa de croit **stinge o comandă** care nu se mai croiește — s-a renunțat la mărime,
+materialul n-a ajuns, era defect —, cu motiv și observații. O planificare încheiată
+**contează doar cu ce a croit**: restul redevine de planificat, pentru că comanda
+tot îl cere. Rezervarea ei de material se eliberează.
 
 ## Alimentarea benzii
 
@@ -431,15 +454,32 @@ al cărei produs nu există în catalog. Istoricul: 353 de planificări, 351 de 
 și croit se potrivesc la bucată cu sheet-ul, după rândurile raportate ca sărite;
 banda la fel, după tranșele de pe comenzi sau produse care nu există.
 
+## Depozitul de produse finite
+
+`/depozit` are lista PSF-urilor și PSC-urilor așteptate, pe trei file: **de stins**
+(lipsește ceva), **finalizate** și **toate**, grupabile pe săptămâni, luni,
+trimestre sau ani. O comandă se stinge:
+
+- **prin scanare**, pe telefon (mai jos);
+- **de mână**, pe fișa comenzii: câte au venit azi, pe fiecare poziție. O livrare
+  parțială lasă comanda de stins până vine restul; pozițiile fără etichetă o
+  primesc atunci, pentru că recepția stă pe etichetă;
+- **la un clic**, „restul nu mai vine": fiecare poziție deschisă se închide pe
+  zero, cu motiv și observații.
+
+Când toate pozițiile sunt stinse — intrate integral sau închise —, comanda se
+închide singură și trece la finalizate. Stinge doar cine are „Recepție" la
+*modifică*: KAM-ii, depozitul și contul master.
+
 ## Recepția
 
 `/scanare`, pe telefon. Scanezi eticheta și vezi **cerut / intrat / lipsesc**.
 Aplicația propune restul; în cele mai multe cazuri coletul e complet și se apasă
 doar „Confirm".
 
-- **Mai puțin** cere motivul din lista `motiv` (doar cele marcate pentru
-  recepție) și întreabă dacă restul mai vine. Dacă nu, poziția se închide și nu
-  mai primește nimic.
+- **Mai puțin** e o livrare parțială: restul rămâne de stins. Dacă restul nu mai
+  vine, poziția se închide cu motivul din lista `motiv` (doar cele marcate pentru
+  recepție) și nu mai primește nimic.
 - **Zero bucăți** înseamnă închiderea poziției: cere motiv și observații scrise.
   Baza o impune și ea (0005), nu doar ecranul.
 - **Peste cerut** se poate, dar ecranul o spune explicit pe buton și pe o

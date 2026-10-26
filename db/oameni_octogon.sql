@@ -23,14 +23,21 @@ SELECT firma_curenta(), x.nume, x.roluri::rol[]
     ('Delia Jurubita',    '{kam,depozit}'),
     ('Teodora Bobocel',   '{kam,depozit}'),
     ('Valentina Stefan',  '{kam,depozit}'),
-    ('Adriana Corbu',     '{croit}')
+    ('Adriana Corbu',     '{croit}'),
+    -- Operatorii de croit: numele adevărate se pun mai târziu, din „Oameni și conturi".
+    ('Operator 1',        '{operator_croit}'),
+    ('Operator 2',        '{operator_croit}'),
+    ('Operator 3',        '{operator_croit}'),
+    ('Operator 4',        '{operator_croit}'),
+    ('Operator 5',        '{operator_croit}')
   ) x(nume, roluri)
 ON CONFLICT (firma_id, nume) DO UPDATE SET roluri = EXCLUDED.roluri, activ = true;
 
 -- Drepturile: vede sau modifică, pe zonă. Contul master (admin) nu are nevoie de rânduri.
 DELETE FROM drept WHERE utilizator_id IN (
     SELECT id FROM utilizator WHERE nume IN ('Madalina Bari', 'Alexandru Stanciu', 'Adelina Neagu', 'Luminita Stanciu',
-      'Venita Manea', 'Delia Jurubita', 'Teodora Bobocel', 'Valentina Stefan', 'Adriana Corbu'));
+      'Venita Manea', 'Delia Jurubita', 'Teodora Bobocel', 'Valentina Stefan', 'Adriana Corbu',
+      'Operator 1', 'Operator 2', 'Operator 3', 'Operator 4', 'Operator 5'));
 
 INSERT INTO drept (firma_id, utilizator_id, zona, nivel)
 SELECT firma_curenta(), u.id, d.zona, d.nivel::nivel_drept
@@ -57,7 +64,11 @@ SELECT firma_curenta(), u.id, d.zona, d.nivel::nivel_drept
     -- (intrări, inventar, gestiune); necesar; trece la croit ce croiește
     ('Adriana Corbu', 'comenzi', 'vede'), ('Adriana Corbu', 'centralizator', 'vede'),
     ('Adriana Corbu', 'planificare', 'vede'), ('Adriana Corbu', 'croit', 'modifica'),
-    ('Adriana Corbu', 'materiale', 'modifica'), ('Adriana Corbu', 'necesar', 'modifica')
+    ('Adriana Corbu', 'materiale', 'modifica'), ('Adriana Corbu', 'necesar', 'modifica'),
+    -- operatorii de croit: văd croitul și bifează operațiile (întins, tăiat, termocolat,
+    -- împerecheat), cu metrii și defectele; nu corectează și nu închid comenzi
+    ('Operator 1', 'croit', 'vede'), ('Operator 2', 'croit', 'vede'), ('Operator 3', 'croit', 'vede'),
+    ('Operator 4', 'croit', 'vede'), ('Operator 5', 'croit', 'vede')
   ) d(nume, zona, nivel)
   JOIN utilizator u ON u.nume = d.nume;
 
@@ -67,6 +78,7 @@ SELECT firma_curenta(), u.id, d.zona, d.nivel::nivel_drept
 UPDATE utilizator SET activ = false
  WHERE email IS NULL
    AND nume NOT IN ('Madalina Bari', 'Alexandru Stanciu', 'Adelina Neagu', 'Luminita Stanciu', 'Venita Manea',
-                    'Delia Jurubita', 'Teodora Bobocel', 'Valentina Stefan', 'Adriana Corbu');
+                    'Delia Jurubita', 'Teodora Bobocel', 'Valentina Stefan', 'Adriana Corbu',
+                    'Operator 1', 'Operator 2', 'Operator 3', 'Operator 4', 'Operator 5');
 
 COMMIT;

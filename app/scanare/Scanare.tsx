@@ -231,7 +231,7 @@ function PasPozitie({
   const seInchide = sub && (inchide || zero);
   const poateConfirma =
     formular && valida && !seLucreaza &&
-    (!sub || motivId !== null) &&
+    (!seInchide || motivId !== null) &&
     (!zero || observatii.trim() !== '');
 
   let eticheta = `Confirm ${valida ? cantitate : ''} buc`;
@@ -263,7 +263,7 @@ function PasPozitie({
           onSubmit={(e) => {
             e.preventDefault();
             if (poateConfirma) {
-              onConfirma({ cantitate, motivId: sub ? motivId : null, inchide: seInchide, observatii });
+              onConfirma({ cantitate, motivId: seInchide ? motivId : null, inchide: seInchide, observatii });
             }
           }}
         >
@@ -290,10 +290,19 @@ function PasPozitie({
           {sub && (
             <fieldset className="motive">
               <legend>
-                {zero ? 'Nu intră nimic.' : `Intră ${cantitate} din ${p.lipsesc}.`} De ce lipsesc{' '}
-                {p.lipsesc - cantitate}?
+                {zero ? 'Nu intră nimic.' : `Intră ${cantitate} din ${p.lipsesc}; restul de ${p.lipsesc - cantitate} rămâne de stins.`}
               </legend>
-              {motive.map((m) => (
+              <label className="inchide">
+                <input
+                  type="checkbox"
+                  checked={seInchide}
+                  disabled={zero}
+                  onChange={(e) => setInchide(e.target.checked)}
+                />
+                Restul nu mai vine — închide poziția
+              </label>
+              {seInchide && <p className="eticheta-camp">De ce?</p>}
+              {seInchide && motive.map((m) => (
                 <label key={m.id} className={motivId === m.id ? 'ales' : ''}>
                   <input
                     type="radio"
@@ -304,15 +313,6 @@ function PasPozitie({
                   {m.nume}
                 </label>
               ))}
-              <label className="inchide">
-                <input
-                  type="checkbox"
-                  checked={seInchide}
-                  disabled={zero}
-                  onChange={(e) => setInchide(e.target.checked)}
-                />
-                Restul nu mai vine — închide poziția
-              </label>
             </fieldset>
           )}
 

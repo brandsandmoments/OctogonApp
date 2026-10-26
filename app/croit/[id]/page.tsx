@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
-import { bifeazaEtapa, detaliiLot, inregistreazaCroit } from '../../lib/croit';
-import { cantitate, numarDinFormular } from '../../lib/format';
-import { motiveCroit } from '../../lib/planificare';
+import { bifeazaEtapa, detaliiLot } from '../../lib/croit';
+import { cantitate } from '../../lib/format';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -13,8 +12,9 @@ function inapoi(id: string, eroare: string | null): never {
 }
 
 /**
- * Fișa lotului, cum o vede croitul: ce i se cere pe mărimi, etapele bifate pe
- * măsură ce se fac, și la final ce s-a croit efectiv — care scade stofa din stoc.
+ * Fișa lotului — o comandă dintr-o taiere: ce i se cere pe mărimi, etapele bifate
+ * pe măsură ce se fac și ce s-a croit. Croitul se înregistrează pe fișa taierii,
+ * odată pentru toate comenzile tăiate împreună.
  */
 export default async function LotPagina({
   params, searchParams,
@@ -27,31 +27,16 @@ export default async function LotPagina({
   const m = await poateModifica('croit');
   const peBanda = await poateModifica('banda');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
-  const [d, motive] = await Promise.all([detaliiLot(id), motiveCroit()]);
+  const d = await detaliiLot(id);
   if (!d) notFound();
   const { lot, marimi, etape, consum } = d;
   const croit = Boolean(lot.croit_la);
-  const principal = consum.find((m) => m.principal);
 
   async function etapa(date: FormData) {
     'use server';
     await cere('croit', 'modifica');
     await bifeazaEtapa(id, String(date.get('etapa')), date.get('bifat') === '1');
     inapoi(id, null);
-  }
-
-  async function inregistreaza(date: FormData) {
-    'use server';
-    await cere('croit', 'modifica');
-    inapoi(id, await inregistreazaCroit({
-      lotId: id,
-      croit: new Map([...date.entries()].filter(([k]) => k.startsWith('q:'))
-        .map(([k, v]) => [k.slice(2), numarDinFormular(v) ?? -1])),
-      motivId: String(date.get('motiv') ?? '') || null,
-      consumPrincipal: numarDinFormular(date.get('consum')),
-      incheie: date.get('incheie') === '1',
-      motivIncheiereId: null,
-    }));
   }
 
   return (
@@ -61,6 +46,7 @@ export default async function LotPagina({
       <p className="sumar">
         {lot.produs} · {lot.cod_sku} · P{lot.prioritate} · cerut în depozit {lot.data_ceruta} · primit {lot.primit_la}
         {croit && <> · <strong>croit {lot.croit_la}</strong></>}
+        {lot.taiere_id && <>{' · '}<Link href={`/croit/taiere/${lot.taiere_id}`}>taierea {lot.taiere}</Link></>}
         {' · '}<Link href={`/planificare/${lot.planificare_id}`}>planificarea</Link>
         {croit && peBanda && <>{' · '}<Link href={`/banda/alimenteaza?lot=${lot.id}`}>dă pe bandă</Link></>}
       </p>
@@ -85,56 +71,22 @@ export default async function LotPagina({
       </ol>
 
       <h2>{croit ? 'Croit' : 'De croit'}</h2>
-      <form action={inregistreaza}><fieldset disabled={!m} className="fara-chenar">
-        <table className="grila">
-          <thead><tr><th>Mărime</th><th className="nr">Cerut</th><th className="nr">Croit efectiv</th>{croit && <th>Motiv</th>}</tr></thead>
-          <tbody>
-            {marimi.map((m) => (
-              <tr key={m.marime_id}>
-                <td>{m.marime}</td>
-                <td className="nr">{m.cerut}</td>
-                <td className="nr">
-                  {croit
-                    ? <span className={m.croit !== m.cerut ? 'lipsa' : ''}>{m.croit}</span>
-                    : <input name={`q:${m.marime_id}`} defaultValue={m.cerut} inputMode="numeric"
-                        className="bucati" aria-label={`Croit ${m.marime}`} />}
-                </td>
-                {croit && <td className="slab">{m.motiv ?? ''}</td>}
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr><td><strong>Total</strong></td>
-              <td className="nr"><strong>{marimi.reduce((s, m) => s + m.cerut, 0)}</strong></td>
-              <td className="nr"><strong>{croit ? marimi.reduce((s, m) => s + (m.croit ?? 0), 0) : ''}</strong></td>
-              {croit && <td />}</tr>
-          </tfoot>
-        </table>
-
-        {!croit && (
-          <div className="antet-comanda">
-            <label>
-              <span>Motiv, dacă diferă de cerut</span>
-              <select name="motiv" defaultValue="">
-                <option value="">—</option>
-                {motive.map((m) => <option key={m.id} value={m.id}>{m.nume}</option>)}
-              </select>
-            </label>
-            {principal && (
-              <label>
-                <span>{principal.denumire} consumat ({principal.unitate})</span>
-                <input name="consum" inputMode="decimal"
-                  placeholder={`teoretic ${cantitate(principal.teoretic)}`} />
-              </label>
-            )}
-            <label className="lat bifa-linie">
-              <input type="checkbox" name="incheie" value="1" />
-              Ce nu s-a croit nu se mai croiește — încheie planificarea
-            </label>
-            <div className="actiuni"><button className="principal">Înregistrează croitul</button></div>
-          </div>
-        )}
-      </fieldset></form>
+      <table className="grila">
+        <thead><tr><th>Mărime</th><th className="nr">Cerut</th><th className="nr">Croit efectiv</th><th>Motiv</th></tr></thead>
+        <tbody>
+          {marimi.map((m) => (
+            <tr key={m.marime_id}>
+              <td>{m.marime}</td>
+              <td className="nr">{m.cerut}</td>
+              <td className="nr"><span className={croit && m.croit !== m.cerut ? 'lipsa' : ''}>{m.croit ?? '—'}</span></td>
+              <td className="slab">{m.motiv ?? ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!croit && lot.taiere_id && (
+        <p><Link href={`/croit/taiere/${lot.taiere_id}`} className="buton">Croitul se înregistrează pe fișa taierii {lot.taiere}</Link></p>
+      )}
 
       {[['materie_prima', 'Materie primă — scade din stoc la croit'],
         ['accesoriu', 'Accesorii — scad la alimentarea benzii']].map(([tip, titlu]) => {

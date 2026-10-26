@@ -122,9 +122,8 @@ export type RezultatReceptie =
  * - Peste cantitatea cerută se poate: atelierul trimite uneori bucăți în plus,
  *   iar ele există fizic în depozit. Ecranul cere confirmarea explicit, pentru
  *   că a doua scanare a aceleiași etichete arată exact la fel.
- * - Mai puțin decât lipsește cere motiv. Și când restul mai vine, motivul e
- *   singurul lucru pe care cel care primește coletul îl știe acum și nimeni
- *   altcineva mai târziu.
+ * - Mai puțin decât lipsește e o livrare parțială: poziția rămâne de stins până
+ *   vine restul. Doar închiderea ei („restul nu mai vine") cere motiv.
  * - Zero bucăți doar ca închidere, cu motiv și observații (vezi 0005).
  * - O poziție închisă nu mai primește nimic.
  */
@@ -151,11 +150,11 @@ export async function inregistreazaReceptie(cerere: CerereReceptie): Promise<Rez
     if (cantitate === 0 && !observatii) {
       return { ok: false, eroare: 'Scrie la observații de ce se închide pe zero.', pozitie };
     }
-    if (sub && !cerere.motivId) {
-      return { ok: false, eroare: 'Alege motivul pentru care intră mai puțin.', pozitie };
+    if (inchide && !cerere.motivId) {
+      return { ok: false, eroare: 'Alege motivul pentru care se închide poziția.', pozitie };
     }
 
-    if (sub && cerere.motivId) {
+    if (inchide && cerere.motivId) {
       const { rowCount } = await c.query(
         `SELECT 1 FROM motiv WHERE id = $1 AND activ AND 'receptie' = ANY (contexte)`,
         [cerere.motivId],
@@ -166,10 +165,29 @@ export async function inregistreazaReceptie(cerere: CerereReceptie): Promise<Rez
     await c.query(
       `INSERT INTO receptie (firma_id, eticheta_id, cantitate, motiv_id, inchide_pozitia, observatii)
        VALUES (firma_curenta(), $1, $2, $3, $4, $5)`,
-      [p.eticheta_id, cantitate, sub ? cerere.motivId : null, inchide, observatii],
+      [p.eticheta_id, cantitate, inchide ? cerere.motivId : null, inchide, observatii],
     );
+    await stingeDacaE(c, p.eticheta_id);
 
     const dupa = await citestePozitia(c, cod, false);
     return { ok: true, pozitie: faraId(dupa!) };
   });
+}
+
+/**
+ * O comandă cu toate pozițiile stinse — intrate integral sau închise — se închide
+ * singură și trece la „finalizate".
+ */
+export async function stingeDacaE(c: PoolClient, etichetaId: string): Promise<void> {
+  await c.query(
+    `UPDATE comanda c SET stare = 'inchisa'
+      WHERE c.id = (SELECT cl.comanda_id FROM eticheta e JOIN comanda_linie cl ON cl.id = e.linie_id WHERE e.id = $1)
+        AND c.stare NOT IN ('inchisa', 'anulata')
+        AND NOT EXISTS (
+            SELECT 1 FROM comanda_cantitate cc JOIN comanda_linie cl ON cl.id = cc.linie_id
+             WHERE cl.comanda_id = c.id
+               AND NOT coalesce((SELECT bool_or(r.inchide_pozitia) OR sum(r.cantitate) >= cc.cantitate
+                                   FROM eticheta e JOIN receptie r ON r.eticheta_id = e.id
+                                  WHERE e.linie_id = cc.linie_id AND e.marime_id = cc.marime_id), false))`,
+    [etichetaId]);
 }

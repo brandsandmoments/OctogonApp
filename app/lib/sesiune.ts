@@ -63,6 +63,20 @@ export async function poateModifica(zona: Zona): Promise<boolean> {
   return Boolean(u && poate(u, zona, 'modifica'));
 }
 
+/**
+ * Operațiile de la croit (întins, tăiat, termocolat, împerecheat, metri, defecte)
+ * le scriu și operatorii de croit, care altfel doar văd croitul. Corecturile și
+ * închiderea rămân la cine poate modifica croitul.
+ */
+export const lucreazaLaCroit = (u: Utilizator) =>
+  poate(u, 'croit', 'modifica') || (u.roluri.includes('operator_croit') && poate(u, 'croit'));
+
+export async function cereOperatorCroit(): Promise<Utilizator> {
+  const u = await cere('croit');
+  if (!lucreazaLaCroit(u)) redirect('/?fara_acces=croit&doar_vede=1');
+  return u;
+}
+
 /** Firma și omul logat, pentru caFirma: tot ce scrie aplicația își știe autorul. */
 export async function firmaCurenta(): Promise<Context> {
   const u = await cere();

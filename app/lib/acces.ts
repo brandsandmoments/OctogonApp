@@ -13,6 +13,7 @@ export const ROLURI = {
   head_of_sales: 'Head of sales',
   planificator: 'Manager producție',
   croit: 'Șef croit',
+  operator_croit: 'Operator croit',
   banda: 'Șef bandă',
   depozit: 'Gestionar depozit',
   dezvoltare: 'Dezvoltare produs',
@@ -82,6 +83,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
   {
     nume: 'Depozit produse finite',
     ecrane: [
+      { href: '/depozit', nume: 'Comenzi de stins', ce: 'PSF-urile și PSC-urile așteptate: de stins, finalizate, toate', zona: 'receptie' },
       { href: '/scanare', nume: 'Scanare', ce: 'scanează eticheta: ce a venit fizic, pe PSF-ul sau PSC-ul lui', zona: 'receptie', nivel: 'modifica' },
     ],
     si: ['/etichete'],

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { cantitate } from '../../lib/format';
-import { anuleazaPlanificare, detaliiPlanificare, incheie, lanseazaSpreCroit, motiveCroit } from '../../lib/planificare';
+import { anuleazaPlanificare, detaliiPlanificare, trimiteLaCroit } from '../../lib/planificare';
 import { STADII } from '../../lib/stadii';
 import '../../formulare.css';
 
@@ -22,20 +22,14 @@ export default async function PlanificarePagina({
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('planificare');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
-  const [d, motive] = await Promise.all([detaliiPlanificare(id), motiveCroit()]);
+  const d = await detaliiPlanificare(id);
   if (!d) notFound();
   const { plan, marimi, loturi, materiale } = d;
   const rest = marimi.reduce((s, m) => s + m.rest, 0);
   const activa = !['anulat', 'incheiat'].includes(plan.stadiu);
-  const lotDeschis = loturi.some((l) => !l.croit_la);
 
-  async function lanseaza() { 'use server'; await cere('planificare', 'modifica'); inapoi(id, await lanseazaSpreCroit(id)); }
+  async function trimite() { 'use server'; await cere('planificare', 'modifica'); inapoi(id, await trimiteLaCroit(id)); }
   async function anuleaza() { 'use server'; await cere('planificare', 'modifica'); inapoi(id, await anuleazaPlanificare(id)); }
-  async function inchide(date: FormData) {
-    'use server';
-    await cere('planificare', 'modifica');
-    inapoi(id, await incheie(id, String(date.get('motiv') ?? '') || null));
-  }
 
   return (
     <main className="formular">
@@ -45,7 +39,6 @@ export default async function PlanificarePagina({
         {plan.produs} · {plan.cod_sku} · P{plan.prioritate} · cerut în depozit {plan.data_ceruta} ·{' '}
         <strong>{STADII[plan.stadiu] ?? plan.stadiu}</strong>
         {plan.motiv_incheiere && ` — ${plan.motiv_incheiere}`}
-        {plan.taiere_id && <> · în taierea <Link href={`/planificare/taiere/${plan.taiere_id}`}>{plan.taiere}</Link></>}
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
 
@@ -91,7 +84,10 @@ export default async function PlanificarePagina({
             <tbody>
               {loturi.map((l) => (
                 <tr key={l.id}>
-                  <td><Link href={`/croit/${l.id}`}>{l.cod}</Link></td>
+                  <td>
+                    <Link href={`/croit/${l.id}`}>{l.cod}</Link>
+                    {l.taiere_id && <span className="slab"> · în <Link href={`/croit/taiere/${l.taiere_id}`}>{l.taiere}</Link></span>}
+                  </td>
                   <td className="nr">cerut {l.cerut}</td>
                   <td className="nr">{l.croit_la ? `croit ${l.croit} · ${l.croit_la}` : <strong>de croit</strong>}</td>
                 </tr>
@@ -103,12 +99,8 @@ export default async function PlanificarePagina({
 
       {activa && (
         <div className="actiuni">
-          {rest > 0 && !lotDeschis && plan.taiere_id && !plan.taiere_trimisa && (
-            <p className="slab">Pleacă la croit odată cu taierea <Link href={`/planificare/taiere/${plan.taiere_id}`}>{plan.taiere}</Link>.</p>
-          )}
-          {/* După ce taierea a plecat, ce a rămas necroit se poate relansa de aici. */}
-          {rest > 0 && !lotDeschis && (!plan.taiere_id || plan.taiere_trimisa) && (
-            <form action={lanseaza}><fieldset disabled={!m} className="fara-chenar"><button className="principal">{loturi.length ? `Relansează restul spre croit (${rest} buc)` : `Lansează spre croit (${rest} buc)`}</button></fieldset></form>
+          {['gata_de_lansat', 'blocat_materiale'].includes(plan.stadiu) && (
+            <form action={trimite}><fieldset disabled={!m} className="fara-chenar"><button className="principal">Trimite la croit ({rest} buc)</button></fieldset></form>
           )}
           {loturi.length === 0 && (
             <form action={anuleaza}><fieldset disabled={!m} className="fara-chenar"><button className="secundar">Anulează planificarea</button></fieldset></form>
@@ -116,19 +108,8 @@ export default async function PlanificarePagina({
         </div>
       )}
 
-      {activa && loturi.length > 0 && !lotDeschis && (
-        <form action={inchide} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
-          {rest > 0 && (
-            <label>
-              <span>De ce nu se mai croiesc {rest} buc</span>
-              <select name="motiv" defaultValue="" required>
-                <option value="">—</option>
-                {motive.map((m) => <option key={m.id} value={m.id}>{m.nume}</option>)}
-              </select>
-            </label>
-          )}
-          <div className="actiuni"><button className="secundar">Încheie planificarea</button></div>
-        </fieldset></form>
+      {activa && loturi.length > 0 && (
+        <p className="slab">Ce a rămas necroit îl închide croitul, din „Rămas de croit", cu motiv și observații.</p>
       )}
     </main>
   );

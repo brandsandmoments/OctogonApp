@@ -1,11 +1,14 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
+import Grupare from '../Grupare';
+import Pliere from '../Pliere';
+import { grupareDinAdresa, grupeaza, perioada } from '../lib/perioade';
 import { cere, poateModifica } from '../lib/sesiune';
 import { branduriActive, centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 
 export const dynamic = 'force-dynamic';
 
-type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string; stadiu?: string };
+type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string; stadiu?: string; grupare?: string };
 
 /**
  * Centralizatorul: toate liniile PSF și PSC, pe mărimi, cu drumul fiecăreia —
@@ -25,6 +28,10 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
     centralizatorPeStadii({ ...f, toate: f.toate === '1', peModel }),
     branduriActive(),
   ]);
+  // Pe perioade, după lansarea comenzii; necroitele rămân grupate pe model.
+  const g = peModel ? '' : grupareDinAdresa(f.grupare, 'saptamana');
+  const ordonate = g ? grupeaza(randuri, (r) => r.data_lansare, g).flatMap((x) => x.randuri) : randuri;
+  const perioadaRand = (r: (typeof randuri)[number]) => (g ? perioada(g, r.data_lansare).nume : '');
   const adresa = (stadiu?: string) => {
     const q = new URLSearchParams(Object.entries({ ...f, stadiu }).filter(([, v]) => v) as [string, string][]);
     return `/centralizator${q.size ? `?${q}` : ''}`;
@@ -46,8 +53,13 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
         ))}
       </nav>
 
+      {peModel
+        ? <p className="filtre"><Pliere semn={JSON.stringify(f)} /></p>
+        : <Grupare ales={g} pastreaza={{ tip: f.tip, brand: f.brand, cauta: f.cauta, toate: f.toate, stadiu: f.stadiu }} />}
+
       <form className="filtre">
         {f.stadiu && <input type="hidden" name="stadiu" value={f.stadiu} />}
+        {f.grupare && <input type="hidden" name="grupare" value={f.grupare} />}
         <select name="tip" defaultValue={f.tip ?? ''} aria-label="Tip">
           <option value="">PSF + PSC</option>
           <option value="PSF">PSF</option>
@@ -88,14 +100,30 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
             </tr>
           </thead>
           <tbody>
-            {randuri.map((r, i) => {
+            {ordonate.map((r, i) => {
               const lipsesc = Math.max(0, r.cerut - r.intrat);
-              const nouaComanda = i === 0 || randuri[i - 1].comanda !== r.comanda || randuri[i - 1].linie_id !== r.linie_id && peModel;
+              const nouaComanda = i === 0 || ordonate[i - 1].comanda !== r.comanda || ordonate[i - 1].linie_id !== r.linie_id && peModel;
+              const nouaPerioada = g && (i === 0 || perioadaRand(ordonate[i - 1]) !== perioadaRand(r));
+              const dinPerioada = nouaPerioada ? ordonate.filter((x) => perioadaRand(x) === perioadaRand(r)) : [];
               const model = r.model ?? r.produs;
-              const nouModel = peModel && (i === 0 || (randuri[i - 1].model ?? randuri[i - 1].produs) !== model);
+              const nouModel = peModel && (i === 0 || (ordonate[i - 1].model ?? ordonate[i - 1].produs) !== model);
               const deModel = nouModel ? randuri.filter((x) => (x.model ?? x.produs) === model) : [];
               return (
                 <Fragment key={i}>
+                {nouaPerioada && (
+                  <tr className="grupa-model">
+                    <td colSpan={5}>
+                      <strong>{perioadaRand(r)}</strong>{' '}
+                      <span className="slab">{new Set(dinPerioada.map((x) => x.comanda)).size} comenzi lansate</span>
+                    </td>
+                    <td className="nr"><strong>{dinPerioada.reduce((a, x) => a + x.cerut, 0)}</strong></td>
+                    <td className="nr">{dinPerioada.reduce((a, x) => a + x.planificat, 0) || '—'}</td>
+                    <td className="nr">{dinPerioada.reduce((a, x) => a + x.croit, 0) || '—'}</td>
+                    <td className="nr">{dinPerioada.reduce((a, x) => a + x.banda, 0) || '—'}</td>
+                    <td className="nr">{dinPerioada.reduce((a, x) => a + x.intrat, 0) || '—'}</td>
+                    <td />
+                  </tr>
+                )}
                 {nouModel && (
                   <tr className="grupa-model">
                     <td colSpan={5}>

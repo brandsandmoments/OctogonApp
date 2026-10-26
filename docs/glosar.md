@@ -247,6 +247,7 @@ Cutting batch. Cannot exist without a planning batch: that constraint is what pr
 | `observatii` | Notes |
 | `croit_la` | When the cut was recorded. Null means still to cut. |
 | `croit_de` | Who recorded the cut |
+| `taiere_id` | The cut this batch was cut in |
 
 ## `lot_croit_cantitate`
 
@@ -376,6 +377,7 @@ Recipe line of a model: which component, how much per finished piece. The materi
 | `consum` | Consumption per finished piece, in that unit |
 | `ordine` | Display order |
 | `principal` | Main fabric of the model: the one cutting depends on. At most one per model. |
+| `se_croieste` | Spread and cut on the table (fabric, lining, interfacing). Cutting operations and metres are recorded for these components. |
 
 ## `motiv`
 
@@ -415,7 +417,8 @@ Planning batch. Decides how much of an order line goes into production now; one 
 | `observatii` | Notes |
 | `incheiat_la` | When the planning batch was closed: fully cut, or closed short. Closing releases its material reservation. |
 | `motiv_incheiere_id` | Reason, when closed with pieces left uncut |
-| `taiere_id` | The cut this planning batch is part of |
+| `observatii_incheiere` | Notes on closing with pieces left uncut; required with a reason |
+| `ordine_croit` | Order in which planning wants it cut; the cutting room sees what is left to cut in this order |
 
 ## `planificare_cantitate`
 
@@ -484,18 +487,50 @@ Sign-in sessions. Only the SHA-256 of the token is stored; the token lives in th
 
 ## `taiere`
 
-A cut: one or more planning batches of the same model, spread and cut together, then split back per order.
+A cut: what the cutting room spreads and cuts at once — part of an order, or orders of the same model together. Each order's share is a cutting batch (lot_croit).
 
 | coloană | english |
 |---|---|
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `numar` | Cut number, shown as T12 |
-| `ordine` | Place in the queue to the cutting room |
+| `ordine` | Order of creation in the cutting room |
 | `creat_de` | Created by |
 | `creat_la` | Created at |
-| `trimis_la` | When it was sent to the cutting room. Null means still in planning. |
-| `trimis_de` | Who sent it |
+| `trimis_la` | When the cut was put together in the cutting room |
+| `trimis_de` | Who put it together |
 | `observatii` | Notes |
+
+## `taiere_material`
+
+Material actually used by a cut, per component and colour: metres and fabric defects. The metres of a colour are split across its orders by pieces cut.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `componenta_id` | Material component of the model |
+| `produs_id` | Product, that is the colour |
+| `material_id` | Material of that colour for the component |
+| `metri` | Metres actually used |
+| `defecte` | Fabric defects found |
+| `scris_de` | Who recorded it |
+| `scris_la` | Recorded at |
+
+## `taiere_operatie`
+
+Work done on a cut, per material component: spreading, cutting, thermofusing; pairing for the whole cut. Who, from when to when.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `componenta_id` | Material component of the model (main fabric, lining, sequins). Null for pairing, which covers the whole cut. |
+| `operatie` | Operation: intins (spreading), taiat (cutting), termocolat (thermofusing), imperecheat (pairing, sorting by colour, preparing for sewing) |
+| `operator_id` | Who did it |
+| `inceput_la` | Started at |
+| `terminat_la` | Finished at. Null means still in progress. |
+| `fata_verificata` | Spreading: the operator confirmed the right side of the fabric. Required to finish spreading. |
+| `observatii` | Notes |
+| `scris_de` | Who recorded it |
+| `scris_la` | Recorded at |
 
 ## `utilizator`
 

@@ -133,3 +133,7 @@
 .drepturi table { width: auto; }
 .drepturi td, .drepturi th { padding: .3rem .6rem; }
 .drepturi input { width: auto; }
+.marimi-croit { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
+.marimi-croit label { display: inline-flex; flex-direction: column; align-items: flex-start; gap: .15rem; }
+.formular .in-rand input { font: inherit; font-size: .85rem; padding: .2rem .4rem; border: 1px solid var(--linie); border-radius: .3rem; background: transparent; color: inherit; }
+.formular .in-rand .bifa { font-size: .85rem; display: inline-flex; gap: .25rem; align-items: center; }

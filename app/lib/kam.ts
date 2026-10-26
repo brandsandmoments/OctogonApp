@@ -1,5 +1,8 @@
 import { caFirma } from './db';
 import { firmaCurenta } from './sesiune';
+import { adaugaZile, PERIOADE, perioada, vecina, type Perioada, type TipPerioada } from './perioade';
+
+export { adaugaZile, luni, PERIOADE, perioada, vecina, type Perioada, type TipPerioada } from './perioade';
 
 /**
  * Eficiența KAM-ului, pe perioade: săptămână (luni–duminică), lună, trimestru, an.
@@ -47,48 +50,6 @@ export type RandKam = {
   vandut_cum: number;
   acuratete: number | null;
 };
-
-/** Lunea săptămânii unei date, ca text YYYY-MM-DD. */
-export function luni(zi: string): string {
-  const d = new Date(`${zi}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-  return d.toISOString().slice(0, 10);
-}
-
-export function adaugaZile(zi: string, n: number): string {
-  const d = new Date(`${zi}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-export const PERIOADE = { saptamana: 'Săptămână', luna: 'Lună', trimestru: 'Trimestru', an: 'An' } as const;
-export type TipPerioada = keyof typeof PERIOADE;
-export type Perioada = { tip: TipPerioada; de_la: string; pana_la: string; nume: string };
-
-const LUNI = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august',
-  'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
-
-/** Perioada de tipul ales care conține ziua, cu un nume de citit. */
-export function perioada(tip: TipPerioada, zi: string): Perioada {
-  if (tip === 'saptamana') {
-    const l = luni(zi);
-    return { tip, de_la: l, pana_la: adaugaZile(l, 6), nume: `${l} – ${adaugaZile(l, 6)}` };
-  }
-  const [an, luna] = zi.split('-').map(Number);
-  const prima = tip === 'an' ? 1 : tip === 'trimestru' ? Math.floor((luna - 1) / 3) * 3 + 1 : luna;
-  const cate = tip === 'an' ? 12 : tip === 'trimestru' ? 3 : 1;
-  const de_la = `${an}-${String(prima).padStart(2, '0')}-01`;
-  const urm = new Date(Date.UTC(an, prima - 1 + cate, 1, 12));
-  const pana_la = adaugaZile(urm.toISOString().slice(0, 10), -1);
-  const nume = tip === 'an' ? String(an)
-    : tip === 'trimestru' ? `T${(prima - 1) / 3 + 1} ${an}`
-    : `${LUNI[prima - 1]} ${an}`;
-  return { tip, de_la, pana_la, nume };
-}
-
-/** Perioada dinainte (-1) sau următoare (+1). */
-export const vecina = (p: Perioada, pas: -1 | 1) =>
-  perioada(p.tip, pas < 0 ? adaugaZile(p.de_la, -1) : adaugaZile(p.pana_la, 1));
 
 /**
  * Perioada din adresă. Implicit, cea care conține ziua de acum o săptămână: la

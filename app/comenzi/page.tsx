@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { Fragment } from 'react';
+import Grupare from '../Grupare';
+import { grupareDinAdresa, grupeaza } from '../lib/perioade';
 import { centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 import { cere, poateModifica } from '../lib/sesiune';
 
@@ -13,9 +16,10 @@ const TIPURI = {
  * Comenzile date de KAM, pe două file: PSF (din forecast) și PSC (pe produse care
  * au deja comenzi pe site). Câte o comandă pe rând, cu cât s-a cerut, cât s-a
  * croit, cât a intrat în depozit și în ce stadiu sunt liniile ei. Pozițiile pe
- * mărimi sunt în centralizator.
+ * mărimi sunt în centralizator. Se grupează pe săptămâni, luni, trimestre sau ani,
+ * după ziua lansării.
  */
-export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string }> }) {
+export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string; grupare?: string }> }) {
   await cere('comenzi');
   const f = await searchParams;
   const tip: keyof typeof TIPURI = f.tip === 'PSC' ? 'PSC' : 'PSF';
@@ -40,21 +44,25 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
     comenzi.set(r.comanda, c);
   }
   const lista = [...comenzi.values()].sort((a, b) => b.lansare.localeCompare(a.lansare) || a.numar.localeCompare(b.numar));
+  // Comenzile pornesc pe săptămâni de lansare, strânse.
+  const g = grupareDinAdresa(f.grupare, 'saptamana');
+  const grupe = g ? grupeaza(lista, (c) => c.lansare, g) : [{ perioada: null, randuri: lista }];
 
   return (
     <main className="lat">
       <h1>Comenzi</h1>
       <nav className="file">
         {(Object.keys(TIPURI) as (keyof typeof TIPURI)[]).map((t) => (
-          <Link key={t} href={`/comenzi?tip=${t}`} className={t === tip ? 'activ' : ''}>{t}</Link>
+          <Link key={t} href={`/comenzi?tip=${t}${f.grupare ? `&grupare=${f.grupare}` : ''}`} className={t === tip ? 'activ' : ''}>{t}</Link>
         ))}
       </nav>
       <p className="sumar">
         {TIPURI[tip]} · {lista.length} comenzi{f.toate === '1' ? '' : ' deschise'} ·{' '}
-        <Link href={`/comenzi?tip=${tip}${f.toate === '1' ? '' : '&toate=1'}`}>
+        <Link href={`/comenzi?tip=${tip}${f.toate === '1' ? '' : '&toate=1'}${f.grupare ? `&grupare=${f.grupare}` : ''}`}>
           {f.toate === '1' ? 'doar deschise' : 'și închise'}
         </Link>
       </p>
+      <Grupare ales={g} pastreaza={{ tip, toate: f.toate }} />
       {poateDa && (
         <p><Link href={`/comenzi/noua?tip=${tip}`} className="buton">+ {tip} nouă</Link></p>
       )}
@@ -73,7 +81,18 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
             </tr>
           </thead>
           <tbody>
-            {lista.map((c) => {
+            {grupe.map((gr) => (
+              <Fragment key={gr.perioada?.de_la ?? 'toate'}>
+              {gr.perioada && (
+                <tr className="grupa-model">
+                  <td colSpan={4}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} comenzi lansate</span></td>
+                  <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.cerut, 0)}</strong></td>
+                  <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.croit, 0)}</strong></td>
+                  <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.intrat, 0)}</strong></td>
+                  <td />
+                </tr>
+              )}
+              {gr.randuri.map((c) => {
               const pe = (s: StadiuLinie) => [...c.stadii.values()].filter((x) => x === s).length;
               return (
                 <tr key={c.numar}>
@@ -94,6 +113,8 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
                 </tr>
               );
             })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>

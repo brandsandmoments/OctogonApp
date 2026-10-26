@@ -27,6 +27,7 @@ export type Componenta = {
   tip: 'materie_prima' | 'accesoriu';
   unitate: string;
   consum: string;
+  se_croieste: boolean;
 };
 
 export type ProdusModel = {
@@ -117,7 +118,7 @@ export async function detaliiModel(id: string): Promise<DetaliiModel | null> {
     // Una după alta, nu Promise.all: o conexiune execută o singură interogare
     // odată, iar toate stau în aceeași tranzacție (vezi caFirma).
     const componente = await c.query<Componenta>(
-      `SELECT id, nume, tip::text AS tip, unitate::text AS unitate, consum::text AS consum
+      `SELECT id, nume, tip::text AS tip, unitate::text AS unitate, consum::text AS consum, se_croieste
          FROM model_componenta WHERE model_id = $1 ORDER BY ordine, nume`, [id]);
     const produse = await c.query<Omit<ProdusModel, 'materiale'>>(
       `SELECT p.id, p.denumire, p.cod_sku, cu.nume AS culoare
@@ -155,9 +156,11 @@ export async function adaugaComponenta(modelId: string, d: {
   if (!(d.consum > 0)) return 'Consumul trebuie să fie mai mare ca zero.';
   try {
     await interogare(
-      `INSERT INTO model_componenta (firma_id, model_id, nume, tip, unitate, consum, ordine)
+      // O materie primă în metri se întinde și se taie, de obicei; se schimbă din rețetă.
+      `INSERT INTO model_componenta (firma_id, model_id, nume, tip, unitate, consum, ordine, se_croieste)
        VALUES (firma_curenta(), $1, $2, $3, $4, $5,
-               (SELECT coalesce(max(ordine), 0) + 1 FROM model_componenta WHERE model_id = $1))`,
+               (SELECT coalesce(max(ordine), 0) + 1 FROM model_componenta WHERE model_id = $1),
+               $3 = 'materie_prima' AND $4 IN ('m', 'm2'))`,
       [modelId, d.nume.trim(), d.tip, d.unitate, d.consum],
     );
     return null;
@@ -167,9 +170,12 @@ export async function adaugaComponenta(modelId: string, d: {
   }
 }
 
-export async function schimbaConsum(componentaId: string, consum: number): Promise<string | null> {
+/** Consumul pe bucată și dacă se întinde și se taie pe masă (stofă, căptușeală, termo). */
+export async function schimbaConsum(componentaId: string, consum: number, seCroieste: boolean): Promise<string | null> {
   if (!(consum > 0)) return 'Consumul trebuie să fie mai mare ca zero.';
-  await interogare(`UPDATE model_componenta SET consum = $2 WHERE id = $1`, [componentaId, consum]);
+  await interogare(
+    `UPDATE model_componenta SET consum = $2, se_croieste = $3 AND tip = 'materie_prima' WHERE id = $1`,
+    [componentaId, consum, seCroieste]);
   return null;
 }
 

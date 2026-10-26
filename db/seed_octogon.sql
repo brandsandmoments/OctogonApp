@@ -99,7 +99,8 @@ FOR r IN SELECT * FROM (VALUES
     ('colet_deteriorat',     'Colet deteriorat la transport',         ARRAY['receptie']),
     ('extern_intarziere',    'Producator extern in intarziere',       ARRAY['receptie']),
     ('rebut_ctc',            'Rebut la CTC',                          ARRAY['receptie']),
-    ('anulat_de_acord',      'Anulat de comun acord',                 ARRAY['receptie'])
+    ('anulat_de_acord',      'Anulat de comun acord',                 ARRAY['receptie']),
+    ('renuntat_marime',      'S-a renuntat la marime',                ARRAY['croit'])
 ) AS v(cod, nume, contexte)
 LOOP
     INSERT INTO motiv (firma_id, cod, nume, contexte)

@@ -122,6 +122,7 @@ export type PlanificareRezumat = {
   loturi_deschise: number;
   stofa_lipsa: boolean;
   alte_lipsa: number;
+  ordine_croit: number | null;
 };
 
 /** Planificările care încă lucrează: neanulate și neîncheiate. */
@@ -136,13 +137,14 @@ export async function planificariActive(): Promise<PlanificareRezumat[]> {
               WHERE lc.planificare_id = pl.id)::int AS croit,
             (SELECT count(*) FROM lot_croit lc WHERE lc.planificare_id = pl.id AND lc.croit_la IS NULL)::int AS loturi_deschise,
             EXISTS (SELECT 1 FROM a WHERE a.planificare_id = pl.id AND a.principal AND a.cumulat > a.stoc) AS stofa_lipsa,
-            (SELECT count(*) FROM a WHERE a.planificare_id = pl.id AND NOT a.principal AND a.cumulat > a.stoc)::int AS alte_lipsa
+            (SELECT count(*) FROM a WHERE a.planificare_id = pl.id AND NOT a.principal AND a.cumulat > a.stoc)::int AS alte_lipsa,
+            pl.ordine_croit
        FROM planificare pl
        JOIN comanda_linie cl ON cl.id = pl.linie_id
        JOIN comanda c        ON c.id = cl.comanda_id
        JOIN produs p         ON p.id = cl.produs_id
       WHERE pl.stadiu NOT IN ('anulat', 'incheiat')
-      ORDER BY c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa`,
+      ORDER BY pl.ordine_croit NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa`,
   );
 }
 
@@ -180,7 +182,7 @@ export async function liniePentruPlanificare(linieId: string): Promise<LiniePlan
  * planificarea există (abia atunci are rezervarea ei).
  */
 export async function creeazaPlanificare(
-  linieId: string, cantitati: Map<string, number>, observatii: string, taiereId?: string,
+  linieId: string, cantitati: Map<string, number>, observatii: string,
 ): Promise<{ id: string } | { eroare: string }> {
   const date = await liniePentruPlanificare(linieId);
   if (!date) return { eroare: 'Linia nu există.' };
@@ -195,33 +197,49 @@ export async function creeazaPlanificare(
   }
 
   return caFirma(firmaCurenta(), async (c) => {
-    if (taiereId) {
-      const { rows: [t] } = await c.query<{ trimis: boolean }>(
-        `SELECT trimis_la IS NOT NULL AS trimis FROM taiere WHERE id = $1 FOR UPDATE`, [taiereId]);
-      if (!t || t.trimis) return { eroare: 'Taierea aleasă a plecat deja la croit.' };
-    }
-    const taiere = taiereId ?? (await taiereNoua(c));
-    const id = await insereazaPlanificare(c, linieId, alese.map((m) => ({ marime_id: m.marime_id, q: m.q })), observatii, taiere);
+    const id = await insereazaPlanificare(c, linieId, alese.map((m) => ({ marime_id: m.marime_id, q: m.q })), observatii);
     await actualizeazaStadiuMateriale(c, id);
     return { id };
   });
 }
 
-/** O taiere nouă, la coada celor în planificare. */
-export async function taiereNoua(c: PoolClient): Promise<string> {
-  // Numărul și ordinea se iau sub blocare: două taieri simultane ar primi același T.
-  await c.query(`LOCK TABLE taiere IN SHARE ROW EXCLUSIVE MODE`);
-  const { rows: [{ id }] } = await c.query<{ id: string }>(
-    `INSERT INTO taiere (firma_id, numar, ordine)
-     VALUES (firma_curenta(), (SELECT coalesce(max(numar), 0) + 1 FROM taiere),
-             (SELECT coalesce(max(ordine), 0) + 1 FROM taiere))
-     RETURNING id`);
-  return id;
+/**
+ * Planifică tot ce a rămas pe liniile alese, câte o planificare pe linie. Pentru
+ * alte cantități, planificarea unei singure linii.
+ */
+export async function planificaTot(linii: string[]): Promise<string | null> {
+  if (linii.length === 0) return 'Bifează cel puțin o comandă.';
+  return caFirma(firmaCurenta(), async (c) => {
+    for (const linieId of linii) {
+      const { rows } = await c.query<{ marime_id: string; q: number; are_reteta: boolean; cod: string }>(
+        `SELECT cc.marime_id, greatest(cc.cantitate - coalesce(pp.cantitate, 0), 0)::int AS q,
+                EXISTS (SELECT 1 FROM model_componenta mc WHERE mc.model_id = p.model_id) AS are_reteta,
+                c.numar || ' · ' || p.denumire AS cod
+           FROM comanda_cantitate cc
+           JOIN comanda_linie cl ON cl.id = cc.linie_id
+           JOIN comanda c        ON c.id = cl.comanda_id
+           JOIN produs p         ON p.id = cl.produs_id
+           LEFT JOIN planificat_pe_pozitie pp ON pp.linie_id = cc.linie_id AND pp.marime_id = cc.marime_id
+          WHERE cc.linie_id = $1`, [linieId]);
+      if (rows.length && !rows[0].are_reteta) throw new Refuzat(`${rows[0].cod}: produsul nu are rețetă.`);
+      const alese = rows.filter((m) => m.q > 0);
+      if (alese.length === 0) continue;
+      const id = await insereazaPlanificare(c, linieId, alese, '');
+      await actualizeazaStadiuMateriale(c, id);
+    }
+    return null;
+  }).catch((e) => {
+    if (e instanceof Refuzat) return e.message;
+    throw e;
+  });
 }
+
+/** Aruncat ca tranzacția să se anuleze: toate liniile alese sau niciuna. */
+class Refuzat extends Error {}
 
 /** Scrie planificarea și cantitățile ei; cine cheamă a verificat deja cantitățile. */
 export async function insereazaPlanificare(
-  c: PoolClient, linieId: string, alese: { marime_id: string; q: number }[], observatii: string, taiereId: string,
+  c: PoolClient, linieId: string, alese: { marime_id: string; q: number }[], observatii: string,
 ): Promise<string> {
   {
     // Numerotarea e pe comandă, nu pe linie, ca în dashboard: psf-ms-sep-1/P1 e
@@ -232,13 +250,13 @@ export async function insereazaPlanificare(
       `SELECT 1 FROM comanda WHERE id = (SELECT comanda_id FROM comanda_linie WHERE id = $1) FOR UPDATE`,
       [linieId]);
     const { rows: [{ id }] } = await c.query<{ id: string }>(
-      `INSERT INTO planificare (firma_id, linie_id, numar_transa, stadiu, observatii, taiere_id)
+      `INSERT INTO planificare (firma_id, linie_id, numar_transa, stadiu, observatii)
        VALUES (firma_curenta(), $1,
                (SELECT coalesce(max(pl.numar_transa), 0) + 1
                   FROM planificare pl JOIN comanda_linie cl ON cl.id = pl.linie_id
                  WHERE cl.comanda_id = (SELECT comanda_id FROM comanda_linie WHERE id = $1)),
-               'gata_de_lansat', nullif($2, ''), $3)
-       RETURNING id`, [linieId, observatii.trim(), taiereId]);
+               'gata_de_lansat', nullif($2, ''))
+       RETURNING id`, [linieId, observatii.trim()]);
     for (const m of alese) {
       await c.query(
         `INSERT INTO planificare_cantitate (firma_id, planificare_id, marime_id, cantitate)
@@ -260,9 +278,10 @@ export async function actualizeazaStadiuMateriale(c: PoolClient, id: string) {
 export type DetaliiPlanificare = {
   plan: { id: string; cod: string; comanda: string; tip: string; prioritate: number; data_ceruta: string;
           produs: string; cod_sku: string; stadiu: string; data_planificare: string; observatii: string | null;
-          motiv_incheiere: string | null; taiere_id: string | null; taiere: string | null; taiere_trimisa: boolean };
+          motiv_incheiere: string | null };
   marimi: { marime: string; planificat: number; croit: number; rest: number }[];
-  loturi: { id: string; cod: string; cerut: number; croit: number | null; croit_la: string | null }[];
+  loturi: { id: string; cod: string; cerut: number; croit: number | null; croit_la: string | null;
+            taiere_id: string | null; taiere: string | null }[];
   materiale: AcoperireMaterial[];
 };
 
@@ -273,10 +292,8 @@ export async function detaliiPlanificare(id: string): Promise<DetaliiPlanificare
               c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
               p.denumire AS produs, p.cod_sku, pl.stadiu::text AS stadiu,
               to_char(pl.data_planificare, 'YYYY-MM-DD') AS data_planificare, pl.observatii,
-              mo.nume AS motiv_incheiere, t.id AS taiere_id, 'T' || t.numar AS taiere,
-              t.trimis_la IS NOT NULL AS taiere_trimisa
+              mo.nume || coalesce(': ' || pl.observatii_incheiere, '') AS motiv_incheiere
          FROM planificare pl
-         LEFT JOIN taiere t    ON t.id = pl.taiere_id
          JOIN comanda_linie cl ON cl.id = pl.linie_id
          JOIN comanda c        ON c.id = cl.comanda_id
          JOIN produs p         ON p.id = cl.produs_id
@@ -294,8 +311,9 @@ export async function detaliiPlanificare(id: string): Promise<DetaliiPlanificare
       `SELECT lc.id, $2 || '/C' || lc.numar_lot AS cod,
               (SELECT coalesce(sum(cantitate), 0) FROM lot_croit_cantitate WHERE lot_id = lc.id)::int AS cerut,
               (SELECT sum(cantitate) FROM lot_croit_efectiv WHERE lot_id = lc.id)::int AS croit,
-              to_char(lc.croit_la, 'YYYY-MM-DD HH24:MI') AS croit_la
-         FROM lot_croit lc WHERE lc.planificare_id = $1 ORDER BY lc.numar_lot`, [id, plan.cod]);
+              to_char(lc.croit_la, 'YYYY-MM-DD HH24:MI') AS croit_la, lc.taiere_id, 'T' || t.numar AS taiere
+         FROM lot_croit lc LEFT JOIN taiere t ON t.id = lc.taiere_id
+        WHERE lc.planificare_id = $1 ORDER BY lc.numar_lot`, [id, plan.cod]);
     return {
       plan,
       marimi: marimi.map((m) => ({ ...m, rest: Math.max(0, m.planificat - m.croit) })),
@@ -306,42 +324,41 @@ export async function detaliiPlanificare(id: string): Promise<DetaliiPlanificare
 }
 
 /**
- * Lansează spre croit: creează lotul …/C{n} cu tot ce a rămas de croit din
- * planificare. Se refuză dacă un lot anterior e încă necroit (croitul ar primi
- * aceleași bucăți de două ori) sau dacă materialele nu ajung.
+ * Trimite planificarea la croit, la coada celor trimise. Croitul hotărăște apoi ce
+ * taie odată: toată, o parte, sau împreună cu alte comenzi pe același model.
+ * Se refuză dacă stofa principală nu ajunge.
  */
-export async function lanseazaSpreCroit(id: string): Promise<string | null> {
-  return caFirma(firmaCurenta(), (c) => lanseaza(c, id));
-}
-
-export async function lanseaza(c: PoolClient, id: string): Promise<string | null> {
-  {
+export async function trimiteLaCroit(id: string): Promise<string | null> {
+  return caFirma(firmaCurenta(), async (c) => {
     const { rows: [pl] } = await c.query<{ stadiu: string }>(
       `SELECT stadiu::text FROM planificare WHERE id = $1 FOR UPDATE`, [id]);
     if (!pl) return 'Planificarea nu există.';
-    if (['anulat', 'incheiat'].includes(pl.stadiu)) return 'Planificarea e închisă.';
-    const { rows: [{ deschise }] } = await c.query<{ deschise: number }>(
-      `SELECT count(*)::int AS deschise FROM lot_croit WHERE planificare_id = $1 AND croit_la IS NULL`, [id]);
-    if (deschise > 0) return 'Un lot e deja la croit și n-a fost croit încă.';
+    if (!['gata_de_lansat', 'blocat_materiale'].includes(pl.stadiu)) return 'Planificarea e deja la croit sau închisă.';
     const lipsa = (await acoperire(c, id)).filter((a) => a.principal && !a.acoperit);
-    if (lipsa.length > 0) {
-      return `Nu ajunge stofa: ${lipsa.map((a) => a.denumire).join(', ')}.`;
-    }
-    const { rows: rest } = await c.query<{ marime_id: string; rest: number }>(
-      `SELECT marime_id, rest FROM planificare_rest_de_croit WHERE planificare_id = $1 AND rest > 0`, [id]);
-    if (rest.length === 0) return 'Nu a rămas nimic de croit.';
-    const { rows: [lot] } = await c.query<{ id: string }>(
-      `INSERT INTO lot_croit (firma_id, planificare_id, numar_lot)
-       VALUES (firma_curenta(), $1, (SELECT coalesce(max(numar_lot), 0) + 1 FROM lot_croit WHERE planificare_id = $1))
-       RETURNING id`, [id]);
-    for (const r of rest) {
-      await c.query(
-        `INSERT INTO lot_croit_cantitate (firma_id, lot_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)`,
-        [lot.id, r.marime_id, r.rest]);
-    }
-    await c.query(`UPDATE planificare SET stadiu = 'lansat_spre_croit' WHERE id = $1 AND stadiu <> 'in_croit'`, [id]);
+    if (lipsa.length > 0) return `Nu ajunge stofa: ${lipsa.map((a) => a.denumire).join(', ')}.`;
+    await c.query(`LOCK TABLE planificare IN SHARE ROW EXCLUSIVE MODE`);
+    await c.query(
+      `UPDATE planificare SET stadiu = 'lansat_spre_croit',
+              ordine_croit = (SELECT coalesce(max(ordine_croit), 0) + 1 FROM planificare)
+        WHERE id = $1`, [id]);
     return null;
-  }
+  });
+}
+
+/** Mută planificarea cu un loc mai sus (-1) sau mai jos (+1) în ordinea spre croit. */
+export async function mutaLaCroit(id: string, pas: -1 | 1): Promise<void> {
+  await caFirma(firmaCurenta(), async (c) => {
+    await c.query(`LOCK TABLE planificare IN SHARE ROW EXCLUSIVE MODE`);
+    const { rows: [vecina] } = await c.query<{ id: string; ordine: number }>(
+      `SELECT v.id, v.ordine_croit AS ordine FROM planificare v, planificare t
+        WHERE t.id = $1 AND v.id <> t.id AND v.stadiu IN ('lansat_spre_croit', 'in_croit')
+          AND (CASE WHEN $2 < 0 THEN v.ordine_croit < t.ordine_croit ELSE v.ordine_croit > t.ordine_croit END)
+        ORDER BY CASE WHEN $2 < 0 THEN -v.ordine_croit ELSE v.ordine_croit END LIMIT 1`, [id, pas]);
+    if (!vecina) return;
+    await c.query(
+      `UPDATE planificare SET ordine_croit = CASE WHEN id = $1 THEN $3 ELSE (SELECT ordine_croit FROM planificare WHERE id = $1) END
+        WHERE id IN ($1, $2)`, [id, vecina.id, vecina.ordine]);
+  });
 }
 
 /** O planificare fără niciun lot se poate anula; după lansare, se încheie. */
@@ -350,14 +367,7 @@ export async function anuleazaPlanificare(id: string): Promise<string | null> {
     const { rows: [{ loturi }] } = await c.query<{ loturi: number }>(
       `SELECT count(*)::int AS loturi FROM lot_croit WHERE planificare_id = $1`, [id]);
     if (loturi > 0) return 'Planificarea are loturi de croit: nu se mai anulează, se încheie.';
-    // Iese și din taiere; o taiere rămasă fără comenzi dispare din coadă.
-    const { rows: [pl] } = await c.query<{ taiere_id: string | null }>(
-      `UPDATE planificare p SET stadiu = 'anulat', taiere_id = NULL FROM planificare v
-        WHERE p.id = $1 AND v.id = p.id RETURNING v.taiere_id`, [id]);
-    if (pl?.taiere_id) {
-      await c.query(`DELETE FROM taiere WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM planificare WHERE taiere_id = $1)`,
-        [pl.taiere_id]);
-    }
+    await c.query(`UPDATE planificare SET stadiu = 'anulat' WHERE id = $1`, [id]);
     return null;
   });
 }
@@ -366,22 +376,23 @@ export async function anuleazaPlanificare(id: string): Promise<string | null> {
  * Încheie planificarea: ce nu s-a croit nu se mai croiește, iar rezervarea de
  * material se eliberează. Cu bucăți rămase necroite, motivul e obligatoriu.
  */
-export async function incheiePlanificare(c: PoolClient, id: string, motivId: string | null): Promise<string | null> {
+export async function incheiePlanificare(
+  c: PoolClient, id: string, motivId: string | null, observatii = '',
+): Promise<string | null> {
   const { rows: [{ deschise, rest }] } = await c.query<{ deschise: number; rest: number }>(
     `SELECT (SELECT count(*) FROM lot_croit WHERE planificare_id = $1 AND croit_la IS NULL)::int AS deschise,
             (SELECT coalesce(sum(rest), 0) FROM planificare_rest_de_croit WHERE planificare_id = $1)::int AS rest`,
     [id]);
   if (deschise > 0) return 'Un lot e încă la croit. Înregistrează întâi croitul.';
   if (rest > 0 && !motivId) return `Au rămas ${rest} bucăți necroite: alege motivul.`;
+  if (rest > 0 && !observatii.trim()) return `Au rămas ${rest} bucăți necroite: scrie observațiile (ce s-a întâmplat).`;
   await c.query(
-    `UPDATE planificare SET stadiu = 'incheiat', incheiat_la = now(), motiv_incheiere_id = $2 WHERE id = $1`,
-    [id, rest > 0 ? motivId : null]);
+    `UPDATE planificare SET stadiu = 'incheiat', incheiat_la = now(), motiv_incheiere_id = $2,
+            observatii_incheiere = $3 WHERE id = $1`,
+    [id, rest > 0 ? motivId : null, rest > 0 ? observatii.trim() : null]);
   return null;
 }
 
-export async function incheie(id: string, motivId: string | null): Promise<string | null> {
-  return caFirma(firmaCurenta(), (c) => incheiePlanificare(c, id, motivId));
-}
 
 export async function motiveCroit(): Promise<{ id: string; nume: string }[]> {
   return interogare(`SELECT id, nume FROM motiv WHERE activ AND 'croit' = ANY (contexte) ORDER BY nume`);

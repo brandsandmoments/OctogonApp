@@ -25,7 +25,12 @@ export type EtichetaDeTiparit = {
  * vine în cinci tranșe sau dacă cineva retipărește coala pentru că s-a pătat.
  */
 export async function emiteEtichete(comanda: string): Promise<number> {
-  return caFirma(firmaCurenta(), async (c: PoolClient) => {
+  return caFirma(firmaCurenta(), (c) => emite(c, comanda));
+}
+
+/** Aceeași emitere, în tranzacția celui care cheamă: intrarea manuală în depozit are nevoie de etichete. */
+export async function emite(c: PoolClient, comanda: string): Promise<number> {
+  {
     const lipsa = await c.query<{ linie_id: string; marime_id: string; ordine: number }>(
       `SELECT cc.linie_id, cc.marime_id, m.ordine
          FROM comanda_cantitate cc
@@ -72,7 +77,7 @@ export async function emiteEtichete(comanda: string): Promise<number> {
       }
     }
     return lipsa.rows.length;
-  });
+  }
 }
 
 /**
