@@ -51,7 +51,7 @@ export function poate(c: Cine, zona: Zona, nivel: Nivel = 'vede'): boolean {
 }
 
 /** Ecranele, cu zona fiecăruia. Pagina principală arată doar ce poate deschide omul. */
-export const ECRANE: { href: string; nume: string; ce: string; zona: Zona; nivel?: Nivel }[] = [
+export const ECRANE: { href: string; nume: string; ce: string; zona: Zona | Zona[]; nivel?: Nivel }[] = [
   { href: '/centralizator', nume: 'Centralizator', ce: 'toate liniile PSF și PSC: cerut, planificat, croit, bandă, intrat', zona: 'centralizator' },
   { href: '/comenzi/noua', nume: 'Comandă nouă', ce: 'PSF sau PSC, cu grila de mărimi', zona: 'comenzi', nivel: 'modifica' },
   { href: '/comenzi', nume: 'Poziții deschise', ce: 'progresul fiecărei poziții', zona: 'comenzi' },
@@ -62,6 +62,7 @@ export const ECRANE: { href: string; nume: string; ce: string; zona: Zona; nivel
   { href: '/scanare', nume: 'Recepție', ce: 'scanează eticheta: ce a venit fizic, pe PSF-ul sau PSC-ul lui', zona: 'receptie', nivel: 'modifica' },
   { href: '/stoc', nume: 'Stoc materiale', ce: 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor', zona: 'materiale' },
   { href: '/inventar', nume: 'Inventar', ce: 'numărătoare fizică; diferențele devin ajustări', zona: 'materiale' },
+  { href: '/dezvoltare', nume: 'Dezvoltare produs', ce: 'tipare de făcut, în lucru, mostre gata de aprobat', zona: ['dezvoltare', 'comenzi'] },
   { href: '/modele', nume: 'Modele și rețete', ce: 'consumul pe bucată și materialul fiecărei culori', zona: 'necesar' },
   { href: '/materiale', nume: 'Materiale', ce: 'nomenclatorul de materii prime și accesorii', zona: 'necesar' },
   { href: '/oameni', nume: 'Oameni și conturi', ce: 'conturi, drepturi, parole, PIN-uri, tablete de atelier', zona: 'oameni' },

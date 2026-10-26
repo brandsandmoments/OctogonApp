@@ -313,5 +313,34 @@ SELECT 'sesiune: ' || nume || ' | atelier ' || din_atelier FROM sesiune_curenta(
 SELECT sesiune_inchide(:'token');
 SELECT 'dupa iesire: ' || count(*) FROM sesiune_curenta(:'token');
 
+\echo '--- 33. tipar nou: fara pasi e de facut; inceput, proba, tipar gata, mostra gata'
+SET app.firma_id = '11111111-1111-1111-1111-111111111111';
+INSERT INTO dezvoltare (id, firma_id, brand_id, model, culori, kam_id) VALUES
+  ('55555555-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'aaaaaaaa-0000-0000-0000-000000000001', 'Melissa', '{Negru,Crem}', '66666666-0000-0000-0000-000000000001');
+SELECT 'fara pasi: ' || stare FROM dezvoltare_stare WHERE dezvoltare_id = '55555555-0000-0000-0000-000000000001';
+INSERT INTO dezvoltare_pas (firma_id, dezvoltare_id, pas, la) VALUES
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'inceput',     '2026-10-01'),
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'proba',       '2026-10-05'),
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'tipar_gata',  '2026-10-07'),
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'mostra_gata', '2026-10-09');
+SELECT 'dupa mostra: ' || stare FROM dezvoltare_stare WHERE dezvoltare_id = '55555555-0000-0000-0000-000000000001';
+
+\echo '--- 34. KAM-ul cere corecturi dupa mostra: inapoi la corecturi; fara motiv (asteptat: EROARE)'
+\set ON_ERROR_STOP off
+INSERT INTO dezvoltare_pas (firma_id, dezvoltare_id, pas, la) VALUES
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'corecturi', '2026-10-10');
+\set ON_ERROR_STOP on
+INSERT INTO dezvoltare_pas (firma_id, dezvoltare_id, pas, la, observatii) VALUES
+  ('11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'corecturi', '2026-10-10', 'talie prea larga');
+SELECT 'dupa corecturi: ' || stare || ' | mostra valabila: ' || mostra_gata FROM dezvoltare_stare
+ WHERE dezvoltare_id = '55555555-0000-0000-0000-000000000001';
+
+\echo '--- 35. jurnalul de pasi nu se rescrie (asteptat: EROARE de permisiune)'
+\set ON_ERROR_STOP off
+DELETE FROM dezvoltare_pas WHERE dezvoltare_id = '55555555-0000-0000-0000-000000000001';
+\set ON_ERROR_STOP on
+RESET app.firma_id;
+
 \echo ''
 \echo '=== gata'

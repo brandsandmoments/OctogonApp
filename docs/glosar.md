@@ -116,6 +116,40 @@ Colour.
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `nume` | Colour name |
 
+## `dezvoltare`
+
+A model in development: pattern to make, sample, approval. Replaces the Situatie Tipare sheet.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `model` | Model name |
+| `culori` | Colours requested, as marketing wrote them |
+| `tip` | Kind of work: new pattern, pattern change, size grading, model variation |
+| `marime_de_la` | Smallest size to grade |
+| `marime_pana_la` | Largest size to grade |
+| `prioritate` | Priority, 1 urgent to 5 lowest |
+| `termen` | Deadline |
+| `kam_id` | KAM who asked for it; approves the sample |
+| `link_poze` | Drive folder with photos |
+| `link_fisa` | Product sheet |
+| `observatii` | Notes |
+| `model_id` | Catalogue model created on approval |
+| `creat_de` | Created by |
+| `creat_la` | Created at |
+
+## `dezvoltare_pas`
+
+Step log of a model in development. Append-only; the status is derived from it.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `pas` | Step: inceput (started), proba (fitting), corecturi (corrections, with reason), tipar_gata (pattern done), mostra_gata (sample done), fisa_gata (product sheet done), aprobat (approved by the KAM), anulat (cancelled) |
+| `la` | When |
+| `de` | By whom |
+| `observatii` | Notes; required for corrections |
+
 ## `dispozitiv`
 
 Shared workshop device registered by an admin. Its token lets the people of that company sign in with a PIN.

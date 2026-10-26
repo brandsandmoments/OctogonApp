@@ -26,10 +26,12 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0011_vanzari_si_eficienta_kam.sql` | vânzările, magazinele Shopify, ținta zilnică a fiecărui PSF |
 | `db/migrations/0012_conturi_si_sesiuni.sql` | conturi, parole și PIN-uri (bcrypt, în bază), sesiuni, tablete de atelier |
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
+| `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
 | `db/oameni_octogon.sql` | oamenii Octogon și drepturile lor, cum le-a dat conducerea |
 | `scripts/sync-shopify.mts` | sincronizarea vânzărilor din cele trei magazine Shopify |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
-| `db/test_izolare.sql` | treizeci și două de verificări de purtare, rulate pe Postgres 16 |
+| `scripts/import-tipare.mts` | importul din „Situație Tipare" |
+| `db/test_izolare.sql` | treizeci și cinci de verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -101,6 +103,8 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
 - [x] Import din dashboard al istoricului: planificări, loturi croite, tranșe pe bandă
 - [x] Eficiența KAM, săptămânal, din vânzările Shopify; sincronizarea magazinelor (cu tokenuri în .env)
+- [x] Dezvoltarea de produs: tipare de făcut, mostre gata, aprobarea KAM-ului, intrarea în catalog
+- [ ] Expedierea: comenzile intrate și nelivrate
 - [ ] Intrările în depozit din dashboard
 
 ## Aplicația
@@ -135,6 +139,7 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
 | `/inventar`, `/inventar/<id>` | numărătoarea fizică; la închidere, diferențele devin ajustări |
+| `/dezvoltare`, `/dezvoltare/<id>` | tipare de făcut, în lucru, mostre de aprobat, aprobate; drumul fiecărui model |
 
 ## Limba schemei
 
@@ -266,7 +271,8 @@ Contul master (admin) poate tot și dă drepturi celorlalți, din „Oameni și 
 | Planificare · Croit · Bandă | fiecare cu ecranele lui |
 | Recepție | scanarea la depozit și etichetele |
 | Materii prime | stocul, intrările de la furnizor, inventarul |
-| Dezvoltare produs · Expediere | rezervate pentru modulele care urmează |
+| Dezvoltare produs | tiparele și mostrele; KAM-urile cu *Comenzi* pot cere un model nou |
+| Expediere | rezervată pentru modulul care urmează |
 
 Rolurile (KAM, șef croit) rămân pentru identitate: lista de KAM din formularul de
 PSF și cine poate intra cu PIN din atelier (croit, bandă, depozit). Cine doar vede
@@ -285,6 +291,34 @@ rulează și cu un proprietar fără SUPERUSER și fără BYPASSRLS.
 **Cine a făcut** se scrie singur: omul logat e declarat în fiecare tranzacție, iar
 coloanele „cine" (a scanat, a planificat, a croit, a dat pe bandă, a mișcat stocul)
 îl primesc implicit.
+
+## Dezvoltarea de produs
+
+Înlocuiește „Situație Tipare". Acolo statusul se scria de mână lângă bifele TIPAR /
+MOSTRĂ / FIȘĂ / APROBAT și se contrazicea cu ele. Aici drumul unui model e **un
+jurnal de pași** — început, probă, corecturi, tipar gata, mostră gata, fișă,
+aprobat —, fiecare cu data și omul lui, iar starea se calculează din pași
+(`dezvoltare_stare`). Jurnalul nu se rescrie: o greșeală se îndreaptă cu un pas nou.
+
+| Secțiune | Ce e acolo |
+|---|---|
+| Tipare de făcut | cereri la care nu s-a început nimic |
+| În lucru | început, probă, corecturi, tipar gata |
+| Mostre gata | de aprobat de KAM-ul care a cerut modelul |
+| Aprobate | intrate în catalog |
+
+Pașii au o ordine: mostra vine după tipar, iar corecturile cer un motiv — altfel
+tiparistul nu știe ce să schimbe — și aduc modelul înapoi în lucru; fiecare rundă
+rămâne în istoric. **Mostra o aprobă KAM-ul care a cerut-o** (sau contul master).
+La aprobare, modelul intră în catalog cu câte un produs pe culoare, cu SKU și
+denumire propuse și modificabile, gata de rețetă.
+
+```sh
+npm run import:tipare -- situatie_tipare.xlsx
+```
+
+Importul citește statusul și bifele din foaie, le face pași și raportează
+rândurile care se contrazic. Se poate rula de mai multe ori.
 
 ## Eficiența KAM
 

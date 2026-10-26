@@ -9,7 +9,7 @@ const NUME_ZONA: Record<Zona, string> = { ...ZONE, oameni: 'Oameni și conturi' 
 /** Pagina de pornire: doar ecranele pe care omul logat le poate deschide. */
 export default async function Acasa({ searchParams }: { searchParams: Promise<{ fara_acces?: string; doar_vede?: string }> }) {
   const [u, { fara_acces, doar_vede }] = await Promise.all([cere(), searchParams]);
-  const ale = ECRANE.filter((e) => poate(u, e.zona, e.nivel));
+  const ale = ECRANE.filter((e) => (Array.isArray(e.zona) ? e.zona : [e.zona]).some((z) => poate(u, z, e.nivel)));
   return (
     <main>
       <h1>Bună, {u.nume.split(' ')[0]}</h1>
