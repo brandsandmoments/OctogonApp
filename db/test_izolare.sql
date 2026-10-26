@@ -9,20 +9,29 @@ INSERT INTO firma (id, nume, slug) VALUES
   ('11111111-1111-1111-1111-111111111111', 'Octogon Fashion', 'octogon'),
   ('22222222-2222-2222-2222-222222222222', 'Alta Firma',      'alta');
 
+-- Rândurile fiecărei firme se scriu cu firma ei declarată: izolarea e forțată și
+-- pentru proprietarul tabelelor (FORCE ROW LEVEL SECURITY), deci testul merge la
+-- fel cu un proprietar obișnuit ca și cu un superuser.
+SET app.firma_id = '22222222-2222-2222-2222-222222222222';
 INSERT INTO brand (id, firma_id, nume) VALUES
-  ('aaaaaaaa-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Parseea'),
   ('aaaaaaaa-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222', 'Altceva');
+INSERT INTO marime (id, firma_id, cod, ordine) VALUES
+  ('bbbbbbbb-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222', '38', 2);
+INSERT INTO produs (id, firma_id, cod_sku, denumire, brand_id) VALUES
+  ('cccccccc-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'X-ALTCEVA', 'Produsul altcuiva', 'aaaaaaaa-0000-0000-0000-000000000002');
+
+SET app.firma_id = '11111111-1111-1111-1111-111111111111';
+INSERT INTO brand (id, firma_id, nume) VALUES
+  ('aaaaaaaa-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Parseea');
 
 -- grile de mărimi diferite, ca să se vadă că nomenclatorul e date
 INSERT INTO marime (id, firma_id, cod, ordine) VALUES
-  ('bbbbbbbb-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'M',  4),
-  ('bbbbbbbb-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222', '38', 2);
+  ('bbbbbbbb-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'M',  4);
 
 INSERT INTO produs (id, firma_id, cod_sku, denumire, brand_id) VALUES
   ('cccccccc-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
-   'PSA-SOPHIE-NEGRU', 'Rochie Sophie Negru', 'aaaaaaaa-0000-0000-0000-000000000001'),
-  ('cccccccc-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
-   'X-ALTCEVA', 'Produsul altcuiva', 'aaaaaaaa-0000-0000-0000-000000000002');
+   'PSA-SOPHIE-NEGRU', 'Rochie Sophie Negru', 'aaaaaaaa-0000-0000-0000-000000000001');
 
 INSERT INTO comanda (id, firma_id, numar, tip, brand_id, data_lansare, stare) VALUES
   ('dddddddd-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
@@ -40,6 +49,7 @@ INSERT INTO eticheta (id, firma_id, cod, linie_id, marime_id, pozitie) VALUES
   ('ffffffff-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
    'OCT-7F3K2M9', 'eeeeeeee-0000-0000-0000-000000000001',
    'bbbbbbbb-0000-0000-0000-000000000001', 4);
+RESET app.firma_id;
 
 \echo '=== pregatire: 2 firme, 2 produse, 1 comanda cu 1 pozitie de 7 buc'
 
@@ -235,6 +245,73 @@ SELECT 'nasturi rezervati ' || coalesce(sum(rezervat), 0) || ' | stoc ' ||
 \set ON_ERROR_STOP off
 UPDATE alimentare_banda SET iesit_productie_la = now() WHERE id = '99999999-0000-0000-0000-0000000000e1';
 \set ON_ERROR_STOP on
+
+\echo '--- 25. doua PSF pe acelasi produs: 10 buc in 1-10 oct si 10 buc in 6-15 oct (cate 1 pe zi)'
+INSERT INTO comanda (id, firma_id, numar, tip, brand_id, data_lansare, stare) VALUES
+  ('77777777-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'psf-test-1', 'PSF',
+   'aaaaaaaa-0000-0000-0000-000000000001', '2026-09-20', 'lansata'),
+  ('77777777-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'psf-test-2', 'PSF',
+   'aaaaaaaa-0000-0000-0000-000000000001', '2026-09-25', 'lansata');
+INSERT INTO comanda_linie (id, firma_id, comanda_id, produs_id, data_ceruta, vanzare_de_la, vanzare_pana_la) VALUES
+  ('77777777-0000-0000-0000-0000000000a1', '11111111-1111-1111-1111-111111111111',
+   '77777777-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', '2026-09-30', '2026-10-01', '2026-10-10'),
+  ('77777777-0000-0000-0000-0000000000a2', '11111111-1111-1111-1111-111111111111',
+   '77777777-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000001', '2026-10-05', '2026-10-06', '2026-10-15');
+INSERT INTO comanda_cantitate (firma_id, linie_id, marime_id, cantitate) VALUES
+  ('11111111-1111-1111-1111-111111111111', '77777777-0000-0000-0000-0000000000a1', 'bbbbbbbb-0000-0000-0000-000000000001', 10),
+  ('11111111-1111-1111-1111-111111111111', '77777777-0000-0000-0000-0000000000a2', 'bbbbbbbb-0000-0000-0000-000000000001', 10);
+SELECT 'tinta pe zi ' || round(tinta, 2) || ' | zile ' || count(*) FROM psf_tinta_zilnica
+ WHERE linie_id = '77777777-0000-0000-0000-0000000000a1' GROUP BY tinta;
+
+\echo '--- 26. 3 vandute pe 3 oct (doar primul PSF activ) si 4 pe 7 oct (amandoua): asteptat 5 la primul, 2 la al doilea'
+INSERT INTO vanzare (firma_id, brand_id, nr_comanda, sku, data, produs_id, cantitate, sursa) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000001', '#1', 'PSA-SOPHIE-NEGRU-M',
+   '2026-10-03 12:00+03', 'cccccccc-0000-0000-0000-000000000001', 3, 'dashboard'),
+  ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000001', '#2', 'PSA-SOPHIE-NEGRU-M',
+   '2026-10-07 12:00+03', 'cccccccc-0000-0000-0000-000000000001', 4, 'dashboard');
+SELECT CASE linie_id WHEN '77777777-0000-0000-0000-0000000000a1' THEN 'primul' ELSE 'al doilea' END
+       || ' ' || round(sum(vandut), 2)
+  FROM psf_vandut_zilnic WHERE linie_id IN ('77777777-0000-0000-0000-0000000000a1', '77777777-0000-0000-0000-0000000000a2')
+ GROUP BY linie_id ORDER BY 1 DESC;
+
+\echo '--- 27. aceeasi linie de comanda adusa a doua oara (asteptat: EROARE, o linie se numara o data)'
+\set ON_ERROR_STOP off
+INSERT INTO vanzare (firma_id, brand_id, nr_comanda, sku, data, produs_id, cantitate, sursa) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000001', '#1', 'PSA-SOPHIE-NEGRU-M',
+   '2026-10-03 12:00+03', 'cccccccc-0000-0000-0000-000000000001', 3, 'shopify');
+\set ON_ERROR_STOP on
+
+\echo '--- 28. parola: setata de admin, logarea merge cu ea si nu merge cu alta'
+INSERT INTO utilizator (id, firma_id, nume, email, roluri) VALUES
+  ('66666666-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Ana Test', 'ana@test.ro', '{kam}'),
+  ('66666666-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'Ion Croit', NULL, '{croit}');
+SELECT cont_seteaza_parola('66666666-0000-0000-0000-000000000001', 'parola-de-test-1');
+SELECT 'buna: ' || (logare_parola('ANA@test.ro', 'parola-de-test-1') IS NOT NULL)
+    || ' | gresita: ' || (logare_parola('ana@test.ro', 'alta-parola-xx') IS NOT NULL);
+
+\echo '--- 29. aplicatia nu poate citi hash-urile (asteptat: EROARE de permisiune)'
+\set ON_ERROR_STOP off
+SELECT parola_hash FROM cont;
+\set ON_ERROR_STOP on
+
+\echo '--- 30. dupa 5 incercari gresite contul se blocheaza: nici parola buna nu mai merge'
+SELECT count(*) FILTER (WHERE logare_parola('ana@test.ro', 'gresit-' || i) IS NULL) FROM generate_series(1, 5) i;
+SELECT 'parola buna, cont blocat: ' || (logare_parola('ana@test.ro', 'parola-de-test-1') IS NOT NULL);
+
+\echo '--- 31. tableta de atelier: Ion intra cu PIN-ul lui, nu cu altul'
+SELECT cont_seteaza_pin('66666666-0000-0000-0000-000000000002', '4821');
+SELECT dispozitiv_inregistreaza('Tableta croit', NULL) AS tableta \gset
+SELECT 'pe tableta: ' || string_agg(nume, ', ') FROM dispozitiv_oameni(:'tableta');
+SELECT 'PIN bun: ' || (logare_pin(:'tableta', '66666666-0000-0000-0000-000000000002', '4821') IS NOT NULL)
+    || ' | PIN gresit: ' || (logare_pin(:'tableta', '66666666-0000-0000-0000-000000000002', '0000') IS NOT NULL)
+    || ' | tableta falsa: ' || (logare_pin('nu-exista', '66666666-0000-0000-0000-000000000002', '4821') IS NOT NULL);
+
+\echo '--- 32. sesiunea spune cine e, fara firma setata; dupa iesire, nimic'
+SELECT logare_pin(:'tableta', '66666666-0000-0000-0000-000000000002', '4821') AS token \gset
+RESET app.firma_id;
+SELECT 'sesiune: ' || nume || ' | atelier ' || din_atelier FROM sesiune_curenta(:'token');
+SELECT sesiune_inchide(:'token');
+SELECT 'dupa iesire: ' || count(*) FROM sesiune_curenta(:'token');
 
 \echo ''
 \echo '=== gata'

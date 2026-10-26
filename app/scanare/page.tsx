@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { cere } from '../lib/sesiune';
 import { motiveReceptie } from '../lib/receptie';
 import Scanare from './Scanare';
 import './scanare.css';
@@ -18,6 +19,7 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, maxi
  * iar în depozit semnalul e slab — un drum mai puțin la fiecare colet.
  */
 export default async function Pagina() {
+  await cere('receptie', 'modifica');
   const motive = await motiveReceptie();
   return <Scanare motive={motive} />;
 }

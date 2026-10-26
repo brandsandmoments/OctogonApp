@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { numarDinFormular } from '../../lib/format';
 import { creeazaPlanificare, liniePentruPlanificare } from '../../lib/planificare';
@@ -12,6 +13,7 @@ export default async function PlanificareNoua({
 }: {
   searchParams: Promise<{ linie?: string; eroare?: string }>;
 }) {
+  await cere('planificare', 'modifica');
   const { linie: linieId, eroare } = await searchParams;
   if (!linieId) notFound();
   const d = await liniePentruPlanificare(linieId);
@@ -20,6 +22,7 @@ export default async function PlanificareNoua({
 
   async function salveaza(date: FormData) {
     'use server';
+    await cere('planificare', 'modifica');
     const cantitati = new Map(
       [...date.entries()].filter(([k]) => k.startsWith('q:'))
         .map(([k, v]) => [k.slice(2), numarDinFormular(v) ?? 0]),

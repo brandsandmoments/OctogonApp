@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { bifeazaEtapa, detaliiLot, inregistreazaCroit } from '../../lib/croit';
 import { cantitate, numarDinFormular } from '../../lib/format';
@@ -21,6 +22,10 @@ export default async function LotPagina({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ eroare?: string }>;
 }) {
+  await cere('croit');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('croit');
+  const peBanda = await poateModifica('banda');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
   const [d, motive] = await Promise.all([detaliiLot(id), motiveCroit()]);
   if (!d) notFound();
@@ -30,12 +35,14 @@ export default async function LotPagina({
 
   async function etapa(date: FormData) {
     'use server';
+    await cere('croit', 'modifica');
     await bifeazaEtapa(id, String(date.get('etapa')), date.get('bifat') === '1');
     inapoi(id, null);
   }
 
   async function inregistreaza(date: FormData) {
     'use server';
+    await cere('croit', 'modifica');
     inapoi(id, await inregistreazaCroit({
       lotId: id,
       croit: new Map([...date.entries()].filter(([k]) => k.startsWith('q:'))
@@ -55,7 +62,7 @@ export default async function LotPagina({
         {lot.produs} · {lot.cod_sku} · P{lot.prioritate} · cerut în depozit {lot.data_ceruta} · primit {lot.primit_la}
         {croit && <> · <strong>croit {lot.croit_la}</strong></>}
         {' · '}<Link href={`/planificare/${lot.planificare_id}`}>planificarea</Link>
-        {croit && <>{' · '}<Link href={`/banda/alimenteaza?lot=${lot.id}`}>dă pe bandă</Link></>}
+        {croit && peBanda && <>{' · '}<Link href={`/banda/alimenteaza?lot=${lot.id}`}>dă pe bandă</Link></>}
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
 
@@ -63,14 +70,14 @@ export default async function LotPagina({
       <ol className="etape">
         {etape.map((e) => (
           <li key={e.id} className={e.bifat_la ? 'bifat' : ''}>
-            <form action={etapa}>
+            <form action={etapa}><fieldset disabled={!m} className="fara-chenar">
               <input type="hidden" name="etapa" value={e.id} />
               <input type="hidden" name="bifat" value={e.bifat_la ? '0' : '1'} />
               <button className="bifa-etapa" disabled={croit} aria-pressed={Boolean(e.bifat_la)}
                 aria-label={`${e.bifat_la ? 'Debifează' : 'Bifează'} ${e.nume}`}>
                 {e.bifat_la ? '✓' : ''}
               </button>
-            </form>
+            </fieldset></form>
             <span>{e.nume}</span>
             {e.bifat_la && <span className="slab">{e.bifat_la}</span>}
           </li>
@@ -78,7 +85,7 @@ export default async function LotPagina({
       </ol>
 
       <h2>{croit ? 'Croit' : 'De croit'}</h2>
-      <form action={inregistreaza}>
+      <form action={inregistreaza}><fieldset disabled={!m} className="fara-chenar">
         <table className="grila">
           <thead><tr><th>Mărime</th><th className="nr">Cerut</th><th className="nr">Croit efectiv</th>{croit && <th>Motiv</th>}</tr></thead>
           <tbody>
@@ -127,7 +134,7 @@ export default async function LotPagina({
             <div className="actiuni"><button className="principal">Înregistrează croitul</button></div>
           </div>
         )}
-      </form>
+      </fieldset></form>
 
       {[['materie_prima', 'Materie primă — scade din stoc la croit'],
         ['accesoriu', 'Accesorii — scad la alimentarea benzii']].map(([tip, titlu]) => {

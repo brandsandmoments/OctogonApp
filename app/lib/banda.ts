@@ -1,4 +1,5 @@
-import { caFirma, firmaCurenta, interogare } from './db';
+import { caFirma } from './db';
+import { firmaCurenta, interogare } from './sesiune';
 
 /** Etapele unei tranșe pe bandă, în ordine. Fiecare cere etapa de dinainte (CHECK în 0010). */
 export const ETAPE_BANDA = [

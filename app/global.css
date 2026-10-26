@@ -65,3 +65,24 @@ main.lat { max-width: 90rem; }
 .file { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--linie); margin: 1rem 0; }
 .file a { padding: .5rem .9rem; text-decoration: none; color: var(--slab); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .file a.activ { color: var(--text); border-bottom-color: currentColor; font-weight: 600; }
+
+.semafor { font-weight: 700; padding: 0 .35rem; border-radius: .25rem; }
+.semafor.verde  { color: #1f6b2c; background: #e3f2e5; }
+.semafor.galben { color: #7a5a00; background: #fbf0cf; }
+.semafor.rosu   { color: #a1300f; background: #fbe3da; }
+.rosu { color: #b3401a; }
+.file .activ-text { padding: .5rem .9rem; font-weight: 600; }
+@media (prefers-color-scheme: dark) {
+  .semafor.verde  { color: #8fd99a; background: #1d3322; }
+  .semafor.galben { color: #f0cf6b; background: #3a3016; }
+  .semafor.rosu   { color: #f5a183; background: #3d2018; }
+  .rosu { color: #f08a5d; }
+}
+
+.bara-sus { display: flex; align-items: center; gap: 1rem; padding: .5rem 1rem; border-bottom: 1px solid var(--linie); font-size: .9rem; }
+.bara-sus .acasa { font-weight: 700; text-decoration: none; }
+.bara-sus .cine { margin-left: auto; }
+.bara-sus form { margin: 0; }
+.bara-sus .iesire { font: inherit; padding: .25rem .7rem; border: 1px solid var(--linie); border-radius: .35rem; background: transparent; color: inherit; cursor: pointer; }
+@media print { .bara-sus { display: none; } }
+.fara-chenar { border: 0; padding: 0; margin: 0; min-width: 0; }

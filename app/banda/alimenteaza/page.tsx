@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { alimenteaza, lotPentruAlimentare } from '../../lib/banda';
 import { cantitate, numarDinFormular } from '../../lib/format';
@@ -12,6 +13,7 @@ export default async function Alimenteaza({
 }: {
   searchParams: Promise<{ lot?: string; eroare?: string }>;
 }) {
+  await cere('banda', 'modifica');
   const { lot: lotId, eroare } = await searchParams;
   if (!lotId) notFound();
   const d = await lotPentruAlimentare(lotId);
@@ -21,6 +23,7 @@ export default async function Alimenteaza({
 
   async function salveaza(date: FormData) {
     'use server';
+    await cere('banda', 'modifica');
     const r = await alimenteaza({
       lotId: lotId!,
       cantitati: new Map([...date.entries()].filter(([k]) => k.startsWith('q:'))

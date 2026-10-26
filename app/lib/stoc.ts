@@ -1,4 +1,5 @@
-import { caFirma, firmaCurenta, interogare } from './db';
+import { caFirma } from './db';
+import { firmaCurenta, interogare } from './sesiune';
 import { cantitate } from './format';
 
 export type RandStoc = {
@@ -320,7 +321,7 @@ export async function inchideInventar(id: string): Promise<string | null> {
           [l.material_id, diferenta, inv.data, id]);
       }
     }
-    await c.query(`UPDATE inventar SET inchis_la = now() WHERE id = $1`, [id]);
+    await c.query(`UPDATE inventar SET inchis_la = now(), inchis_de = utilizator_curent() WHERE id = $1`, [id]);
     return null;
   });
 }

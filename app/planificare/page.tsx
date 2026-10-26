@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../lib/sesiune';
 import { deplanificat, planificariActive } from '../lib/planificare';
 import { STADII } from '../lib/stadii';
 
@@ -9,6 +10,9 @@ export const dynamic = 'force-dynamic';
  * planificat din comenzile deschise — urgența întâi, apoi termenul.
  */
 export default async function Planificare({ searchParams }: { searchParams: Promise<{ cauta?: string }> }) {
+  await cere('planificare');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('planificare');
   const { cauta } = await searchParams;
   const [active, deplan] = await Promise.all([planificariActive(), deplanificat(cauta)]);
 
@@ -67,7 +71,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
                 <td className="nr">{l.cerut}</td>
                 <td className="nr">{l.planificat || '—'}</td>
                 <td className="nr"><strong>{l.rest}</strong></td>
-                <td>{l.are_reteta
+                <td>{!m ? null : l.are_reteta
                   ? <Link href={`/planificare/nou?linie=${l.linie_id}`}>Planifică</Link>
                   : <span className="lipsa">fără rețetă</span>}</td>
               </tr>

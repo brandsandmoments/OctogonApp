@@ -8,7 +8,9 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:reset": "./scripts/db-reset.sh",
-    "import:dashboard": "node --env-file=.env scripts/import-dashboard.mts"
+    "import:dashboard": "node --env-file=.env scripts/import-dashboard.mts",
+    "sync:shopify": "node --env-file=.env scripts/sync-shopify.mts",
+    "cont:admin": "node --env-file=.env scripts/cont-admin.mts"
   },
   "dependencies": {
     "bwip-js": "^4.11.4",

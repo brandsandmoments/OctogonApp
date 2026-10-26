@@ -4,8 +4,9 @@
  *   npm run import:dashboard -- <fisier.xlsx>
  *
  * Ce aduce: branduri, categorii, culori, materiale, modele cu rețetele lor,
- * produsele, comenzile PSF și PSC cu liniile și cantitățile pe mărimi, apoi
- * istoricul de producție: planificările, loturile croite și tranșele de pe bandă.
+ * produsele, oamenii (cu KAM-ul fiecărei comenzi), comenzile PSF și PSC cu liniile
+ * și cantitățile pe mărimi, istoricul de producție (planificările, loturile croite,
+ * tranșele de pe bandă) și vânzările din Shopify adunate în fila VANZARI.
  *
  * Trei reguli:
  *
@@ -24,7 +25,7 @@
  */
 import ExcelJS from 'exceljs';
 import type { PoolClient } from 'pg';
-import { caFirma, firmaCurenta } from '../app/lib/db.ts';
+import { caFirma, firmaDinMediu } from '../app/lib/db.ts';
 
 type Celula = string | number | boolean | null;
 type Rand = { nr: number; c: (col: string) => Celula };
@@ -91,7 +92,7 @@ function data(v: Celula): string | null {
 
 /** „Trening Echo" → „trening-echo", ca tagul Shopify model:echo. Fără diacritice. */
 function slug(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
@@ -129,6 +130,7 @@ const semnaleaza = (s: string) => raport.push(s);
 // ---------------------------------------------------------------- import
 
 async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
+  const oameni = await importaOameni(c, wb);
   const produseSheet = randuri(wb, 'NOM_PRODUSE').filter((r) => text(r.c('Denumire produs (titlu Shopify)')));
   const retete = randuri(wb, 'RETETE').filter((r) => text(r.c('Model')));
   const materialeSheet = randuri(wb, 'NOM_MATERIALE').filter((r) => text(r.c('Cod')));
@@ -303,7 +305,8 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
   type Linie = { rand: number; produs: string; dataCeruta: string | null; deLa: string | null; panaLa: string | null;
                  cant: Map<string, number>; observatii: string | null };
   type Comanda = { numar: string; tip: 'PSF' | 'PSC'; date: string[]; ceruteLa: string[]; branduri: string[];
-                   prioritati: number[]; stari: string[]; observatii: Set<string>; linii: Map<string, Linie> };
+                   prioritati: number[]; stari: string[]; observatii: Set<string>; linii: Map<string, Linie>;
+                   kam: string | null };
   const comenzi = new Map<string, Comanda>();
 
   // Rândurile marcate „Exemplu - se poate sterge" se sar — dar nu și cele pe care
@@ -334,7 +337,7 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       }
       const cmd: Comanda = comenzi.get(id) ?? {
         numar: id, tip: fila, date: [], ceruteLa: [], branduri: [], prioritati: [], stari: [],
-        observatii: new Set<string>(), linii: new Map(),
+        observatii: new Set<string>(), linii: new Map(), kam: null,
       };
       comenzi.set(id, cmd);
 
@@ -343,7 +346,14 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       const prio = Number(String(r.c(col.prio) ?? '').split(' ')[0]); if (prio >= 1 && prio <= 5) cmd.prioritati.push(prio);
       const stare = text(r.c(col.stare)); if (stare) cmd.stari.push(stare);
       const cine = text(r.c(col.cine));
-      if (cine) cmd.observatii.add(`${fila === 'PSF' ? 'KAM' : 'Comandă dată de'}: ${cine.replace(/^ALex/, 'Alex')}`);
+      if (cine) {
+        const kam = oameni.get(cine.toLowerCase());
+        if (kam) cmd.kam ??= kam;
+        else {
+          cmd.observatii.add(`${fila === 'PSF' ? 'KAM' : 'Comandă dată de'}: ${cine}`);
+          semnaleaza(`${fila} ${id}: „${cine}" nu e în lista de persoane — trecut doar în observații`);
+        }
+      }
       if (fila === 'PSC') {
         const client = text(r.c('Client / Magazin')); if (client) cmd.observatii.add(`Client: ${client}`);
         const nrClient = text(r.c('Nr. comanda client')); if (nrClient) cmd.observatii.add(`Nr. comandă client: ${nrClient}`);
@@ -399,7 +409,12 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
   const minim = (xs: string[]) => [...xs].sort()[0] ?? null;
 
   for (const cmd of comenzi.values()) {
-    if (existente.has(cmd.numar)) { numara('comenzi existente, neatinse'); continue; }
+    if (existente.has(cmd.numar)) {
+      // Comanda nu se rescrie; primește doar KAM-ul, dacă încă nu are.
+      if (cmd.kam) await c.query(`UPDATE comanda SET kam_id = $2 WHERE numar = $1 AND kam_id IS NULL`, [cmd.numar, cmd.kam]);
+      numara('comenzi existente, neatinse');
+      continue;
+    }
     if (cmd.linii.size === 0) {
       semnaleaza(`${cmd.tip} ${cmd.numar}: nicio linie importabilă — comanda nu s-a creat`);
       continue;
@@ -422,10 +437,10 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       : stari.includes('in_productie') ? 'in_productie' : 'lansata';
 
     const { rows: [{ id }] } = await c.query<{ id: string }>(
-      `INSERT INTO comanda (firma_id, numar, tip, brand_id, data_lansare, prioritate, stare, observatii)
-       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      `INSERT INTO comanda (firma_id, numar, tip, brand_id, data_lansare, prioritate, stare, observatii, kam_id)
+       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [cmd.numar, cmd.tip, branduri.get(brand), dataLansare, cmd.prioritati.length ? Math.min(...cmd.prioritati) : 3, stare,
-       ['Import din dashboard.', ...cmd.observatii].join(' ')],
+       ['Import din dashboard.', ...cmd.observatii].join(' '), cmd.kam],
     );
     numara(`comenzi ${cmd.tip} importate`);
 
@@ -448,6 +463,105 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       }
       numara('linii importate');
     }
+  }
+}
+
+// ---------------------------------------------------------------- oameni
+
+/** Rolul din NOM_LISTE („Asigura Stoc - Croit", „KAM - Key Account Manager") → rolurile aplicației. */
+function roluri(rol: string): string[] {
+  const r = rol.toLowerCase();
+  if (r.startsWith('kam') || r.startsWith('head of sales')) return ['kam'];
+  if (r.includes('planific')) return ['planificator'];
+  if (/croi|croit|termocul|depozitare piese/.test(r)) return ['croit'];
+  if (/linia|banda|calcat|stander|ctc/.test(r)) return ['banda'];
+  if (/aprovizionare|achizitii|expediaza/.test(r)) return ['depozit'];
+  return [];
+}
+
+/**
+ * Oamenii din NOM_LISTE (coloanele E–F), ca utilizatori fără email: emailul vine
+ * odată cu autentificarea. Numele e cheia — „ALex Stanciu" și „Alex Stanciu" sunt
+ * același om, deci comparăm fără majuscule.
+ */
+async function importaOameni(c: PoolClient, wb: ExcelJS.Workbook): Promise<Map<string, string>> {
+  const ws = wb.getWorksheet('NOM_LISTE');
+  if (!ws) throw new Error('Lipsește fila NOM_LISTE');
+  const oameni = new Map<string, string>(); // nume mic → id
+  for (let r = 4; r <= ws.rowCount; r++) {
+    const nume = text(valoare(ws.getCell(`E${r}`).value));
+    if (!nume) continue;
+    const rol = text(valoare(ws.getCell(`F${r}`).value)) ?? '';
+    const { rows: [u] } = await c.query<{ id: string; nou: boolean }>(
+      `INSERT INTO utilizator (firma_id, nume, roluri) VALUES (firma_curenta(), $1, $2::rol[])
+       ON CONFLICT (firma_id, nume) DO UPDATE SET nume = EXCLUDED.nume
+       RETURNING id, (xmax = 0) AS nou`, [nume, roluri(rol)]);
+    oameni.set(nume.toLowerCase(), u.id);
+    numara(u.nou ? 'oameni noi' : 'oameni existenți');
+  }
+  for (const r of (await c.query<{ id: string; nume: string }>(`SELECT id, nume FROM utilizator`)).rows) {
+    oameni.set(r.nume.toLowerCase(), r.id);
+  }
+  return oameni;
+}
+
+// ---------------------------------------------------------------- vânzări
+
+/**
+ * Vânzările din fila VANZARI: o linie pe comandă și SKU de variantă. SKU-ul e
+ * prefixul produsului plus mărimea (MSLL-ROCHIESERAPHYNE-NEGRU-S); mărimea trece
+ * prin aliasuri (Shopify scrie 2XS și XXL). Un SKU necunoscut se păstrează, fără
+ * produs: vânzarea a existat, doar catalogul n-o știe.
+ *
+ * Nu suprascrie ce a venit deja din Shopify: sincronizarea e sursa mai bună.
+ */
+async function importaVanzari(c: PoolClient, wb: ExcelJS.Workbook) {
+  const branduri = new Map((await c.query<{ id: string; nume: string }>(`SELECT id, nume FROM brand`)).rows
+    .map((b) => [b.nume, b.id]));
+  const produse = (await c.query<{ id: string; cod_sku: string }>(`SELECT id, cod_sku FROM produs`)).rows
+    .sort((a, b) => b.cod_sku.length - a.cod_sku.length); // cel mai lung prefix câștigă
+  const marimi = new Map<string, string>();
+  for (const m of (await c.query<{ id: string; cod: string }>(`SELECT id, cod FROM marime`)).rows) marimi.set(m.cod.toUpperCase(), m.id);
+  for (const a of (await c.query<{ marime_id: string; alias: string }>(`SELECT marime_id, alias FROM marime_alias`)).rows) {
+    if (!marimi.has(a.alias.toUpperCase())) marimi.set(a.alias.toUpperCase(), a.marime_id);
+  }
+
+  type Linie = { brand: string; nr: string; sku: string; data: string; produs: string | null; marime: string | null;
+                 cantitate: number; valoare: number };
+  const linii = new Map<string, Linie>();
+  const necunoscute = new Set<string>();
+  for (const r of randuri(wb, 'VANZARI')) {
+    const brand = text(r.c('Brand'));
+    const nr = text(r.c('Nr. comanda'));
+    const sku = text(r.c('SKU varianta'))?.toUpperCase();
+    const zi = data(r.c('Data comanda'));
+    const q = numar(r.c('Cantitate'));
+    if (!brand || !nr || !sku || !zi || !q || q <= 0) continue;
+    if (!branduri.has(brand)) { semnaleaza(`VANZARI rândul ${r.nr}: brandul „${brand}" nu există — sărit`); continue; }
+    const produs = produse.find((p) => sku.startsWith(`${p.cod_sku.toUpperCase()}-`));
+    const marime = produs ? marimi.get(sku.slice(produs.cod_sku.length + 1)) ?? null : null;
+    if (!produs) necunoscute.add(sku);
+    const k = `${brand}|${nr}|${sku}`;
+    const x = linii.get(k);
+    // Același SKU de două ori în aceeași comandă: în bază e o singură linie, cu suma.
+    if (x) { x.cantitate += Math.round(q); x.valoare += numar(r.c('Valoare (RON)')) ?? 0; continue; }
+    linii.set(k, { brand, nr, sku, data: zi, produs: produs?.id ?? null, marime, cantitate: Math.round(q),
+                   valoare: numar(r.c('Valoare (RON)')) ?? 0 });
+  }
+  for (const l of linii.values()) {
+    const { rowCount } = await c.query(
+      `INSERT INTO vanzare (firma_id, brand_id, nr_comanda, sku, data, produs_id, marime_id, cantitate, valoare, sursa)
+       VALUES (firma_curenta(), $1, $2, $3, ($4::date + time '12:00') AT TIME ZONE 'Europe/Bucharest', $5, $6, $7, $8, 'dashboard')
+       ON CONFLICT (firma_id, brand_id, nr_comanda, sku) DO UPDATE
+          SET cantitate = EXCLUDED.cantitate, valoare = EXCLUDED.valoare, data = EXCLUDED.data,
+              produs_id = EXCLUDED.produs_id, marime_id = EXCLUDED.marime_id
+        WHERE vanzare.sursa = 'dashboard'`,
+      [branduri.get(l.brand), l.nr, l.sku, l.data, l.produs, l.marime, l.cantitate, l.valoare]);
+    numara('linii de vânzare', rowCount ?? 0);
+  }
+  if (necunoscute.size) {
+    numara('SKU-uri vândute necunoscute în catalog', necunoscute.size);
+    semnaleaza(`${necunoscute.size} SKU-uri din VANZARI nu se potrivesc cu niciun produs din catalog (păstrate fără produs), de ex.: ${[...necunoscute].slice(0, 8).join(', ')}`);
   }
 }
 
@@ -828,9 +942,10 @@ if (!fisier) {
 }
 const wb = new ExcelJS.Workbook();
 await wb.xlsx.readFile(fisier);
-await caFirma(firmaCurenta(), async (c) => {
+await caFirma(firmaDinMediu(), async (c) => {
   await importa(c, wb);
   await importaIstoric(c, wb);
+  await importaVanzari(c, wb);
 });
 
 console.log('\nImport terminat.\n');

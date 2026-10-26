@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { cere } from '../../lib/sesiune';
 import { code128, qr } from '../../lib/coduri';
 import { emiteEtichete, etichetele } from '../../lib/etichete';
 import './etichete.css';
@@ -20,6 +21,7 @@ export default async function Coala({
 }: {
   params: Promise<{ comanda: string }>;
 }) {
+  await cere(['receptie', 'planificare'], 'modifica');
   const { comanda: brut } = await params;
   const comanda = decodeURIComponent(brut);
 

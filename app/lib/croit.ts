@@ -1,4 +1,5 @@
-import { caFirma, firmaCurenta, interogare } from './db';
+import { caFirma } from './db';
+import { firmaCurenta, interogare } from './sesiune';
 import { incheiePlanificare } from './planificare';
 
 export type Vedere = 'toate' | 'croite';
@@ -263,7 +264,7 @@ async function inregistreaza(d: CroitNou): Promise<string | null> {
       `INSERT INTO lot_etapa (firma_id, lot_id, etapa_id)
        SELECT firma_curenta(), $1, id FROM etapa_croit WHERE cod = 'croit'
        ON CONFLICT (lot_id, etapa_id) DO NOTHING`, [d.lotId]);
-    await c.query(`UPDATE lot_croit SET croit_la = now() WHERE id = $1`, [d.lotId]);
+    await c.query(`UPDATE lot_croit SET croit_la = now(), croit_de = utilizator_curent() WHERE id = $1`, [d.lotId]);
 
     const { rows: [{ rest }] } = await c.query<{ rest: number }>(
       `SELECT coalesce(sum(rest), 0)::int AS rest FROM planificare_rest_de_croit WHERE planificare_id = $1`,

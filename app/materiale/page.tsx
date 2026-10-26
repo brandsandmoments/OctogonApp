@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { cere, poateModifica } from '../lib/sesiune';
 import { adaugaMaterial, culori, materiale, UNITATI } from '../lib/retete';
 import '../formulare.css';
 
@@ -8,6 +9,7 @@ const TIP = { materie_prima: 'Materie primă', accesoriu: 'Accesoriu' } as const
 
 async function adauga(date: FormData) {
   'use server';
+  await cere('necesar', 'modifica');
   const s = (k: string) => String(date.get(k) ?? '');
   const eroare = await adaugaMaterial({
     tip: s('tip'), cod: s('cod'), denumire: s('denumire'),
@@ -18,6 +20,9 @@ async function adauga(date: FormData) {
 
 /** Nomenclatorul de materiale: stofe, căptușeli, fermoare, nasturi, etichete. */
 export default async function Materiale({ searchParams }: { searchParams: Promise<{ eroare?: string }> }) {
+  await cere('necesar');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('necesar');
   const [{ eroare }, lista, cul] = await Promise.all([searchParams, materiale(), culori()]);
 
   return (
@@ -28,7 +33,7 @@ export default async function Materiale({ searchParams }: { searchParams: Promis
         {lista.filter((m) => m.tip === 'accesoriu').length} accesorii
       </p>
 
-      <form action={adauga} className="antet-comanda">
+      <form action={adauga} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
         <label>
           <span>Tip</span>
           <select name="tip" defaultValue="materie_prima">
@@ -53,7 +58,7 @@ export default async function Materiale({ searchParams }: { searchParams: Promis
         </label>
         <label><span>Furnizor</span><input name="furnizor" /></label>
         <div className="actiuni"><button className="principal">Adaugă</button></div>
-      </form>
+      </fieldset></form>
       {eroare && <p className="eroare">{eroare}</p>}
 
       <table>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { cantitate } from '../../lib/format';
 import { detaliiInventar, familii, inchideInventar, salveazaNumaratori } from '../../lib/stoc';
@@ -24,6 +25,9 @@ export default async function InventarPagina({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ familie?: string; eroare?: string }>;
 }) {
+  await cere('materiale');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('materiale');
   const [{ id }, { familie = '', eroare }] = await Promise.all([params, searchParams]);
   const [d, fam] = await Promise.all([detaliiInventar(id, familie), familii()]);
   if (!d) notFound();
@@ -32,6 +36,7 @@ export default async function InventarPagina({
 
   async function salveaza(date: FormData) {
     'use server';
+    await cere('materiale', 'modifica');
     const numaratori = new Map(
       [...date.entries()].filter(([k]) => k.startsWith('n:')).map(([k, v]) => [k.slice(2), String(v)]),
     );
@@ -61,7 +66,7 @@ export default async function InventarPagina({
         </form>
       )}
 
-      <form action={salveaza}>
+      <form action={salveaza}><fieldset disabled={!m} className="fara-chenar">
         <div className="tabel-derulant">
           <table>
             <thead>
@@ -112,7 +117,7 @@ export default async function InventarPagina({
             </button>
           </div>
         )}
-      </form>
+      </fieldset></form>
     </main>
   );
 }

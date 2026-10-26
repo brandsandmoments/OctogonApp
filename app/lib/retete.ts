@@ -1,4 +1,5 @@
-import { caFirma, firmaCurenta, interogare } from './db';
+import { caFirma } from './db';
+import { firmaCurenta, interogare } from './sesiune';
 
 export type Material = {
   id: string;

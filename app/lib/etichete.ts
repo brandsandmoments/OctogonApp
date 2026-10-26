@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
-import { caFirma, firmaCurenta } from './db';
+import { caFirma } from './db';
+import { firmaCurenta } from './sesiune';
 import { serialNou } from './coduri';
 
 export type EtichetaDeTiparit = {

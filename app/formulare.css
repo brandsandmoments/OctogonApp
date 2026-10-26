@@ -102,3 +102,34 @@
 .etape li.bifat .bifa-etapa { background: var(--text); color: var(--fundal); border-color: var(--text); }
 .bifa-linie { display: flex !important; align-items: center; gap: .5rem; }
 .bifa-linie input { width: auto; }
+
+.cauta-produs { position: relative; }
+.lista-produse {
+  position: fixed; z-index: 10;
+  max-height: 18rem; overflow-y: auto; margin: 0; padding: .25rem 0; list-style: none;
+  background: var(--fundal); border: 1px solid var(--linie); border-radius: .35rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
+}
+.lista-produse li { padding: .4rem .6rem; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lista-produse li.activ { background: var(--linie); }
+
+.logare { max-width: 24rem; margin-top: 2rem; }
+.logare form label { display: block; margin-bottom: .75rem; }
+.alege-om { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: .4rem; }
+.alege-om label { display: flex !important; align-items: center; gap: .75rem; min-height: 3rem; padding: .5rem .75rem;
+  border: 1px solid var(--linie); border-radius: .5rem; margin: 0 !important; cursor: pointer; }
+.alege-om input { width: auto; }
+.alege-om label:has(input:checked) { border-color: currentColor; font-weight: 600; }
+
+.roluri { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .4rem 1rem; }
+.roluri label { display: flex; align-items: center; gap: .35rem; }
+.roluri input { width: auto; }
+
+/* Fieldset-ul care dezactivează un formular pentru cine doar vede: fără chenar, fără spațiu. */
+.fara-chenar { border: 0; padding: 0; margin: 0; min-width: 0; }
+.fara-chenar:disabled button, .fara-chenar:disabled input, .fara-chenar:disabled select { cursor: not-allowed; }
+
+.drepturi { border: 0; padding: 0; margin: 0; }
+.drepturi table { width: auto; }
+.drepturi td, .drepturi th { padding: .3rem .6rem; }
+.drepturi input { width: auto; }

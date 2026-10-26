@@ -1,4 +1,5 @@
-import { caFirma, firmaCurenta } from './db';
+import { caFirma } from './db';
+import { firmaCurenta } from './sesiune';
 
 export type AntetComanda = {
   numar: string;

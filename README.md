@@ -23,8 +23,13 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0008_stoc_si_inventar.sql` | fișa de magazie, rezervarea din planificări, inventarul, parametrii de pierderi |
 | `db/migrations/0009_planificare_si_croit.sql` | ce i se cere lotului, când s-a croit, încheierea planificării |
 | `db/migrations/0010_alimentare_banda.sql` | tranșele de pe bandă, consumul de accesorii, rezervarea lor până la bandă |
+| `db/migrations/0011_vanzari_si_eficienta_kam.sql` | vânzările, magazinele Shopify, ținta zilnică a fiecărui PSF |
+| `db/migrations/0012_conturi_si_sesiuni.sql` | conturi, parole și PIN-uri (bcrypt, în bază), sesiuni, tablete de atelier |
+| `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
+| `db/oameni_octogon.sql` | oamenii Octogon și drepturile lor, cum le-a dat conducerea |
+| `scripts/sync-shopify.mts` | sincronizarea vânzărilor din cele trei magazine Shopify |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
-| `db/test_izolare.sql` | douăzeci și patru de verificări de purtare, rulate pe Postgres 16 |
+| `db/test_izolare.sql` | treizeci și două de verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -60,13 +65,14 @@ psql octogon -f db/migrations/0001_structura.sql
 psql octogon -f db/migrations/0002_izolare.sql
 ```
 
-Aplicația setează firma la fiecare conexiune:
+Aplicația setează firma — și omul logat — la fiecare tranzacție:
 
 ```sql
 SET app.firma_id = '<uuid-ul firmei>';
 ```
 
-Fără asta, toate interogările întorc zero rânduri. Intenționat.
+Fără asta, toate interogările întorc zero rânduri. Intenționat. Firma vine din
+sesiunea omului logat; doar scripturile (import, sincronizare) o iau din `FIRMA_ID`.
 
 ## Verificare
 
@@ -85,7 +91,7 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Stack: Next.js 16 + TypeScript + Postgres
 - [x] Migrarea 0003: mărimi numerice și lista de motive
 - [x] Primul ecran: pozițiile deschise cu progresul lor
-- [ ] Autentificare și roluri (acum firma vine din `FIRMA_ID`, din mediu)
+- [x] Autentificare și roluri: email + parolă la birou, PIN pe tableta atelierului
 - [x] Generarea etichetelor: Code 128 + QR, pe coală A4
 - [x] Ecranul de scanare, pe telefon
 - [x] Introducerea PSF/PSC, centralizatorul, rețete pe model, necesarul pe comandă
@@ -94,7 +100,8 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Alimentarea benzii: loturile croite intră pe bandă, accesoriile scad din stoc
 - [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
 - [x] Import din dashboard al istoricului: planificări, loturi croite, tranșe pe bandă
-- [ ] Import din cele trei magazine Shopify; intrările în depozit din dashboard
+- [x] Eficiența KAM, săptămânal, din vânzările Shopify; sincronizarea magazinelor (cu tokenuri în .env)
+- [ ] Intrările în depozit din dashboard
 
 ## Aplicația
 
@@ -124,6 +131,7 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | `/materiale` | nomenclatorul de materii prime și accesorii |
 | `/planificare`, `/planificare/<id>` | ce e de planificat; acoperirea cu stofă; lansarea spre croit; încheierea |
 | `/croit`, `/croit/<lot>` | tot ce e în croit, de croit, croite, rămas de croit; fișa lotului cu etapele și croitul efectiv |
+| `/kam`, `/kam/<kam>` | eficiența KAM pe săptămâni: ritmul și acuratețea la zi a fiecărui PSF |
 | `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
 | `/inventar`, `/inventar/<id>` | numărătoarea fizică; la închidere, diferențele devin ajustări |
@@ -230,6 +238,83 @@ n-a intrat.
 ÷ 60; zile = ore-om ÷ (persoane × ore pe zi), rotunjit în sus, de la intrarea în
 producție. Orele pe zi sunt un parametru al firmei (8). Fără persoane sau minute
 pe bucată nu se estimează nimic — o dată inventată e mai rea decât niciuna.
+
+## Conturi și roluri
+
+**Biroul** (KAM, manager, admin) intră cu email și parolă. **Atelierul** (croit,
+bandă, depozit) intră pe telefonul sau tableta comună: își alege numele și bagă un
+PIN de 4–6 cifre. Tableta e înregistrată o dată de admin, de pe ea însăși, din
+„Oameni și conturi" — deci un PIN nu e niciodată singura barieră. Sesiunea de birou
+ține o săptămână, cea de atelier o tură (12 ore).
+
+```sh
+npm run cont:admin -- --email ana@octogonfashion.com --nume "Ana Popescu"   # primul admin
+```
+
+Parola se tastează la prompt, ascunsă. Restul conturilor le dă adminul din aplicație.
+
+**Drepturile sunt pe om și pe zonă**, pe două niveluri: *vede* sau *modifică*
+(care îl include pe *vede*). Șefa de croit, de pildă, vede PSF-urile și planificarea
+fără să le poată schimba, dar lucrează la croit și în gestiunea de materii prime.
+Contul master (admin) poate tot și dă drepturi celorlalți, din „Oameni și conturi".
+
+| Zonă | Ce cuprinde |
+|---|---|
+| Comenzi | pozițiile; *modifică* = dă PSF și PSC |
+| Centralizator · Eficiența KAM | doar de văzut |
+| Necesar | necesarul pe comandă, modelele, rețetele, nomenclatorul de materiale |
+| Planificare · Croit · Bandă | fiecare cu ecranele lui |
+| Recepție | scanarea la depozit și etichetele |
+| Materii prime | stocul, intrările de la furnizor, inventarul |
+| Dezvoltare produs · Expediere | rezervate pentru modulele care urmează |
+
+Rolurile (KAM, șef croit) rămân pentru identitate: lista de KAM din formularul de
+PSF și cine poate intra cu PIN din atelier (croit, bandă, depozit). Cine doar vede
+o zonă are formularele, dar cu butoanele dezactivate; acțiunea e refuzată oricum
+pe server. Accesul se verifică la fiecare pagină și la fiecare acțiune
+(`app/lib/sesiune.ts`, `cere(zona, nivel)`).
+
+**Parolele și PIN-urile nu ies din bază.** Se verifică în Postgres, cu bcrypt
+(pgcrypto), prin funcții SECURITY DEFINER; tabelele `cont`, `sesiune` și
+`dispozitiv` nu au niciun drept acordat rolului aplicației. Sesiunea e un token
+aleator, iar în bază stă doar amprenta lui SHA-256. După 5 încercări greșite,
+contul se blochează 15 minute; o parolă nouă închide sesiunile vechi. Funcțiile
+nu depind de un proprietar care ocolește izolarea pe firme: testul de purtare
+rulează și cu un proprietar fără SUPERUSER și fără BYPASSRLS.
+
+**Cine a făcut** se scrie singur: omul logat e declarat în fiecare tranzacție, iar
+coloanele „cine" (a scanat, a planificat, a croit, a dat pe bandă, a mișcat stocul)
+îl primesc implicit.
+
+## Eficiența KAM
+
+Cine dă un PSF își asumă și perioada în care se vinde ce a pus în el: la PSF,
+KAM-ul și perioada de vânzare a fiecărei linii sunt obligatorii. Din vânzările
+reale se măsoară, în fiecare săptămână (luni–duminică), cât de bine a citit piața:
+
+| | |
+|---|---|
+| **De vândut** | volumul PSF împărțit egal pe zilele perioadei |
+| **Ritmul săptămânii** | vândut în săptămână ÷ de vândut în săptămână |
+| **Acuratețea la zi** | 1 − \|vândut până acum − de vândut până acum\| ÷ de vândut până acum |
+
+La finalul perioadei, acuratețea la zi e exact KPI-ul din dashboard (KPI_KAM).
+Vânzările se numără brut — comandat pe site, înainte de retururi și anulări —
+tot ca în sheet. Pragurile (70% / 85%) sunt parametri ai firmei, din fila TINTE.
+
+Două diferențe față de sheet, ambele intenționate:
+
+- **Suprapunerile se împart.** Când două PSF-uri pe același produs au perioade
+  care se suprapun, vânzările zilei se împart după ținta zilnică a fiecăruia.
+  Sheet-ul le dădea pe toate fiecăruia, deci aceeași bucată conta la doi KAM.
+- **Pe KAM, acuratețea e media ponderată a liniilor**, nu acuratețea sumelor: o
+  sumă ar lăsa un PSF supraestimat să compenseze unul subestimat.
+
+Vânzările vin din Shopify (`npm run sync:shopify`). Fiecare magazin își ia
+domeniul și tokenul din `.env` (`SHOPIFY_SHOP_<COD>`, `SHOPIFY_TOKEN_<COD>` — o
+aplicație custom cu acces `read_orders`); baza nu le ține. Brandul unei vânzări
+vine din produs, nu din magazin. Istoricul de până acum vine din fila VANZARI;
+aceeași comandă adusă apoi din Shopify o înlocuiește, nu se adaugă.
 
 ## Stocul de materiale
 

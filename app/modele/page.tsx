@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../lib/sesiune';
 import { redirect } from 'next/navigation';
 import { nomenclatoareComanda } from '../lib/comenzi';
 import { adaugaModel, modele } from '../lib/retete';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 async function adauga(date: FormData) {
   'use server';
+  await cere('necesar', 'modifica');
   const s = (k: string) => String(date.get(k) ?? '');
   const eroare = await adaugaModel({ brandId: s('brand'), cod: s('cod'), denumire: s('denumire') });
   redirect(eroare ? `/modele?eroare=${encodeURIComponent(eroare)}` : '/modele');
@@ -18,13 +20,16 @@ async function adauga(date: FormData) {
  * componentă fără material: cât timp nu e zero, necesarul acelor produse e incomplet.
  */
 export default async function Modele({ searchParams }: { searchParams: Promise<{ eroare?: string }> }) {
+  await cere('necesar');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('necesar');
   const [{ eroare }, lista, { branduri }] = await Promise.all([searchParams, modele(), nomenclatoareComanda()]);
 
   return (
     <main className="formular">
       <h1>Modele și rețete</h1>
 
-      <form action={adauga} className="antet-comanda">
+      <form action={adauga} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
         <label>
           <span>Brand</span>
           <select name="brand" defaultValue="" required>
@@ -35,7 +40,7 @@ export default async function Modele({ searchParams }: { searchParams: Promise<{
         <label><span>Cod</span><input name="cod" placeholder="echo" required /></label>
         <label><span>Denumire</span><input name="denumire" placeholder="Trening Echo" required /></label>
         <div className="actiuni"><button className="principal">Adaugă model</button></div>
-      </form>
+      </fieldset></form>
       {eroare && <p className="eroare">{eroare}</p>}
 
       <table>

@@ -4,12 +4,15 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import type { LinieNoua, Nomenclatoare } from '../../lib/comenzi';
 import { salveazaComanda } from './actiuni';
+import CautaProdus from './CautaProdus';
 
 // Data locală, nu UTC: după miezul nopții în România, UTC e încă „ieri".
 const azi = () => new Date().toLocaleDateString('sv-SE');
-const linieGoala = (): LinieNoua => ({ produsId: '', dataCeruta: '', cantitati: {} });
+const linieGoala = (): LinieNoua => ({ produsId: '', dataCeruta: '', vanzareDeLa: '', vanzarePanaLa: '', cantitati: {} });
 
-export default function FormularComanda({ branduri, produse, marimi }: Nomenclatoare) {
+export default function FormularComanda({
+  branduri, produse, marimi, kami, kamImplicit,
+}: Nomenclatoare & { kamImplicit: string }) {
   const router = useRouter();
   const [seLucreaza, porneste] = useTransition();
   const [eroare, setEroare] = useState<string>();
@@ -17,6 +20,7 @@ export default function FormularComanda({ branduri, produse, marimi }: Nomenclat
   const [numar, setNumar] = useState('');
   const [tip, setTip] = useState<'PSF' | 'PSC'>('PSC');
   const [brandId, setBrandId] = useState(branduri.length === 1 ? branduri[0].id : '');
+  const [kamId, setKamId] = useState(kamImplicit);
   const [dataLansare, setDataLansare] = useState(azi());
   const [prioritate, setPrioritate] = useState(3);
   const [observatii, setObservatii] = useState('');
@@ -36,7 +40,7 @@ export default function FormularComanda({ branduri, produse, marimi }: Nomenclat
     setEroare(undefined);
     porneste(async () => {
       const r = await salveazaComanda({
-        numar, tip, brandId, dataLansare, prioritate, observatii, lanseaza, linii,
+        numar, tip, brandId, kamId, dataLansare, prioritate, observatii, lanseaza, linii,
       });
       if (r.ok) router.push(`/necesar/${encodeURIComponent(r.numar)}`);
       else setEroare(r.eroare);
@@ -75,6 +79,13 @@ export default function FormularComanda({ branduri, produse, marimi }: Nomenclat
           </select>
         </label>
         <label>
+          <span>KAM{tip === 'PSF' && ' *'}</span>
+          <select value={kamId} onChange={(e) => setKamId(e.target.value)}>
+            <option value="">—</option>
+            {kami.map((k) => <option key={k.id} value={k.id}>{k.nume}</option>)}
+          </select>
+        </label>
+        <label>
           <span>Data lansării</span>
           <input type="date" value={dataLansare} onChange={(e) => setDataLansare(e.target.value)} />
         </label>
@@ -100,6 +111,8 @@ export default function FormularComanda({ branduri, produse, marimi }: Nomenclat
             <tr>
               <th>Produs</th>
               <th>Cerut în depozit</th>
+              {tip === 'PSF' && <th>Se vinde de la</th>}
+              {tip === 'PSF' && <th>până la</th>}
               {marimi.map((m) => (
                 <th key={m.id} className="nr">
                   {m.cod}
@@ -114,17 +127,12 @@ export default function FormularComanda({ branduri, produse, marimi }: Nomenclat
             {linii.map((l, i) => (
               <tr key={i}>
                 <td>
-                  <select
-                    value={l.produsId}
-                    disabled={!brandId}
-                    onChange={(e) => schimbaLinie(i, { produsId: e.target.value })}
-                    aria-label="Produs"
-                  >
-                    <option value="">{brandId ? '— alege produsul —' : 'alege întâi brandul'}</option>
-                    {produseBrand.map((p) => (
-                      <option key={p.id} value={p.id}>{p.nume} · {p.cod_sku}</option>
-                    ))}
-                  </select>
+                  <CautaProdus
+                    produse={produseBrand}
+                    valoare={l.produsId}
+                    dezactivat={!brandId}
+                    onAlege={(id) => schimbaLinie(i, { produsId: id })}
+                  />
                 </td>
                 <td>
                   <input
@@ -134,6 +142,20 @@ export default function FormularComanda({ branduri, produse, marimi }: Nomenclat
                     aria-label="Data cerută în depozit"
                   />
                 </td>
+                {tip === 'PSF' && (
+                  <>
+                    <td>
+                      <input type="date" value={l.vanzareDeLa}
+                        onChange={(e) => schimbaLinie(i, { vanzareDeLa: e.target.value })}
+                        aria-label="Se vinde de la" />
+                    </td>
+                    <td>
+                      <input type="date" value={l.vanzarePanaLa} min={l.vanzareDeLa || undefined}
+                        onChange={(e) => schimbaLinie(i, { vanzarePanaLa: e.target.value })}
+                        aria-label="Se vinde până la" />
+                    </td>
+                  </>
+                )}
                 {marimi.map((m) => (
                   <td key={m.id} className="nr">
                     <input
@@ -173,8 +195,12 @@ export default function FormularComanda({ branduri, produse, marimi }: Nomenclat
         className="secundar"
         disabled={!brandId}
         onClick={() =>
-          // Data cerută se moștenește de la linia de deasupra: de obicei e aceeași.
-          setLinii((ls) => [...ls, { ...linieGoala(), dataCeruta: ls[ls.length - 1]?.dataCeruta ?? '' }])
+          // Datele se moștenesc de la linia de deasupra: de obicei sunt aceleași.
+          setLinii((ls) => {
+            const sus = ls[ls.length - 1];
+            return [...ls, { ...linieGoala(), dataCeruta: sus?.dataCeruta ?? '',
+                             vanzareDeLa: sus?.vanzareDeLa ?? '', vanzarePanaLa: sus?.vanzarePanaLa ?? '' }];
+          })
         }
       >
         + Linie

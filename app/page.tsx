@@ -1,27 +1,28 @@
 import Link from 'next/link';
+import { ECRANE, poate, ZONE, type Zona } from './lib/acces';
+import { cere } from './lib/sesiune';
 
-const ECRANE: [string, string, string][] = [
-  ['/centralizator', 'Centralizator', 'toate liniile PSF și PSC: cerut, planificat, croit, intrat'],
-  ['/comenzi/noua', 'Comandă nouă', 'PSF sau PSC, cu grila de mărimi'],
-  ['/planificare', 'Planificare', 'ce intră în producție acum; lansarea spre croit'],
-  ['/croit', 'Croit', 'toate, croite, rămas de croit; înregistrarea croitului'],
-  ['/banda', 'Bandă', 'loturile croite intră pe bandă; drumul până la depozit'],
-  ['/modele', 'Modele și rețete', 'consumul pe bucată și materialul fiecărei culori'],
-  ['/stoc', 'Stoc materiale', 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor'],
-  ['/inventar', 'Inventar', 'numărătoare fizică; diferențele devin ajustări'],
-  ['/materiale', 'Materiale', 'materii prime și accesorii'],
-  ['/comenzi', 'Poziții deschise', 'progresul fiecărei poziții'],
-  ['/scanare', 'Recepție', 'scanează o etichetă, pe telefon'],
-];
+export const dynamic = 'force-dynamic';
 
-export default function Acasa() {
+const NUME_ZONA: Record<Zona, string> = { ...ZONE, oameni: 'Oameni și conturi' };
+
+/** Pagina de pornire: doar ecranele pe care omul logat le poate deschide. */
+export default async function Acasa({ searchParams }: { searchParams: Promise<{ fara_acces?: string; doar_vede?: string }> }) {
+  const [u, { fara_acces, doar_vede }] = await Promise.all([cere(), searchParams]);
+  const ale = ECRANE.filter((e) => poate(u, e.zona, e.nivel));
   return (
     <main>
-      <h1>OctogonApp</h1>
+      <h1>Bună, {u.nume.split(' ')[0]}</h1>
+      {fara_acces && (
+        <p className="eroare">
+          {doar_vede ? 'Poți doar să vezi' : 'Nu ai drept la'} „{NUME_ZONA[fara_acces as Zona] ?? fara_acces}”
+          {doar_vede && ', nu să modifici'}. Dacă ar trebui să ai, cere-i unui cont master dreptul.
+        </p>
+      )}
       <ul className="meniu">
-        {ECRANE.map(([href, nume, ce]) => (
-          <li key={href}>
-            <Link href={href}>{nume}</Link> <span className="slab">— {ce}</span>
+        {ale.map((e) => (
+          <li key={e.href}>
+            <Link href={e.href}>{e.nume}</Link> <span className="slab">— {e.ce}</span>
           </li>
         ))}
       </ul>

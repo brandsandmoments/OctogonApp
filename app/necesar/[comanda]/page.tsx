@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound } from 'next/navigation';
 import { cantitate } from '../../lib/format';
 import { necesarComanda, type Gol, type RandNecesar } from '../../lib/necesar';
@@ -50,6 +51,8 @@ function Tabel({ titlu, randuri }: { titlu: string; randuri: RandNecesar[] }) {
 }
 
 export default async function NecesarPagina({ params }: { params: Promise<{ comanda: string }> }) {
+  await cere(['necesar', 'comenzi', 'planificare']);
+  const etichete = (await poateModifica('receptie')) || (await poateModifica('planificare'));
   const { comanda } = await params;
   const n = await necesarComanda(decodeURIComponent(comanda));
   if (!n) notFound();
@@ -60,7 +63,7 @@ export default async function NecesarPagina({ params }: { params: Promise<{ coma
       <h1>Necesar {antet.numar}</h1>
       <p className="sumar">
         {antet.tip} · {antet.brand} · lansare {antet.data_lansare} · {antet.stare} · {antet.bucati} buc
-        {' · '}<Link href={`/etichete/${encodeURIComponent(antet.numar)}`}>etichete</Link>
+        {etichete && <>{' · '}<Link href={`/etichete/${encodeURIComponent(antet.numar)}`}>etichete</Link></>}
       </p>
 
       {goluri.length > 0 && (

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { detaliiTransa, ETAPE_BANDA, schimbaEtapa, type EtapaBanda } from '../../lib/banda';
 import { cantitate } from '../../lib/format';
@@ -17,6 +18,9 @@ export default async function TransaPagina({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ eroare?: string }>;
 }) {
+  await cere('banda');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('banda');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
   const d = await detaliiTransa(id);
   if (!d) notFound();
@@ -25,6 +29,7 @@ export default async function TransaPagina({
 
   async function etapa(date: FormData) {
     'use server';
+    await cere('banda', 'modifica');
     inapoi(id, await schimbaEtapa(id, String(date.get('etapa')) as EtapaBanda, date.get('bifat') === '1'));
   }
 
@@ -57,12 +62,12 @@ export default async function TransaPagina({
       <ol className="etape">
         {ETAPE_BANDA.map(([k, nume]) => (
           <li key={k} className={t[k] ? 'bifat' : ''}>
-            <form action={etapa}>
+            <form action={etapa}><fieldset disabled={!m} className="fara-chenar">
               <input type="hidden" name="etapa" value={k} />
               <input type="hidden" name="bifat" value={t[k] ? '0' : '1'} />
               <button className="bifa-etapa" aria-pressed={Boolean(t[k])}
                 aria-label={`${t[k] ? 'Debifează' : 'Bifează'} ${nume}`}>{t[k] ? '✓' : ''}</button>
-            </form>
+            </fieldset></form>
             <span>{nume}</span>
             {t[k] && <span className="slab">{t[k]}</span>}
           </li>

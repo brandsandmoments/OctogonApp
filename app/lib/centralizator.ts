@@ -1,4 +1,4 @@
-import { interogare } from './db';
+import { interogare } from './sesiune';
 
 export type RandCentralizator = {
   comanda: string;

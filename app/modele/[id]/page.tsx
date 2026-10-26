@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { cere, poateModifica } from '../../lib/sesiune';
 import {
   adaugaComponenta, detaliiModel, legaProduse, salveazaAlocari, schimbaConsum, stergeComponenta, UNITATI,
 } from '../../lib/retete';
@@ -23,6 +24,9 @@ export default async function ModelPagina({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ eroare?: string }>;
 }) {
+  await cere('necesar');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('necesar');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
   const d = await detaliiModel(id);
   if (!d) notFound();
@@ -30,6 +34,7 @@ export default async function ModelPagina({
 
   async function componentaNoua(date: FormData) {
     'use server';
+    await cere('necesar', 'modifica');
     const s = (k: string) => String(date.get(k) ?? '');
     inapoi(id, await adaugaComponenta(id, {
       nume: s('nume'), tip: s('tip'), unitate: s('unitate'), consum: Number(s('consum').replace(',', '.')),
@@ -38,6 +43,7 @@ export default async function ModelPagina({
 
   async function consum(date: FormData) {
     'use server';
+    await cere('necesar', 'modifica');
     const s = (k: string) => String(date.get(k) ?? '');
     if (date.get('sterge')) {
       await stergeComponenta(s('componenta'));
@@ -48,12 +54,14 @@ export default async function ModelPagina({
 
   async function lega(date: FormData) {
     'use server';
+    await cere('necesar', 'modifica');
     await legaProduse(id, date.getAll('produs').map(String));
     inapoi(id, null);
   }
 
   async function alocari(date: FormData) {
     'use server';
+    await cere('necesar', 'modifica');
     const lista = [...date.entries()]
       .filter(([k]) => k.startsWith('m:'))
       .map(([k, v]) => {
@@ -79,13 +87,13 @@ export default async function ModelPagina({
               <td>{c.nume}</td>
               <td className="slab">{c.tip === 'materie_prima' ? 'materie primă' : 'accesoriu'}</td>
               <td className="nr">
-                <form action={consum} className="in-linie">
+                <form action={consum} className="in-linie"><fieldset disabled={!m} className="fara-chenar">
                   <input type="hidden" name="componenta" value={c.id} />
                   <input name="consum" defaultValue={Number(c.consum)} inputMode="decimal" aria-label={`Consum ${c.nume}`} />
                   <span>{c.unitate}</span>
                   <button className="mic">Salvează</button>
                   <button className="mic" name="sterge" value="1" aria-label={`Șterge ${c.nume}`}>×</button>
-                </form>
+                </fieldset></form>
               </td>
               <td />
             </tr>
@@ -93,7 +101,7 @@ export default async function ModelPagina({
         </tbody>
       </table>
 
-      <form action={componentaNoua} className="antet-comanda">
+      <form action={componentaNoua} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
         <label><span>Componentă nouă</span><input name="nume" placeholder="Stofă principală" required /></label>
         <label>
           <span>Tip</span>
@@ -108,7 +116,7 @@ export default async function ModelPagina({
         </label>
         <label><span>Consum pe bucată</span><input name="consum" inputMode="decimal" placeholder="2,1" required /></label>
         <div className="actiuni"><button className="principal">Adaugă</button></div>
-      </form>
+      </fieldset></form>
 
       <h2>Material pe culoare</h2>
       {produse.length === 0 ? (
@@ -116,7 +124,7 @@ export default async function ModelPagina({
       ) : componente.length === 0 ? (
         <p className="slab">Adaugă întâi componentele rețetei.</p>
       ) : (
-        <form action={alocari}>
+        <form action={alocari}><fieldset disabled={!m} className="fara-chenar">
           <div className="tabel-derulant">
             <table className="grila">
               <thead>
@@ -151,13 +159,13 @@ export default async function ModelPagina({
             </table>
           </div>
           <div className="actiuni"><button className="principal">Salvează materialele</button></div>
-        </form>
+        </fieldset></form>
       )}
 
       {libere.length > 0 && (
         <>
           <h2>Leagă produse de model</h2>
-          <form action={lega}>
+          <form action={lega}><fieldset disabled={!m} className="fara-chenar">
             <div className="lista-bife">
               {libere.map((p) => (
                 <label key={p.id}>
@@ -166,7 +174,7 @@ export default async function ModelPagina({
               ))}
             </div>
             <div className="actiuni"><button className="principal">Leagă</button></div>
-          </form>
+          </fieldset></form>
         </>
       )}
     </main>

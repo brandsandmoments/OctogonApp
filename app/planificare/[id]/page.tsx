@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { cantitate } from '../../lib/format';
 import { anuleazaPlanificare, detaliiPlanificare, incheie, lanseazaSpreCroit, motiveCroit } from '../../lib/planificare';
@@ -17,6 +18,9 @@ export default async function PlanificarePagina({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ eroare?: string }>;
 }) {
+  await cere('planificare');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('planificare');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
   const [d, motive] = await Promise.all([detaliiPlanificare(id), motiveCroit()]);
   if (!d) notFound();
@@ -25,10 +29,11 @@ export default async function PlanificarePagina({
   const activa = !['anulat', 'incheiat'].includes(plan.stadiu);
   const lotDeschis = loturi.some((l) => !l.croit_la);
 
-  async function lanseaza() { 'use server'; inapoi(id, await lanseazaSpreCroit(id)); }
-  async function anuleaza() { 'use server'; inapoi(id, await anuleazaPlanificare(id)); }
+  async function lanseaza() { 'use server'; await cere('planificare', 'modifica'); inapoi(id, await lanseazaSpreCroit(id)); }
+  async function anuleaza() { 'use server'; await cere('planificare', 'modifica'); inapoi(id, await anuleazaPlanificare(id)); }
   async function inchide(date: FormData) {
     'use server';
+    await cere('planificare', 'modifica');
     inapoi(id, await incheie(id, String(date.get('motiv') ?? '') || null));
   }
 
@@ -98,16 +103,16 @@ export default async function PlanificarePagina({
       {activa && (
         <div className="actiuni">
           {rest > 0 && !lotDeschis && (
-            <form action={lanseaza}><button className="principal">Lansează spre croit ({rest} buc)</button></form>
+            <form action={lanseaza}><fieldset disabled={!m} className="fara-chenar"><button className="principal">Lansează spre croit ({rest} buc)</button></fieldset></form>
           )}
           {loturi.length === 0 && (
-            <form action={anuleaza}><button className="secundar">Anulează planificarea</button></form>
+            <form action={anuleaza}><fieldset disabled={!m} className="fara-chenar"><button className="secundar">Anulează planificarea</button></fieldset></form>
           )}
         </div>
       )}
 
       {activa && loturi.length > 0 && !lotDeschis && (
-        <form action={inchide} className="antet-comanda">
+        <form action={inchide} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
           {rest > 0 && (
             <label>
               <span>De ce nu se mai croiesc {rest} buc</span>
@@ -118,7 +123,7 @@ export default async function PlanificarePagina({
             </label>
           )}
           <div className="actiuni"><button className="secundar">Încheie planificarea</button></div>
-        </form>
+        </fieldset></form>
       )}
     </main>
   );

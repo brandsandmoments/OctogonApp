@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../lib/sesiune';
 import { deAlimentat, transe } from '../lib/banda';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,9 @@ const VEDERI: [string, string][] = [
  * estimată în depozit și marja față de termen) și ce a ajuns la depozit.
  */
 export default async function Banda({ searchParams }: { searchParams: Promise<{ vedere?: string }> }) {
+  await cere('banda');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('banda');
   const { vedere = 'de_alimentat' } = await searchParams;
   return (
     <main className="lat">
@@ -23,12 +27,12 @@ export default async function Banda({ searchParams }: { searchParams: Promise<{ 
           <Link key={v} href={`/banda?vedere=${v}`} className={v === vedere ? 'activ' : ''}>{nume}</Link>
         ))}
       </nav>
-      {vedere === 'de_alimentat' ? <DeAlimentat /> : <Transe predate={vedere === 'predate'} />}
+      {vedere === 'de_alimentat' ? <DeAlimentat m={m} /> : <Transe predate={vedere === 'predate'} />}
     </main>
   );
 }
 
-async function DeAlimentat() {
+async function DeAlimentat({ m }: { m: boolean }) {
   const lista = await deAlimentat();
   return (
     <>
@@ -48,7 +52,7 @@ async function DeAlimentat() {
                   <td className="nr">{l.croit}</td>
                   <td className="nr">{l.alimentat || '—'}</td>
                   <td className="nr"><strong>{l.rest}</strong></td>
-                  <td><Link href={`/banda/alimenteaza?lot=${l.lot_id}`}>Dă pe bandă</Link></td>
+                  <td>{m && <Link href={`/banda/alimenteaza?lot=${l.lot_id}`}>Dă pe bandă</Link>}</td>
                 </tr>
               ))}
             </tbody>

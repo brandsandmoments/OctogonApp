@@ -1,13 +1,15 @@
-import { caFirma, firmaCurenta } from './db';
+import { caFirma } from './db';
+import { firmaCurenta } from './sesiune';
 
 export type Optiune = { id: string; nume: string };
-export type ProdusOptiune = { id: string; nume: string; cod_sku: string; brand_id: string };
+export type ProdusOptiune = { id: string; nume: string; cod_sku: string; brand_id: string; activ: boolean };
 export type MarimeOptiune = { id: string; cod: string; cod_numeric: string | null };
 
 export type Nomenclatoare = {
   branduri: Optiune[];
   produse: ProdusOptiune[];
   marimi: MarimeOptiune[];
+  kami: Optiune[];
 };
 
 /** Tot ce trebuie formularului de comandă, într-o singură tranzacție. */
@@ -15,17 +17,23 @@ export async function nomenclatoareComanda(): Promise<Nomenclatoare> {
   return caFirma(firmaCurenta(), async (c) => {
     // Una după alta: o conexiune execută o singură interogare odată.
     const branduri = await c.query<Optiune>(`SELECT id, nume FROM brand WHERE activ ORDER BY nume`);
+    // Și produsele inactive: „Activ" din catalog înseamnă activ pe site, nu „nu se mai
+    // produce" — 73 de produse inactive au comenzi în dashboard. Vin după cele active.
     const produse = await c.query<ProdusOptiune>(
-      `SELECT id, denumire AS nume, cod_sku, brand_id FROM produs WHERE activ ORDER BY denumire`,
+      `SELECT id, denumire AS nume, cod_sku, brand_id, activ FROM produs ORDER BY NOT activ, denumire`,
     );
     const marimi = await c.query<MarimeOptiune>(`SELECT id, cod, cod_numeric FROM marime ORDER BY ordine`);
-    return { branduri: branduri.rows, produse: produse.rows, marimi: marimi.rows };
+    const kami = await c.query<Optiune>(
+      `SELECT id, nume FROM utilizator WHERE activ AND 'kam' = ANY (roluri) ORDER BY nume`);
+    return { branduri: branduri.rows, produse: produse.rows, marimi: marimi.rows, kami: kami.rows };
   });
 }
 
 export type LinieNoua = {
   produsId: string;
   dataCeruta: string;
+  vanzareDeLa: string;   // perioada în care KAM-ul crede că se vinde linia
+  vanzarePanaLa: string;
   cantitati: Record<string, number>; // marime_id → bucăți
 };
 
@@ -33,6 +41,7 @@ export type ComandaNoua = {
   numar: string;
   tip: 'PSF' | 'PSC';
   brandId: string;
+  kamId: string;
   dataLansare: string;
   prioritate: number;
   observatii: string;
@@ -74,21 +83,32 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
   if (linii.some((l) => !l.dataCeruta)) {
     return { ok: false, eroare: 'Fiecare linie are nevoie de data cerută în depozit.' };
   }
+  // La PSF, KAM-ul își asumă și perioada de vânzare: din ea se măsoară, săptămânal,
+  // cât de bine a citit piața. Fără ea, PSF-ul n-ar avea cu ce fi comparat.
+  if (cmd.tip === 'PSF') {
+    if (!cmd.kamId) return { ok: false, eroare: 'La PSF, alege KAM-ul care îl dă.' };
+    if (linii.some((l) => !l.vanzareDeLa || !l.vanzarePanaLa)) {
+      return { ok: false, eroare: 'La PSF, fiecare linie are nevoie de perioada în care crezi că se vinde.' };
+    }
+    if (linii.some((l) => l.vanzarePanaLa < l.vanzareDeLa)) {
+      return { ok: false, eroare: 'Perioada de vânzare se termină înainte să înceapă.' };
+    }
+  }
 
   try {
     return await caFirma(firmaCurenta(), async (c) => {
       const { rows: [{ id }] } = await c.query<{ id: string }>(
-        `INSERT INTO comanda (firma_id, numar, tip, brand_id, data_lansare, prioritate, stare, observatii)
-         VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, nullif($7, ''))
+        `INSERT INTO comanda (firma_id, numar, tip, brand_id, data_lansare, prioritate, stare, observatii, kam_id)
+         VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, '')::uuid)
          RETURNING id`,
         [numar, cmd.tip, cmd.brandId, cmd.dataLansare, cmd.prioritate,
-         cmd.lanseaza ? 'lansata' : 'ciorna', cmd.observatii.trim()],
+         cmd.lanseaza ? 'lansata' : 'ciorna', cmd.observatii.trim(), cmd.kamId],
       );
       for (const l of linii) {
         const { rows: [linie] } = await c.query<{ id: string }>(
-          `INSERT INTO comanda_linie (firma_id, comanda_id, produs_id, data_ceruta)
-           VALUES (firma_curenta(), $1, $2, $3) RETURNING id`,
-          [id, l.produsId, l.dataCeruta],
+          `INSERT INTO comanda_linie (firma_id, comanda_id, produs_id, data_ceruta, vanzare_de_la, vanzare_pana_la)
+           VALUES (firma_curenta(), $1, $2, $3, nullif($4, '')::date, nullif($5, '')::date) RETURNING id`,
+          [id, l.produsId, l.dataCeruta, l.vanzareDeLa, l.vanzarePanaLa],
         );
         for (const [marimeId, q] of l.cantitati) {
           await c.query(

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../lib/sesiune';
 import { branduriActive, centralizator } from '../lib/centralizator';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,8 @@ type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string };
  * trimis pe WhatsApp să arate exact ce vede cel care l-a trimis.
  */
 export default async function Centralizator({ searchParams }: { searchParams: Promise<Cautare> }) {
+  await cere('centralizator');
+  const comandaNoua = await poateModifica('comenzi');
   const f = await searchParams;
   const [randuri, branduri] = await Promise.all([
     centralizator({ ...f, toate: f.toate === '1' }),
@@ -39,7 +42,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
           <input type="checkbox" name="toate" value="1" defaultChecked={f.toate === '1'} /> și închise
         </label>
         <button>Filtrează</button>
-        <Link href="/comenzi/noua" className="buton">+ Comandă nouă</Link>
+        {comandaNoua && <Link href="/comenzi/noua" className="buton">+ Comandă nouă</Link>}
       </form>
 
       <p className="sumar">

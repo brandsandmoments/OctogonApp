@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere } from '../lib/sesiune';
 import { loturi, ramasDeCroit, type Vedere } from '../lib/croit';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ const VEDERI: [string, string][] = [
  * necroite, plus diferențele loturilor croite incomplet.
  */
 export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string }> }) {
+  await cere('croit');
   const { vedere = 'toate' } = await searchParams;
 
   return (

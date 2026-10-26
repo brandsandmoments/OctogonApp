@@ -30,22 +30,32 @@ export class FirmaLipsa extends Error {
   }
 }
 
-/** Temporar: firma vine din mediu. După autentificare, din utilizatorul conectat. */
-export function firmaCurenta(): string {
+/**
+ * Firma pentru scripturi (import, sincronizare Shopify), care rulează fără om
+ * logat. Aplicația nu o folosește: acolo firma vine din sesiune (sesiune.ts).
+ */
+export function firmaDinMediu(): string {
   const id = process.env.FIRMA_ID;
   if (!id) throw new FirmaLipsa();
   return id;
 }
 
+/** Pentru cine rulează o tranzacție: firma, și omul logat când e unul (scripturile n-au). */
+export type Context = { firma: string; utilizator?: string };
+
 export async function caFirma<T>(
-  firmaId: string,
+  context: string | Context | Promise<string | Context>,
   fn: (c: PoolClient) => Promise<T>,
 ): Promise<T> {
+  const ctx = await context;
+  const { firma: firmaId, utilizator } = typeof ctx === 'string' ? { firma: ctx, utilizator: undefined } : ctx;
   if (!firmaId) throw new FirmaLipsa();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT set_config($1, $2, true)', ['app.firma_id', firmaId]);
+    // Omul logat: coloanele „cine a făcut" îl iau implicit (utilizator_curent(), 0012).
+    if (utilizator) await client.query('SELECT set_config($1, $2, true)', ['app.utilizator_id', utilizator]);
     const rezultat = await fn(client);
     await client.query('COMMIT');
     return rezultat;
@@ -57,10 +67,10 @@ export async function caFirma<T>(
   }
 }
 
-/** Scurtătură pentru o singură interogare de citire. */
-export async function interogare<T = Record<string, unknown>>(
-  text: string,
-  valori: unknown[] = [],
-): Promise<T[]> {
-  return caFirma(firmaCurenta(), async (c) => (await c.query(text, valori)).rows as T[]);
+/**
+ * O interogare în afara oricărei firme: doar pentru funcțiile de logare și sesiune
+ * din 0012, care își declară singure firma. Orice altceva trece prin caFirma.
+ */
+export async function faraFirma<T = Record<string, unknown>>(text: string, valori: unknown[] = []): Promise<T[]> {
+  return (await pool.query(text, valori)).rows as T[];
 }

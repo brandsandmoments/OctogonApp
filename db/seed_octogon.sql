@@ -113,8 +113,20 @@ INSERT INTO parametru (firma_id, cheie, valoare, descriere) VALUES
     (f, 'pierderi_tehnologice',     0.05, 'Pierderi tehnologice la croit'),
     (f, 'defecte_material',         0.08, 'Defecte de material'),
     (f, 'neconformitati_productie', 0.07, 'Neconformitati in productie'),
-    (f, 'ore_pe_zi',                8,    'Ore de lucru pe zi, pentru data estimata in depozit')
+    (f, 'ore_pe_zi',                8,    'Ore de lucru pe zi, pentru data estimata in depozit'),
+    -- pragurile KAM din TINTE (KAM_ACC, KAM_VND): galben de la, verde de la
+    (f, 'kam_acuratete_galben',     0.70, 'Acuratete forecast PSF: galben de la'),
+    (f, 'kam_acuratete_verde',      0.85, 'Acuratete forecast PSF: verde de la'),
+    (f, 'kam_vandut_galben',        0.70, 'Procent vandut din PSF: galben de la'),
+    (f, 'kam_vandut_verde',         0.90, 'Procent vandut din PSF: verde de la')
 ON CONFLICT (firma_id, cheie) DO NOTHING;
+
+-- ---- magazinele Shopify, cate unul pe brand. Domeniul si tokenul sunt in .env.
+INSERT INTO magazin (firma_id, brand_id, cod)
+SELECT f, b.id, x.cod
+  FROM (VALUES ('Parseea', 'PARSEEA'), ('Maison Loulou', 'MAISON_LOULOU'), ('Sleevy', 'SLEEVY')) x(brand, cod)
+  JOIN brand b ON b.firma_id = f AND b.nume = x.brand
+ON CONFLICT (firma_id, cod) DO NOTHING;
 
 END $seed$;
 

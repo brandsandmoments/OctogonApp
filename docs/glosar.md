@@ -93,6 +93,20 @@ Order line. One product in one order.
 | `vanzare_pana_la` | Selling window, to |
 | `observatii` | Notes |
 
+## `cont`
+
+Credentials: bcrypt password and PIN hashes, failed attempts, lockout. No privileges for the application role; reachable only through SECURITY DEFINER functions.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Company of the account, so sign-in never needs to bypass row-level security |
+| `email` | Sign-in email, kept equal to utilizator.email by a trigger |
+| `parola_hash` | bcrypt hash of the password; null when the person does not sign in with a password |
+| `pin_hash` | bcrypt hash of the workshop PIN; null when the person does not sign in from the workshop |
+| `incercari_esuate` | Consecutive failed sign-in attempts |
+| `blocat_pana` | Locked until; set after 5 failed attempts |
+| `parola_schimbata_la` | Password last changed at |
+
 ## `culoare`
 
 Colour.
@@ -101,6 +115,27 @@ Colour.
 |---|---|
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `nume` | Colour name |
+
+## `dispozitiv`
+
+Shared workshop device registered by an admin. Its token lets the people of that company sign in with a PIN.
+
+| coloană | english |
+|---|---|
+| `nume` | Device name |
+| `amprenta` | SHA-256 of the device token |
+| `inregistrat_la` | Registered at |
+| `revocat_la` | Revoked at; a revoked device cannot sign anyone in |
+
+## `drept`
+
+What a person may do, per area: see (vede) or change (modifica, which includes seeing). Admins need no rows: they may do everything.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `zona` | Area: comenzi (PSF/PSC orders), centralizator, kam (KAM efficiency), necesar (material requirement, recipes), planificare (planning), croit (cutting), banda (line), receptie (finished-goods receipt, labels), materiale (raw-material stock and stock counts), dezvoltare (product development), expediere (shipping) |
+| `nivel` | Level: vede (see) or modifica (change) |
 
 ## `etapa_croit`
 
@@ -211,6 +246,17 @@ Stage reached by a cutting batch, with who ticked it and when.
 | `etapa_id` | References etapa_croit. |
 | `bifat_la` | Ticked at |
 | `bifat_de` | Ticked by |
+
+## `magazin`
+
+Shopify store of a brand. Its domain and access token live in the environment (SHOPIFY_SHOP_<cod>, SHOPIFY_TOKEN_<cod>), never in the database.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `cod` | Store code; suffix of its environment variables |
+| `sincronizat_pana_la` | Orders updated up to this moment have been read |
+| `activ` | Active |
 
 ## `marime`
 
@@ -388,6 +434,19 @@ Goods receipt. One scan of one label. Quantities are summed from here, never sto
 | `inchide_pozitia` | Closes the position short: the rest is not coming |
 | `observatii` | Notes. Required when the position is closed with zero pieces. |
 
+## `sesiune`
+
+Sign-in sessions. Only the SHA-256 of the token is stored; the token lives in the browser cookie.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Company of the session |
+| `amprenta` | SHA-256 of the session token |
+| `din_atelier` | Signed in from a workshop device with a PIN; such sessions last one shift |
+| `creat_la` | Created at |
+| `expira_la` | Expires at |
+| `folosita_la` | Last used at |
+
 ## `utilizator`
 
 User. Belongs to exactly one company.
@@ -396,7 +455,23 @@ User. Belongs to exactly one company.
 |---|---|
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `nume` | Full name |
-| `email` | Email, unique within the company; used to sign in |
-| `roluri` | Roles: kam (key account manager), planificator (planner), croit (cutting), banda (assembly line), depozit (warehouse), admin |
+| `email` | Email; required once sign-in exists, optional until then |
+| `roluri` | Roles: kam (key account manager), head_of_sales, planificator (production manager), croit (cutting lead), banda (line lead), depozit (warehouse keeper), dezvoltare (product development), admin |
 | `activ` | Active |
 | `creat_la` | Created at |
+
+## `vanzare`
+
+One order line sold on a store: gross demand, before returns and cancellations. One row per order and SKU, whichever source brought it.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `nr_comanda` | Store order number: #21591 |
+| `sku` | Variant SKU as sold |
+| `data` | When the customer ordered |
+| `produs_id` | Product the SKU belongs to; null when the SKU is not in the catalogue |
+| `marime_id` | Size the SKU belongs to |
+| `cantitate` | Pieces ordered |
+| `valoare` | Line value, RON |
+| `sursa` | Where the row came from: shopify (synced) or dashboard (imported history) |

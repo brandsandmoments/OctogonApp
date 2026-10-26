@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
-import { caFirma, firmaCurenta, interogare } from './db';
+import { caFirma } from './db';
+import { firmaCurenta, interogare } from './sesiune';
 
 /** Câte o cantitate pe mărime, în ordinea grilei: [{ marime, cantitate }]. */
 export type PeMarimi = { marime_id: string; marime: string; cantitate: number }[];

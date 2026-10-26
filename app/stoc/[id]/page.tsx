@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { cantitate, numarDinFormular } from '../../lib/format';
 import { adaugaMiscare, fisaMaterial } from '../../lib/stoc';
@@ -23,6 +24,9 @@ export default async function FisaMagazie({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ eroare?: string }>;
 }) {
+  await cere('materiale');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('materiale');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
   const fisa = await fisaMaterial(id);
   if (!fisa) notFound();
@@ -31,6 +35,7 @@ export default async function FisaMagazie({
 
   async function miscare(date: FormData) {
     'use server';
+    await cere('materiale', 'modifica');
     const s = (k: string) => String(date.get(k) ?? '');
     inapoi(id, await adaugaMiscare({
       materialId: id, tip: s('tip') as 'intrare' | 'iesire' | 'retur_furnizor',
@@ -58,7 +63,7 @@ export default async function FisaMagazie({
         </div>
       </dl>
 
-      <form action={miscare} className="antet-comanda">
+      <form action={miscare} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
         <label>
           <span>Mișcare</span>
           <select name="tip" defaultValue="intrare">
@@ -74,7 +79,7 @@ export default async function FisaMagazie({
         <label><span>Preț unitar (RON)</span><input name="pret" inputMode="decimal" /></label>
         <label className="lat"><span>Observații</span><input name="observatii" /></label>
         <div className="actiuni"><button className="principal">Înregistrează</button></div>
-      </form>
+      </fieldset></form>
       {eroare && <p className="eroare">{eroare}</p>}
 
       {rezervari.length > 0 && (

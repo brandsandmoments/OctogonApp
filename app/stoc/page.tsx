@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cere, poateModifica } from '../lib/sesiune';
 import { redirect } from 'next/navigation';
 import { cantitate, numarDinFormular } from '../lib/format';
 import { adaugaMiscare, factorPierderi, familii, listaStoc, materialeSelect } from '../lib/stoc';
@@ -10,6 +11,7 @@ type Cautare = { tip?: string; familie?: string; cauta?: string; lipsa?: string;
 
 async function intrare(date: FormData) {
   'use server';
+  await cere('materiale', 'modifica');
   const s = (k: string) => String(date.get(k) ?? '');
   const eroare = await adaugaMiscare({
     materialId: s('material'), tip: 'intrare', cantitate: numarDinFormular(date.get('cantitate')) ?? 0,
@@ -24,6 +26,9 @@ async function intrare(date: FormData) {
  * ce mai cer comenzile neplanificate și cât trebuie cumpărat.
  */
 export default async function Stoc({ searchParams }: { searchParams: Promise<Cautare> }) {
+  await cere('materiale');
+  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
+  const m = await poateModifica('materiale');
   const f = await searchParams;
   const [randuri, fam, materiale, factor] = await Promise.all([
     listaStoc({ ...f, lipsa: f.lipsa === '1' }), familii(), materialeSelect(), factorPierderi(),
@@ -40,7 +45,7 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
 
       <details className="caseta" open={Boolean(f.eroare)}>
         <summary>Intrare de la furnizor</summary>
-        <form action={intrare} className="antet-comanda">
+        <form action={intrare} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
           <label className="lat">
             <span>Material</span>
             <select name="material" required defaultValue="">
@@ -57,7 +62,7 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
           <label><span>Preț unitar (RON)</span><input name="pret" inputMode="decimal" /></label>
           <label className="lat"><span>Observații</span><input name="observatii" /></label>
           <div className="actiuni"><button className="principal">Înregistrează intrarea</button></div>
-        </form>
+        </fieldset></form>
       </details>
       {f.eroare && <p className="eroare">{f.eroare}</p>}
       {f.ok && <p className="ok">Intrarea s-a înregistrat.</p>}

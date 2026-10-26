@@ -1,4 +1,4 @@
-import { interogare } from '../lib/db';
+import { interogare, cere } from '../lib/sesiune';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +48,7 @@ async function pozitii(): Promise<Pozitie[]> {
 }
 
 export default async function Comenzi() {
+  await cere('comenzi');
   const randuri = await pozitii();
 
   if (randuri.length === 0) {
