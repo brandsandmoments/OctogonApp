@@ -342,5 +342,26 @@ DELETE FROM dezvoltare_pas WHERE dezvoltare_id = '55555555-0000-0000-0000-000000
 \set ON_ERROR_STOP on
 RESET app.firma_id;
 
+\echo '--- 36. doua PSF pe Sophie intra in aceeasi taiere; un produs de pe alt model (asteptat: EROARE)'
+SET app.firma_id = '11111111-1111-1111-1111-111111111111';
+INSERT INTO taiere (id, firma_id, numar, ordine) VALUES
+  ('44444444-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 1, 1);
+INSERT INTO planificare (firma_id, linie_id, numar_transa, stadiu, taiere_id) VALUES
+  ('11111111-1111-1111-1111-111111111111', '77777777-0000-0000-0000-0000000000a1', 1, 'gata_de_lansat', '44444444-0000-0000-0000-000000000001'),
+  ('11111111-1111-1111-1111-111111111111', '77777777-0000-0000-0000-0000000000a2', 1, 'gata_de_lansat', '44444444-0000-0000-0000-000000000001');
+SELECT 'in taiere: ' || count(*) FROM planificare WHERE taiere_id = '44444444-0000-0000-0000-000000000001';
+INSERT INTO produs (id, firma_id, cod_sku, denumire, brand_id) VALUES
+  ('cccccccc-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111',
+   'PSA-ALTUL', 'Bluza fara model', 'aaaaaaaa-0000-0000-0000-000000000001');
+INSERT INTO comanda_linie (id, firma_id, comanda_id, produs_id, data_ceruta) VALUES
+  ('eeeeeeee-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111',
+   'dddddddd-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000003', '2026-10-11');
+\set ON_ERROR_STOP off
+INSERT INTO planificare (firma_id, linie_id, numar_transa, stadiu, taiere_id) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'eeeeeeee-0000-0000-0000-000000000003', 9, 'gata_de_lansat', '44444444-0000-0000-0000-000000000001');
+\set ON_ERROR_STOP on
+SELECT 'tot in taiere: ' || count(*) FROM planificare WHERE taiere_id = '44444444-0000-0000-0000-000000000001';
+RESET app.firma_id;
+
 \echo ''
 \echo '=== gata'

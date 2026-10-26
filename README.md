@@ -27,11 +27,12 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0012_conturi_si_sesiuni.sql` | conturi, parole și PIN-uri (bcrypt, în bază), sesiuni, tablete de atelier |
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
 | `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
+| `db/migrations/0015_taiere.sql` | taierea: mai multe PSF și PSC pe același model, tăiate împreună |
 | `db/oameni_octogon.sql` | oamenii Octogon și drepturile lor, cum le-a dat conducerea |
 | `scripts/sync-shopify.mts` | sincronizarea vânzărilor din cele trei magazine Shopify |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
 | `scripts/import-tipare.mts` | importul din „Situație Tipare" |
-| `db/test_izolare.sql` | treizeci și cinci de verificări de purtare, rulate pe Postgres 16 |
+| `db/test_izolare.sql` | treizeci și șase de verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -139,7 +140,7 @@ vede doar secțiunile la care are drept.
 | `/necesar/<comanda>` | materia primă și accesoriile unei comenzi, plus ce lipsește din rețete |
 | `/modele`, `/modele/<id>` | modelele, consumul pe bucată, materialul fiecărei culori |
 | `/materiale` | nomenclatorul de materii prime și accesorii |
-| `/planificare`, `/planificare/<id>` | ce e de planificat; acoperirea cu stofă; lansarea spre croit; încheierea |
+| `/planificare`, `/planificare/taiere/<id>`, `/planificare/<id>` | de planificat pe model; taierile, ordinea lor și trimiterea la croit; o planificare cu încheierea ei |
 | `/croit`, `/croit/<lot>` | tot ce e în croit, de croit, croite, rămas de croit; fișa lotului cu etapele și croitul efectiv |
 | `/kam`, `/kam/<kam>` | eficiența KAM pe săptămână, lună, trimestru sau an: ritmul și acuratețea la zi a fiecărui PSF |
 | `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
@@ -212,14 +213,22 @@ tabelului, pentru că un necesar care tace despre ele pare complet și nu e.
 ## Planificare și croit
 
 Lanțul e cel din dashboard: comanda → planificarea (`psf-ms-sep-1/P1`) → lotul de
-croit (`psf-ms-sep-1/P1/C1`).
+croit (`psf-ms-sep-1/P1/C1`). Peste el stă **taierea** (`T12`): una sau mai multe
+planificări de pe același model, întinse și tăiate împreună, apoi împărțite înapoi
+pe comenzi — fiecare comandă își păstrează planificarea și lotul ei.
 
-**Planificarea** ia din pozițiile care mai au ceva neplanificat (urgența întâi,
-apoi termenul) și spune pe loc dacă stofa ajunge. Stocul se împarte în ordinea
+**Planificarea** arată ce mai e de planificat grupat pe model. Planificatorul
+bifează comenzile care se taie împreună și face din ele o taiere (sau le adaugă la
+una existentă); baza refuză o taiere cu două modele. Taierile stau într-o coadă pe
+care planificatorul o ordonează și din care le trimite la croit, cu necesarul de
+materii prime și accesorii adunat pe taiere. Trimiterea e toată sau nimic: o
+comandă fără stofă oprește toată taierea. Ce se croiește efectiv hotărăște croitul.
+
+Pentru fiecare planificare se vede pe loc dacă stofa ajunge. Stocul se împarte în ordinea
 priorității comenzii, apoi a datei planificării: când stofa nu ajunge pentru toți,
 urgentele trec primele. **Doar stofa principală oprește lansarea**; restul
 materialelor dau avertisment — ca în dashboard, unde statusul materiei prime și
-cel al accesoriilor sunt separate. Lansarea creează lotul cu tot ce a rămas de croit.
+cel al accesoriilor sunt separate. Trimiterea creează, pe fiecare comandă, lotul cu tot ce i-a rămas de croit.
 
 **Croitul** vede loturile în patru feluri: tot ce e în croit, de croit, croite și
 rămas de croit (pe mărimi, inclusiv diferențele loturilor croite incomplet). Pe

@@ -45,6 +45,7 @@ export default async function PlanificarePagina({
         {plan.produs} · {plan.cod_sku} · P{plan.prioritate} · cerut în depozit {plan.data_ceruta} ·{' '}
         <strong>{STADII[plan.stadiu] ?? plan.stadiu}</strong>
         {plan.motiv_incheiere && ` — ${plan.motiv_incheiere}`}
+        {plan.taiere_id && <> · în taierea <Link href={`/planificare/taiere/${plan.taiere_id}`}>{plan.taiere}</Link></>}
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
 
@@ -102,8 +103,12 @@ export default async function PlanificarePagina({
 
       {activa && (
         <div className="actiuni">
-          {rest > 0 && !lotDeschis && (
-            <form action={lanseaza}><fieldset disabled={!m} className="fara-chenar"><button className="principal">Lansează spre croit ({rest} buc)</button></fieldset></form>
+          {rest > 0 && !lotDeschis && plan.taiere_id && !plan.taiere_trimisa && (
+            <p className="slab">Pleacă la croit odată cu taierea <Link href={`/planificare/taiere/${plan.taiere_id}`}>{plan.taiere}</Link>.</p>
+          )}
+          {/* După ce taierea a plecat, ce a rămas necroit se poate relansa de aici. */}
+          {rest > 0 && !lotDeschis && (!plan.taiere_id || plan.taiere_trimisa) && (
+            <form action={lanseaza}><fieldset disabled={!m} className="fara-chenar"><button className="principal">{loturi.length ? `Relansează restul spre croit (${rest} buc)` : `Lansează spre croit (${rest} buc)`}</button></fieldset></form>
           )}
           {loturi.length === 0 && (
             <form action={anuleaza}><fieldset disabled={!m} className="fara-chenar"><button className="secundar">Anulează planificarea</button></fieldset></form>

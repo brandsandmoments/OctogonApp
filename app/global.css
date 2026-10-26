@@ -96,3 +96,7 @@ main.lat { max-width: 90rem; }
 .navigare .file-sectiune a.activ { color: var(--text); font-weight: 600; }
 @media print { .navigare { display: none; } }
 .centralizator tr.grupa-model td { border-top: 2px solid var(--text); background: color-mix(in srgb, var(--linie) 35%, transparent); }
+.in-rand { margin: 0; display: inline-flex; }
+.in-rand fieldset { display: inline-flex; gap: .25rem; }
+.in-rand button, .in-rand select { font: inherit; font-size: .8rem; padding: .2rem .5rem; border: 1px solid var(--linie); border-radius: .3rem; background: transparent; color: inherit; cursor: pointer; }
+.in-rand button:disabled { opacity: .35; cursor: default; }

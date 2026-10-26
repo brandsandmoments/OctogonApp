@@ -415,6 +415,7 @@ Planning batch. Decides how much of an order line goes into production now; one 
 | `observatii` | Notes |
 | `incheiat_la` | When the planning batch was closed: fully cut, or closed short. Closing releases its material reservation. |
 | `motiv_incheiere_id` | Reason, when closed with pieces left uncut |
+| `taiere_id` | The cut this planning batch is part of |
 
 ## `planificare_cantitate`
 
@@ -480,6 +481,21 @@ Sign-in sessions. Only the SHA-256 of the token is stored; the token lives in th
 | `creat_la` | Created at |
 | `expira_la` | Expires at |
 | `folosita_la` | Last used at |
+
+## `taiere`
+
+A cut: one or more planning batches of the same model, spread and cut together, then split back per order.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `numar` | Cut number, shown as T12 |
+| `ordine` | Place in the queue to the cutting room |
+| `creat_de` | Created by |
+| `creat_la` | Created at |
+| `trimis_la` | When it was sent to the cutting room. Null means still in planning. |
+| `trimis_de` | Who sent it |
+| `observatii` | Notes |
 
 ## `utilizator`
 

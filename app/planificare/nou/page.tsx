@@ -3,6 +3,7 @@ import { cere } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { numarDinFormular } from '../../lib/format';
 import { creeazaPlanificare, liniePentruPlanificare } from '../../lib/planificare';
+import { taieriDeschisePeModel } from '../../lib/taiere';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,7 @@ export default async function PlanificareNoua({
   const d = await liniePentruPlanificare(linieId);
   if (!d) notFound();
   const { linie, marimi } = d;
+  const taieri = await taieriDeschisePeModel(linie.model_cheie);
 
   async function salveaza(date: FormData) {
     'use server';
@@ -27,7 +29,8 @@ export default async function PlanificareNoua({
       [...date.entries()].filter(([k]) => k.startsWith('q:'))
         .map(([k, v]) => [k.slice(2), numarDinFormular(v) ?? 0]),
     );
-    const r = await creeazaPlanificare(linieId!, cantitati, String(date.get('observatii') ?? ''));
+    const r = await creeazaPlanificare(linieId!, cantitati, String(date.get('observatii') ?? ''),
+      String(date.get('taiere') ?? '') || undefined);
     if ('eroare' in r) redirect(`/planificare/nou?linie=${linieId}&eroare=${encodeURIComponent(r.eroare)}`);
     redirect(`/planificare/${r.id}`);
   }
@@ -61,6 +64,15 @@ export default async function PlanificareNoua({
             </tbody>
           </table>
         </div>
+        {taieri.length > 0 && (
+          <label className="antet-comanda">
+            <span>Se taie</span>
+            <select name="taiere" defaultValue="">
+              <option value="">separat, într-o taiere nouă</option>
+              {taieri.map((t) => <option key={t.id} value={t.id}>împreună cu {t.cod}</option>)}
+            </select>
+          </label>
+        )}
         <label className="antet-comanda"><span>Observații</span><input name="observatii" /></label>
         {eroare && <p className="eroare">{eroare}</p>}
         <div className="actiuni"><button className="principal">Salvează planificarea</button></div>

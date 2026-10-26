@@ -13,6 +13,8 @@ export type LinieDePlanificat = {
   data_ceruta: string;
   produs: string;
   cod_sku: string;
+  model_cheie: string;   // modelul, sau produsul când n-are model: ce se poate tăia împreună
+  model: string;
   are_reteta: boolean;
   cerut: number;
   planificat: number;
@@ -31,6 +33,7 @@ export async function deplanificat(cauta?: string): Promise<LinieDePlanificat[]>
      SELECT cl.id AS linie_id, c.numar AS comanda, c.tip::text AS tip, c.prioritate,
             to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
             p.denumire AS produs, p.cod_sku,
+            coalesce(p.model_id, p.id)::text AS model_cheie, coalesce(mo.denumire, p.denumire) AS model,
             EXISTS (SELECT 1 FROM model_componenta mc WHERE mc.model_id = p.model_id) AS are_reteta,
             sum(cc.cantitate)::int AS cerut,
             sum(least(coalesce(pl.q, 0), cc.cantitate))::int AS planificat,
@@ -38,13 +41,14 @@ export async function deplanificat(cauta?: string): Promise<LinieDePlanificat[]>
        FROM comanda_linie cl
        JOIN comanda c            ON c.id = cl.comanda_id
        JOIN produs p             ON p.id = cl.produs_id
+       LEFT JOIN model mo        ON mo.id = p.model_id
        JOIN comanda_cantitate cc ON cc.linie_id = cl.id
        LEFT JOIN planificat pl   ON pl.linie_id = cl.id AND pl.marime_id = cc.marime_id
       WHERE c.stare IN ('lansata', 'in_productie')
         AND ($1::text IS NULL OR c.numar ILIKE '%' || $1 || '%' OR p.denumire ILIKE '%' || $1 || '%')
-      GROUP BY cl.id, c.numar, c.tip, c.prioritate, cl.data_ceruta, p.denumire, p.cod_sku, p.model_id
+      GROUP BY cl.id, c.numar, c.tip, c.prioritate, cl.data_ceruta, p.id, p.denumire, p.cod_sku, p.model_id, mo.denumire
      HAVING sum(greatest(cc.cantitate - coalesce(pl.q, 0), 0)) > 0
-      ORDER BY c.prioritate, cl.data_ceruta, c.numar, p.denumire`,
+      ORDER BY coalesce(mo.denumire, p.denumire), c.prioritate, cl.data_ceruta, c.numar, p.denumire`,
     [cauta?.trim() || null],
   );
 }
@@ -88,7 +92,7 @@ export type AcoperireMaterial = {
   acoperit: boolean;
 };
 
-async function acoperire(c: PoolClient, planificareId: string): Promise<AcoperireMaterial[]> {
+export async function acoperire(c: PoolClient, planificareId: string): Promise<AcoperireMaterial[]> {
   const { rows } = await c.query<AcoperireMaterial>(
     `WITH a AS (${ACOPERIRE})
      SELECT m.id AS material_id, m.cod, m.denumire, m.unitate::text AS unitate, a.principal,
@@ -144,7 +148,7 @@ export async function planificariActive(): Promise<PlanificareRezumat[]> {
 
 export type LiniePlanificare = {
   linie: { id: string; comanda: string; tip: string; prioritate: number; data_ceruta: string;
-           produs: string; cod_sku: string; are_reteta: boolean };
+           produs: string; cod_sku: string; are_reteta: boolean; model_cheie: string };
   marimi: { marime_id: string; marime: string; cerut: number; planificat: number; rest: number }[];
 };
 
@@ -153,7 +157,8 @@ export async function liniePentruPlanificare(linieId: string): Promise<LiniePlan
     const { rows: [linie] } = await c.query<LiniePlanificare['linie']>(
       `SELECT cl.id, c.numar AS comanda, c.tip::text AS tip, c.prioritate,
               to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta, p.denumire AS produs, p.cod_sku,
-              EXISTS (SELECT 1 FROM model_componenta mc WHERE mc.model_id = p.model_id) AS are_reteta
+              EXISTS (SELECT 1 FROM model_componenta mc WHERE mc.model_id = p.model_id) AS are_reteta,
+              coalesce(p.model_id, p.id)::text AS model_cheie
          FROM comanda_linie cl JOIN comanda c ON c.id = cl.comanda_id JOIN produs p ON p.id = cl.produs_id
         WHERE cl.id = $1`, [linieId]);
     if (!linie) return null;
@@ -175,7 +180,7 @@ export async function liniePentruPlanificare(linieId: string): Promise<LiniePlan
  * planificarea există (abia atunci are rezervarea ei).
  */
 export async function creeazaPlanificare(
-  linieId: string, cantitati: Map<string, number>, observatii: string,
+  linieId: string, cantitati: Map<string, number>, observatii: string, taiereId?: string,
 ): Promise<{ id: string } | { eroare: string }> {
   const date = await liniePentruPlanificare(linieId);
   if (!date) return { eroare: 'Linia nu există.' };
@@ -190,6 +195,35 @@ export async function creeazaPlanificare(
   }
 
   return caFirma(firmaCurenta(), async (c) => {
+    if (taiereId) {
+      const { rows: [t] } = await c.query<{ trimis: boolean }>(
+        `SELECT trimis_la IS NOT NULL AS trimis FROM taiere WHERE id = $1 FOR UPDATE`, [taiereId]);
+      if (!t || t.trimis) return { eroare: 'Taierea aleasă a plecat deja la croit.' };
+    }
+    const taiere = taiereId ?? (await taiereNoua(c));
+    const id = await insereazaPlanificare(c, linieId, alese.map((m) => ({ marime_id: m.marime_id, q: m.q })), observatii, taiere);
+    await actualizeazaStadiuMateriale(c, id);
+    return { id };
+  });
+}
+
+/** O taiere nouă, la coada celor în planificare. */
+export async function taiereNoua(c: PoolClient): Promise<string> {
+  // Numărul și ordinea se iau sub blocare: două taieri simultane ar primi același T.
+  await c.query(`LOCK TABLE taiere IN SHARE ROW EXCLUSIVE MODE`);
+  const { rows: [{ id }] } = await c.query<{ id: string }>(
+    `INSERT INTO taiere (firma_id, numar, ordine)
+     VALUES (firma_curenta(), (SELECT coalesce(max(numar), 0) + 1 FROM taiere),
+             (SELECT coalesce(max(ordine), 0) + 1 FROM taiere))
+     RETURNING id`);
+  return id;
+}
+
+/** Scrie planificarea și cantitățile ei; cine cheamă a verificat deja cantitățile. */
+export async function insereazaPlanificare(
+  c: PoolClient, linieId: string, alese: { marime_id: string; q: number }[], observatii: string, taiereId: string,
+): Promise<string> {
+  {
     // Numerotarea e pe comandă, nu pe linie, ca în dashboard: psf-ms-sep-1/P1 e
     // Mada Ivoire, /P2 Mada Maro. Pe linie, două culori ar purta același cod pe
     // fișa tipărită. Comanda se blochează cât se numerotează, ca două planificări
@@ -198,25 +232,24 @@ export async function creeazaPlanificare(
       `SELECT 1 FROM comanda WHERE id = (SELECT comanda_id FROM comanda_linie WHERE id = $1) FOR UPDATE`,
       [linieId]);
     const { rows: [{ id }] } = await c.query<{ id: string }>(
-      `INSERT INTO planificare (firma_id, linie_id, numar_transa, stadiu, observatii)
+      `INSERT INTO planificare (firma_id, linie_id, numar_transa, stadiu, observatii, taiere_id)
        VALUES (firma_curenta(), $1,
                (SELECT coalesce(max(pl.numar_transa), 0) + 1
                   FROM planificare pl JOIN comanda_linie cl ON cl.id = pl.linie_id
                  WHERE cl.comanda_id = (SELECT comanda_id FROM comanda_linie WHERE id = $1)),
-               'gata_de_lansat', nullif($2, ''))
-       RETURNING id`, [linieId, observatii.trim()]);
+               'gata_de_lansat', nullif($2, ''), $3)
+       RETURNING id`, [linieId, observatii.trim(), taiereId]);
     for (const m of alese) {
       await c.query(
         `INSERT INTO planificare_cantitate (firma_id, planificare_id, marime_id, cantitate)
          VALUES (firma_curenta(), $1, $2, $3)`, [id, m.marime_id, m.q]);
     }
-    await actualizeazaStadiuMateriale(c, id);
-    return { id };
-  });
+    return id;
+  }
 }
 
 /** gata_de_lansat ↔ blocat_materiale, după acoperirea stofei principale. Stadiile de după lansare nu se ating. */
-async function actualizeazaStadiuMateriale(c: PoolClient, id: string) {
+export async function actualizeazaStadiuMateriale(c: PoolClient, id: string) {
   const lipsa = (await acoperire(c, id)).some((a) => a.principal && !a.acoperit);
   await c.query(
     `UPDATE planificare SET stadiu = $2
@@ -227,7 +260,7 @@ async function actualizeazaStadiuMateriale(c: PoolClient, id: string) {
 export type DetaliiPlanificare = {
   plan: { id: string; cod: string; comanda: string; tip: string; prioritate: number; data_ceruta: string;
           produs: string; cod_sku: string; stadiu: string; data_planificare: string; observatii: string | null;
-          motiv_incheiere: string | null };
+          motiv_incheiere: string | null; taiere_id: string | null; taiere: string | null; taiere_trimisa: boolean };
   marimi: { marime: string; planificat: number; croit: number; rest: number }[];
   loturi: { id: string; cod: string; cerut: number; croit: number | null; croit_la: string | null }[];
   materiale: AcoperireMaterial[];
@@ -240,8 +273,10 @@ export async function detaliiPlanificare(id: string): Promise<DetaliiPlanificare
               c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
               p.denumire AS produs, p.cod_sku, pl.stadiu::text AS stadiu,
               to_char(pl.data_planificare, 'YYYY-MM-DD') AS data_planificare, pl.observatii,
-              mo.nume AS motiv_incheiere
+              mo.nume AS motiv_incheiere, t.id AS taiere_id, 'T' || t.numar AS taiere,
+              t.trimis_la IS NOT NULL AS taiere_trimisa
          FROM planificare pl
+         LEFT JOIN taiere t    ON t.id = pl.taiere_id
          JOIN comanda_linie cl ON cl.id = pl.linie_id
          JOIN comanda c        ON c.id = cl.comanda_id
          JOIN produs p         ON p.id = cl.produs_id
@@ -276,7 +311,11 @@ export async function detaliiPlanificare(id: string): Promise<DetaliiPlanificare
  * aceleași bucăți de două ori) sau dacă materialele nu ajung.
  */
 export async function lanseazaSpreCroit(id: string): Promise<string | null> {
-  return caFirma(firmaCurenta(), async (c) => {
+  return caFirma(firmaCurenta(), (c) => lanseaza(c, id));
+}
+
+export async function lanseaza(c: PoolClient, id: string): Promise<string | null> {
+  {
     const { rows: [pl] } = await c.query<{ stadiu: string }>(
       `SELECT stadiu::text FROM planificare WHERE id = $1 FOR UPDATE`, [id]);
     if (!pl) return 'Planificarea nu există.';
@@ -302,7 +341,7 @@ export async function lanseazaSpreCroit(id: string): Promise<string | null> {
     }
     await c.query(`UPDATE planificare SET stadiu = 'lansat_spre_croit' WHERE id = $1 AND stadiu <> 'in_croit'`, [id]);
     return null;
-  });
+  }
 }
 
 /** O planificare fără niciun lot se poate anula; după lansare, se încheie. */
@@ -311,7 +350,14 @@ export async function anuleazaPlanificare(id: string): Promise<string | null> {
     const { rows: [{ loturi }] } = await c.query<{ loturi: number }>(
       `SELECT count(*)::int AS loturi FROM lot_croit WHERE planificare_id = $1`, [id]);
     if (loturi > 0) return 'Planificarea are loturi de croit: nu se mai anulează, se încheie.';
-    await c.query(`UPDATE planificare SET stadiu = 'anulat' WHERE id = $1`, [id]);
+    // Iese și din taiere; o taiere rămasă fără comenzi dispare din coadă.
+    const { rows: [pl] } = await c.query<{ taiere_id: string | null }>(
+      `UPDATE planificare p SET stadiu = 'anulat', taiere_id = NULL FROM planificare v
+        WHERE p.id = $1 AND v.id = p.id RETURNING v.taiere_id`, [id]);
+    if (pl?.taiere_id) {
+      await c.query(`DELETE FROM taiere WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM planificare WHERE taiere_id = $1)`,
+        [pl.taiere_id]);
+    }
     return null;
   });
 }
