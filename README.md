@@ -21,8 +21,9 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0006_modele_materiale_retete.sql` | modele, materiale, rețete și necesarul pe comandă |
 | `db/migrations/0007_campuri_din_dashboard.sql` | familia și prețul materialului, stofa principală a modelului |
 | `db/migrations/0008_stoc_si_inventar.sql` | fișa de magazie, rezervarea din planificări, inventarul, parametrii de pierderi |
+| `db/migrations/0009_planificare_si_croit.sql` | ce i se cere lotului, când s-a croit, încheierea planificării |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
-| `db/test_izolare.sql` | nouăsprezece verificări de purtare, rulate pe Postgres 16 |
+| `db/test_izolare.sql` | douăzeci și una de verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -87,8 +88,9 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Generarea etichetelor: Code 128 + QR, pe coală A4
 - [x] Ecranul de scanare, pe telefon
 - [x] Introducerea PSF/PSC, centralizatorul, rețete pe model, necesarul pe comandă
-- [x] Stoc și inventar pe materii prime și accesorii: rezervare la planificare, scădere la croit (butonul de consum vine cu ecranele de croit)
-- [ ] Planificarea, croitul (de croit / croite / rămas de croit), alimentarea benzii
+- [x] Stoc și inventar pe materii prime și accesorii: rezervare la planificare, scădere la croit 
+- [x] Planificarea și croitul (tot ce e în croit / de croit / croite / rămas de croit)
+- [ ] Alimentarea benzii: loturile croite intră pe bandă, accesoriile scad din stoc
 - [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
 - [ ] Import din cele trei magazine Shopify; planificarea, croitul și recepțiile din dashboard
 
@@ -118,6 +120,8 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | `/necesar/<comanda>` | materia primă și accesoriile unei comenzi, plus ce lipsește din rețete |
 | `/modele`, `/modele/<id>` | modelele, consumul pe bucată, materialul fiecărei culori |
 | `/materiale` | nomenclatorul de materii prime și accesorii |
+| `/planificare`, `/planificare/<id>` | ce e de planificat; acoperirea cu stofă; lansarea spre croit; încheierea |
+| `/croit`, `/croit/<lot>` | tot ce e în croit, de croit, croite, rămas de croit; fișa lotului cu etapele și croitul efectiv |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
 | `/inventar`, `/inventar/<id>` | numărătoarea fizică; la închidere, diferențele devin ajustări |
 
@@ -182,6 +186,31 @@ Necesarul unei comenzi = bucăți cerute × consum, adunat pe material, calculat
 vederea `necesar_comanda`. Un produs fără model, un model fără rețetă sau o
 componentă fără material **nu dispar din sumă**: ecranul le arată deasupra
 tabelului, pentru că un necesar care tace despre ele pare complet și nu e.
+
+## Planificare și croit
+
+Lanțul e cel din dashboard: comanda → planificarea (`psf-ms-sep-1/P1`) → lotul de
+croit (`psf-ms-sep-1/P1/C1`).
+
+**Planificarea** ia din pozițiile care mai au ceva neplanificat (urgența întâi,
+apoi termenul) și spune pe loc dacă stofa ajunge. Stocul se împarte în ordinea
+priorității comenzii, apoi a datei planificării: când stofa nu ajunge pentru toți,
+urgentele trec primele. **Doar stofa principală oprește lansarea**; restul
+materialelor dau avertisment — ca în dashboard, unde statusul materiei prime și
+cel al accesoriilor sunt separate. Lansarea creează lotul cu tot ce a rămas de croit.
+
+**Croitul** vede loturile în patru feluri: tot ce e în croit, de croit, croite și
+rămas de croit (pe mărimi, inclusiv diferențele loturilor croite incomplet). Pe
+fișa lotului bifează cele nouă etape și, la final, scrie cât s-a croit pe mărimi —
+cu motiv din listă dacă diferă de cerut. Într-o singură tranzacție:
+
+- **materia primă scade din stoc**: teoretic, iar pentru stofa principală metrii
+  măsurați, dacă s-au scris; **accesoriile scad abia la alimentarea benzii**;
+- planificarea trece în croit sau se încheie — singură când nu mai e nimic de
+  croit, ori la cerere, cu motiv, când restul nu mai vine.
+
+O planificare încheiată **contează doar cu ce a croit**: restul redevine de
+planificat, pentru că comanda tot îl cere. Rezervarea ei de material se eliberează.
 
 ## Stocul de materiale
 

@@ -33,11 +33,7 @@ export type Filtre = { tip?: string; brand?: string; cauta?: string; toate?: boo
 export async function centralizator(f: Filtre): Promise<RandCentralizator[]> {
   return interogare<RandCentralizator>(
     `WITH planificat AS (
-         SELECT pl.linie_id, pc.marime_id, sum(pc.cantitate)::int AS q
-           FROM planificare pl
-           JOIN planificare_cantitate pc ON pc.planificare_id = pl.id
-          WHERE pl.stadiu <> 'anulat'
-          GROUP BY pl.linie_id, pc.marime_id),
+         SELECT linie_id, marime_id, cantitate AS q FROM planificat_pe_pozitie),
      croit AS (
          SELECT pl.linie_id, le.marime_id, sum(le.cantitate)::int AS q
            FROM planificare pl

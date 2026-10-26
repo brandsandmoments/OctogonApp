@@ -61,3 +61,7 @@ main.lat { max-width: 90rem; }
 .meniu { list-style: none; padding: 0; margin: 1rem 0; }
 .meniu li { padding: .5rem 0; border-bottom: 1px solid var(--linie); }
 .meniu a { font-weight: 600; }
+
+.file { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--linie); margin: 1rem 0; }
+.file a { padding: .5rem .9rem; text-decoration: none; color: var(--slab); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.file a.activ { color: var(--text); border-bottom-color: currentColor; font-weight: 600; }

@@ -148,6 +148,17 @@ Cutting batch. Cannot exist without a planning batch: that constraint is what pr
 | `data_primire` | Date cutting received the batch |
 | `responsabil_id` | Cutting room lead responsible |
 | `observatii` | Notes |
+| `croit_la` | When the cut was recorded. Null means still to cut. |
+| `croit_de` | Who recorded the cut |
+
+## `lot_croit_cantitate`
+
+What a cutting batch was asked to cut, per size: the planning batch's remaining pieces at release time. Fixed afterwards; the cut quantities are measured against it.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `cantitate` | Pieces asked of the cutting room |
 
 ## `lot_croit_efectiv`
 
@@ -291,8 +302,10 @@ Planning batch. Decides how much of an order line goes into production now; one 
 | `numar_transa` | Batch number within that line |
 | `planificat_de` | Planned by |
 | `data_planificare` | Planning date |
-| `stadiu` | Stage: fara_cantitate (nothing planned), blocat_materiale (blocked, missing materials), gata_de_lansat (ready to release), lansat_spre_croit (released to cutting), in_croit (in cutting), anulat (cancelled) |
+| `stadiu` | Stage: fara_cantitate (nothing planned), blocat_materiale (blocked, missing materials), gata_de_lansat (ready to release), lansat_spre_croit (released to cutting), in_croit (in cutting), incheiat (closed), anulat (cancelled) |
 | `observatii` | Notes |
+| `incheiat_la` | When the planning batch was closed: fully cut, or closed short. Closing releases its material reservation. |
+| `motiv_incheiere_id` | Reason, when closed with pieces left uncut |
 
 ## `planificare_cantitate`
 

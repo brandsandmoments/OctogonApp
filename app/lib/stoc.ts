@@ -36,10 +36,7 @@ export async function listaStoc(f: FiltreStoc): Promise<RandStoc[]> {
      rezervat AS (
          SELECT material_id, sum(rezervat) AS q FROM rezervare_material GROUP BY material_id),
      planificat AS (
-         SELECT pl.linie_id, pc.marime_id, sum(pc.cantitate) AS q
-           FROM planificare pl JOIN planificare_cantitate pc ON pc.planificare_id = pl.id
-          WHERE pl.stadiu <> 'anulat'
-          GROUP BY pl.linie_id, pc.marime_id),
+         SELECT linie_id, marime_id, cantitate AS q FROM planificat_pe_pozitie),
      neplanificat AS (
          SELECT pm.material_id,
                 sum(greatest(cc.cantitate - coalesce(p.q, 0), 0) * mc.consum) AS q

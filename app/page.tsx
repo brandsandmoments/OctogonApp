@@ -3,6 +3,8 @@ import Link from 'next/link';
 const ECRANE: [string, string, string][] = [
   ['/centralizator', 'Centralizator', 'toate liniile PSF și PSC: cerut, planificat, croit, intrat'],
   ['/comenzi/noua', 'Comandă nouă', 'PSF sau PSC, cu grila de mărimi'],
+  ['/planificare', 'Planificare', 'ce intră în producție acum; lansarea spre croit'],
+  ['/croit', 'Croit', 'de croit, croite, rămas de croit; înregistrarea croitului'],
   ['/modele', 'Modele și rețete', 'consumul pe bucată și materialul fiecărei culori'],
   ['/stoc', 'Stoc materiale', 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor'],
   ['/inventar', 'Inventar', 'numărătoare fizică; diferențele devin ajustări'],

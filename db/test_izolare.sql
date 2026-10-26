@@ -196,4 +196,17 @@ SELECT 'stoc ' || s.stoc || ' | rezervat ' || coalesce(r.rezervat, 0) || ' | dis
  WHERE s.material_id = '99999999-0000-0000-0000-0000000000a1';
 
 \echo ''
+\echo '--- 20. planificarea se incheie cu 3 bucati necroite: rezervarea se elibereaza (asteptat: rezervat 0)'
+UPDATE planificare SET stadiu = 'incheiat', incheiat_la = now()
+ WHERE id = '99999999-0000-0000-0000-0000000000b1';
+SELECT 'rezervat ' || coalesce(sum(rezervat), 0) FROM rezervare_material
+ WHERE material_id = '99999999-0000-0000-0000-0000000000a1';
+
+\echo '--- 21. planificarea incheiata acopera doar ce a croit: 4 din 7, deci 3 redevin de planificat'
+SELECT 'acoperit ' || pp.cantitate || ' din ' || cc.cantitate || ' | de planificat ' || (cc.cantitate - pp.cantitate)
+  FROM planificat_pe_pozitie pp
+  JOIN comanda_cantitate cc ON cc.linie_id = pp.linie_id AND cc.marime_id = pp.marime_id
+ WHERE pp.linie_id = 'eeeeeeee-0000-0000-0000-000000000001';
+
+\echo ''
 \echo '=== gata'
