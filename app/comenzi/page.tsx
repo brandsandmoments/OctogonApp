@@ -1,118 +1,102 @@
-import { interogare, cere } from '../lib/sesiune';
+import Link from 'next/link';
+import { centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
+import { cere, poateModifica } from '../lib/sesiune';
 
 export const dynamic = 'force-dynamic';
 
-type Pozitie = {
-  comanda: string;
-  tip: string;
-  produs: string;
-  cod_sku: string;
-  marime: string;
-  marime_numerica: string | null;
-  cerut: number;
-  intrat: number;
-  cod_eticheta: string | null;
-  motiv: string | null;
-};
+const TIPURI = {
+  PSF: 'Punere pe stoc din forecast',
+  PSC: 'Punere pe stoc din comanda clientului',
+} as const;
 
 /**
- * Progresul pe fiecare poziție de comandă — adică exact ce se vede după ce se
- * scanează o etichetă. „Cerut 7, intrat 4, lipsesc 3" se calculează din recepții,
- * nu se ține într-o coloană care poate rămâne în urmă.
+ * Comenzile date de KAM, pe două file: PSF (din forecast) și PSC (pe produse care
+ * au deja comenzi pe site). Câte o comandă pe rând, cu cât s-a cerut, cât s-a
+ * croit, cât a intrat în depozit și în ce stadiu sunt liniile ei. Pozițiile pe
+ * mărimi sunt în centralizator.
  */
-async function pozitii(): Promise<Pozitie[]> {
-  return interogare<Pozitie>(`
-    SELECT c.numar                      AS comanda,
-           c.tip::text                  AS tip,
-           p.denumire                   AS produs,
-           p.cod_sku,
-           m.cod                        AS marime,
-           m.cod_numeric                AS marime_numerica,
-           cc.cantitate                 AS cerut,
-           coalesce(sum(r.cantitate), 0)::int AS intrat,
-           e.cod                        AS cod_eticheta,
-           max(mo.nume)                 AS motiv
-      FROM comanda_cantitate cc
-      JOIN comanda_linie cl ON cl.id = cc.linie_id
-      JOIN comanda c        ON c.id  = cl.comanda_id
-      JOIN produs p         ON p.id  = cl.produs_id
-      JOIN marime m         ON m.id  = cc.marime_id
-      LEFT JOIN eticheta e  ON e.linie_id = cl.id AND e.marime_id = cc.marime_id
-      LEFT JOIN receptie r  ON r.eticheta_id = e.id
-      LEFT JOIN motiv mo    ON mo.id = r.motiv_id
-     WHERE c.stare NOT IN ('anulata', 'inchisa')
-     GROUP BY c.numar, c.tip, p.denumire, p.cod_sku, m.cod, m.cod_numeric,
-              m.ordine, cc.cantitate, e.cod
-     ORDER BY c.numar, p.denumire, m.ordine
-  `);
-}
-
-export default async function Comenzi() {
+export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string }> }) {
   await cere('comenzi');
-  const randuri = await pozitii();
+  const f = await searchParams;
+  const tip: keyof typeof TIPURI = f.tip === 'PSC' ? 'PSC' : 'PSF';
+  const [{ randuri }, poateDa] = await Promise.all([
+    centralizatorPeStadii({ tip, toate: f.toate === '1' }),
+    poateModifica('comenzi'),
+  ]);
 
-  if (randuri.length === 0) {
-    return (
-      <main>
-        <h1>Poziții deschise</h1>
-        <p>
-          Nicio poziție deschisă. Dacă te așteptai la date, verifică întâi că
-          <code> FIRMA_ID</code> e setat — fără el baza de date întoarce zero
-          rânduri, nu o eroare.
-        </p>
-      </main>
-    );
+  type Comanda = {
+    numar: string; brand: string; kam: string | null; lansare: string; prioritate: number; stare: string;
+    cerutLa: string; cerut: number; croit: number; intrat: number; stadii: Map<string, StadiuLinie>;
+  };
+  const comenzi = new Map<string, Comanda>();
+  for (const r of randuri) {
+    const c = comenzi.get(r.comanda) ?? {
+      numar: r.comanda, brand: r.brand, kam: r.kam, lansare: r.data_lansare, prioritate: r.prioritate, stare: r.stare,
+      cerutLa: r.data_ceruta, cerut: 0, croit: 0, intrat: 0, stadii: new Map(),
+    };
+    c.cerut += r.cerut; c.croit += r.croit; c.intrat += r.intrat;
+    if (r.data_ceruta < c.cerutLa) c.cerutLa = r.data_ceruta;
+    c.stadii.set(r.linie_id, r.stadiu);
+    comenzi.set(r.comanda, c);
   }
+  const lista = [...comenzi.values()].sort((a, b) => b.lansare.localeCompare(a.lansare) || a.numar.localeCompare(b.numar));
 
   return (
-    <main>
-      <h1>Poziții deschise</h1>
+    <main className="lat">
+      <h1>Comenzi</h1>
+      <nav className="file">
+        {(Object.keys(TIPURI) as (keyof typeof TIPURI)[]).map((t) => (
+          <Link key={t} href={`/comenzi?tip=${t}`} className={t === tip ? 'activ' : ''}>{t}</Link>
+        ))}
+      </nav>
       <p className="sumar">
-        {randuri.length} poziții ·{' '}
-        {randuri.reduce((s, r) => s + r.cerut, 0)} buc cerute ·{' '}
-        {randuri.reduce((s, r) => s + r.intrat, 0)} buc intrate
+        {TIPURI[tip]} · {lista.length} comenzi{f.toate === '1' ? '' : ' deschise'} ·{' '}
+        <Link href={`/comenzi?tip=${tip}${f.toate === '1' ? '' : '&toate=1'}`}>
+          {f.toate === '1' ? 'doar deschise' : 'și închise'}
+        </Link>
       </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Comandă</th>
-            <th>Produs</th>
-            <th>Mărime</th>
-            <th className="nr">Cerut</th>
-            <th className="nr">Intrat</th>
-            <th className="nr">Lipsesc</th>
-            <th>Etichetă</th>
-          </tr>
-        </thead>
-        <tbody>
-          {randuri.map((r, i) => {
-            const lipsesc = r.cerut - r.intrat;
-            return (
-              <tr key={i}>
-                <td>
-                  {r.comanda} <span className="slab">{r.tip}</span>
-                </td>
-                <td>
-                  {r.produs}
-                  <br />
-                  <span className="slab">{r.cod_sku}</span>
-                </td>
-                <td>
-                  {r.marime}
-                  {r.marime_numerica && <span className="slab"> · {r.marime_numerica}</span>}
-                </td>
-                <td className="nr">{r.cerut}</td>
-                <td className="nr">{r.intrat}</td>
-                <td className="nr">
-                  {lipsesc > 0 ? <strong>{lipsesc}</strong> : '—'}
-                  {r.motiv && <div className="slab">{r.motiv}</div>}
-                </td>
-                <td className="slab">{r.cod_eticheta ?? 'neemisă'}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {poateDa && (
+        <p><Link href={`/comenzi/noua?tip=${tip}`} className="buton">+ {tip} nouă</Link></p>
+      )}
+      <div className="tabel-derulant">
+        <table>
+          <thead>
+            <tr>
+              <th>Comandă</th>
+              <th>KAM</th>
+              <th>Lansată</th>
+              <th>Cerută la</th>
+              <th className="nr">Cerut</th>
+              <th className="nr">Croit</th>
+              <th className="nr">Intrat</th>
+              <th>Liniile</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((c) => {
+              const pe = (s: StadiuLinie) => [...c.stadii.values()].filter((x) => x === s).length;
+              return (
+                <tr key={c.numar}>
+                  <td>
+                    <Link href={`/centralizator?cauta=${encodeURIComponent(c.numar)}&toate=1`}>{c.numar}</Link>{' '}
+                    <span className="slab">{c.brand} · P{c.prioritate}{c.stare === 'ciorna' && ' · ciornă'}</span>
+                  </td>
+                  <td>{c.kam ?? <span className="slab">—</span>}</td>
+                  <td className="slab">{c.lansare}</td>
+                  <td className="slab">{c.cerutLa}</td>
+                  <td className="nr">{c.cerut}</td>
+                  <td className="nr">{c.croit || '—'}</td>
+                  <td className="nr">{c.intrat || '—'}</td>
+                  <td className="slab">
+                    {(Object.keys(STADII_LINIE) as StadiuLinie[]).filter((s) => pe(s) > 0)
+                      .map((s) => `${pe(s)} ${STADII_LINIE[s].toLowerCase()}`).join(' · ')}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </main>
   );
 }

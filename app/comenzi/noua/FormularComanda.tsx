@@ -11,14 +11,14 @@ const azi = () => new Date().toLocaleDateString('sv-SE');
 const linieGoala = (): LinieNoua => ({ produsId: '', dataCeruta: '', vanzareDeLa: '', vanzarePanaLa: '', cantitati: {} });
 
 export default function FormularComanda({
-  branduri, produse, marimi, kami, kamImplicit,
-}: Nomenclatoare & { kamImplicit: string }) {
+  branduri, produse, marimi, kami, kamImplicit, tipImplicit,
+}: Nomenclatoare & { kamImplicit: string; tipImplicit: 'PSF' | 'PSC' }) {
   const router = useRouter();
   const [seLucreaza, porneste] = useTransition();
   const [eroare, setEroare] = useState<string>();
 
   const [numar, setNumar] = useState('');
-  const [tip, setTip] = useState<'PSF' | 'PSC'>('PSC');
+  const [tip, setTip] = useState<'PSF' | 'PSC'>(tipImplicit);
   const [brandId, setBrandId] = useState(branduri.length === 1 ? branduri[0].id : '');
   const [kamId, setKamId] = useState(kamImplicit);
   const [dataLansare, setDataLansare] = useState(azi());

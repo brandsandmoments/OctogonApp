@@ -50,20 +50,77 @@ export function poate(c: Cine, zona: Zona, nivel: Nivel = 'vede'): boolean {
   return are === 'modifica' || (are === 'vede' && nivel === 'vede');
 }
 
-/** Ecranele, cu zona fiecăruia. Pagina principală arată doar ce poate deschide omul. */
-export const ECRANE: { href: string; nume: string; ce: string; zona: Zona | Zona[]; nivel?: Nivel }[] = [
-  { href: '/centralizator', nume: 'Centralizator', ce: 'toate liniile PSF și PSC: cerut, planificat, croit, bandă, intrat', zona: 'centralizator' },
-  { href: '/comenzi/noua', nume: 'Comandă nouă', ce: 'PSF sau PSC, cu grila de mărimi', zona: 'comenzi', nivel: 'modifica' },
-  { href: '/comenzi', nume: 'Poziții deschise', ce: 'progresul fiecărei poziții', zona: 'comenzi' },
-  { href: '/kam', nume: 'Eficiența KAM', ce: 'săptămânal: PSF-urile fiecărui KAM față de vânzările din Shopify', zona: 'kam' },
-  { href: '/planificare', nume: 'Planificare', ce: 'ce intră în producție acum; lansarea spre croit', zona: 'planificare' },
-  { href: '/croit', nume: 'Croit', ce: 'toate, croite, rămas de croit; înregistrarea croitului', zona: 'croit' },
-  { href: '/banda', nume: 'Bandă', ce: 'loturile croite intră pe bandă; drumul până la depozit', zona: 'banda' },
-  { href: '/scanare', nume: 'Recepție', ce: 'scanează eticheta: ce a venit fizic, pe PSF-ul sau PSC-ul lui', zona: 'receptie', nivel: 'modifica' },
-  { href: '/stoc', nume: 'Stoc materiale', ce: 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor', zona: 'materiale' },
-  { href: '/inventar', nume: 'Inventar', ce: 'numărătoare fizică; diferențele devin ajustări', zona: 'materiale' },
-  { href: '/dezvoltare', nume: 'Dezvoltare produs', ce: 'tipare de făcut, în lucru, mostre gata de aprobat', zona: ['dezvoltare', 'comenzi'] },
-  { href: '/modele', nume: 'Modele și rețete', ce: 'consumul pe bucată și materialul fiecărei culori', zona: 'necesar' },
-  { href: '/materiale', nume: 'Materiale', ce: 'nomenclatorul de materii prime și accesorii', zona: 'necesar' },
-  { href: '/oameni', nume: 'Oameni și conturi', ce: 'conturi, drepturi, parole, PIN-uri, tablete de atelier', zona: 'oameni' },
+export type Ecran = { href: string; nume: string; ce: string; zona: Zona | Zona[]; nivel?: Nivel };
+
+/**
+ * Meniul, pe secțiuni — drumul unei comenzi: KAM-ul o dă (Comenzi), producția o
+ * face (Asigură stoc: centralizator, planificare, croit, bandă), depozitul o
+ * primește (Depozit produse finite). Fiecare secțiune își arată ecranele ca
+ * file, ca să nu se umple meniul de taburi.
+ *
+ * `si` sunt adresele care țin de secțiune fără să fie în file (necesarul unei
+ * comenzi, coala de etichete).
+ */
+export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
+  {
+    nume: 'Comenzi',
+    ecrane: [
+      { href: '/comenzi', nume: 'PSF și PSC', ce: 'comenzile date: punere pe stoc din forecast și din comanda clientului', zona: 'comenzi' },
+      { href: '/comenzi/noua', nume: 'Comandă nouă', ce: 'PSF sau PSC, cu grila de mărimi', zona: 'comenzi', nivel: 'modifica' },
+    ],
+  },
+  {
+    nume: 'Asigură stoc',
+    ecrane: [
+      { href: '/centralizator', nume: 'Centralizator', ce: 'toate comenzile și stadiul lor: necroite, croite, în lucru, gata', zona: 'centralizator' },
+      { href: '/planificare', nume: 'Planificare', ce: 'necesarul, gruparea pe model și trimiterea la croit', zona: 'planificare' },
+      { href: '/croit', nume: 'Croit', ce: 'ce e de croit, ce s-a croit, ce a rămas', zona: 'croit' },
+      { href: '/banda', nume: 'Bandă', ce: 'alimentarea benzii; în lucru și terminate', zona: 'banda' },
+    ],
+    si: ['/necesar'],
+  },
+  {
+    nume: 'Depozit produse finite',
+    ecrane: [
+      { href: '/scanare', nume: 'Scanare', ce: 'scanează eticheta: ce a venit fizic, pe PSF-ul sau PSC-ul lui', zona: 'receptie', nivel: 'modifica' },
+    ],
+    si: ['/etichete'],
+  },
+  {
+    nume: 'Eficiență',
+    ecrane: [
+      { href: '/kam', nume: 'KAM', ce: 'PSF-urile fiecărui KAM față de vânzările din Shopify: săptămână, lună, trimestru, an', zona: 'kam' },
+    ],
+  },
+  {
+    nume: 'Dezvoltare produs',
+    ecrane: [
+      { href: '/dezvoltare', nume: 'Dezvoltare produs', ce: 'tipare de făcut, în lucru, mostre gata de aprobat', zona: ['dezvoltare', 'comenzi'] },
+    ],
+  },
+  {
+    nume: 'Materii prime',
+    ecrane: [
+      { href: '/stoc', nume: 'Stoc', ce: 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor', zona: 'materiale' },
+      { href: '/inventar', nume: 'Inventar', ce: 'numărătoare fizică; diferențele devin ajustări', zona: 'materiale' },
+      { href: '/modele', nume: 'Modele și rețete', ce: 'consumul pe bucată și materialul fiecărei culori', zona: 'necesar' },
+      { href: '/materiale', nume: 'Materiale', ce: 'nomenclatorul de materii prime și accesorii', zona: 'necesar' },
+    ],
+  },
+  {
+    nume: 'Oameni și conturi',
+    ecrane: [
+      { href: '/oameni', nume: 'Oameni și conturi', ce: 'conturi, drepturi, parole, PIN-uri, tablete de atelier', zona: 'oameni' },
+    ],
+  },
 ];
+
+export const poateDeschide = (c: Cine, e: Ecran) =>
+  (Array.isArray(e.zona) ? e.zona : [e.zona]).some((z) => poate(c, z, e.nivel));
+
+/** Meniul omului: doar secțiunile și ecranele pe care le poate deschide. */
+export function meniulLui(c: Cine) {
+  return SECTIUNI
+    .map((s) => ({ ...s, ecrane: s.ecrane.filter((e) => poateDeschide(c, e)) }))
+    .filter((s) => s.ecrane.length > 0);
+}

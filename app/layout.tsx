@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ROLURI, type Rol } from './lib/acces';
+import { meniulLui, ROLURI, type Rol } from './lib/acces';
 import { iesire } from './lib/logare';
 import { utilizatorCurent } from './lib/sesiune';
+import Navigare from './Navigare';
 import './global.css';
 
 export const metadata: Metadata = {
@@ -24,6 +25,11 @@ export default async function Layout({ children }: { children: React.ReactNode }
             </span>
             <form action={iesire}><button className="iesire">Ieși</button></form>
           </header>
+        )}
+        {u && (
+          <Navigare
+            sectiuni={meniulLui(u).map((s) => ({ nume: s.nume, si: s.si, ecrane: s.ecrane.map(({ href, nume }) => ({ href, nume })) }))}
+          />
         )}
         {children}
       </body>

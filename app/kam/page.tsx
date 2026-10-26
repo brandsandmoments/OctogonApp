@@ -1,27 +1,25 @@
 import Link from 'next/link';
 import { cere } from '../lib/sesiune';
-import { adaugaZile, luni, saptamana } from '../lib/kam';
+import { adresaPerioadei, eficienta, perioadaDinAdresa } from '../lib/kam';
+import NavPerioada from './NavPerioada';
 import { Acuratete, buc, Procent, Ritm } from './semafor';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Eficiența KAM-ilor într-o săptămână: pe fiecare, PSF-urile active, ritmul
- * săptămânii (vândut / de vândut în săptămână) și acuratețea la zi (cumulat de la
+ * Eficiența KAM-ilor într-o săptămână, lună, trimestru sau an: pe fiecare,
+ * PSF-urile active, ritmul perioadei (vândut / de vândut în perioadă) și acuratețea la zi (cumulat de la
  * începutul fiecărei perioade). Ultimul rând e HEAD OF SALES: toți KAM-ii împreună.
  */
-export default async function Kam({ searchParams }: { searchParams: Promise<{ saptamana?: string }> }) {
+export default async function Kam({ searchParams }: { searchParams: Promise<{ perioada?: string; de_la?: string; saptamana?: string }> }) {
   await cere('kam');
-  const { saptamana: s } = await searchParams;
-  // Implicit, ultima săptămână încheiată: cea curentă abia a început.
-  const azi = new Date().toLocaleDateString('sv-SE');
-  const l = luni(s ?? adaugaZile(azi, -7));
-  const d = await saptamana(l);
+  const per = perioadaDinAdresa(await searchParams);
+  const d = await eficienta(per);
   const p = d.praguri;
 
   const Rand = ({ r, link }: { r: typeof d.total; link: boolean }) => (
     <tr className={link ? '' : 'prima'}>
-      <td>{link ? <Link href={`/kam/${r.kam_id ?? 'fara'}?saptamana=${l}`}>{r.kam}</Link> : <strong>{r.kam}</strong>}</td>
+      <td>{link ? <Link href={`/kam/${r.kam_id ?? 'fara'}?${adresaPerioadei(per)}`}>{r.kam}</Link> : <strong>{r.kam}</strong>}</td>
       <td className="nr">{r.linii}</td>
       <td className="nr">{buc(r.tinta_sapt)}</td>
       <td className="nr">{buc(r.vandut_sapt)}</td>
@@ -36,14 +34,10 @@ export default async function Kam({ searchParams }: { searchParams: Promise<{ sa
   return (
     <main className="lat">
       <h1>Eficiența KAM</h1>
-      <nav className="file">
-        <Link href={`/kam?saptamana=${adaugaZile(l, -7)}`}>← săptămâna dinainte</Link>
-        <span className="activ-text">{l} – {d.duminica}</span>
-        <Link href={`/kam?saptamana=${adaugaZile(l, 7)}`}>săptămâna următoare →</Link>
-      </nav>
+      <NavPerioada per={per} baza="/kam" />
       <p className="sumar">
         Vânzări înregistrate până la {d.ultima_vanzare ?? '—'}
-        {d.ultima_vanzare && d.ultima_vanzare < d.duminica && <strong className="lipsa"> — săptămâna nu e completă în date</strong>}
+        {d.ultima_vanzare && d.ultima_vanzare < per.pana_la && <strong> — perioada e în curs: ținta se socotește până în ziua asta</strong>}
         {' · '}praguri: acuratețe {Math.round(p.acurateteGalben * 100)}% / {Math.round(p.acurateteVerde * 100)}%
       </p>
 
@@ -52,7 +46,7 @@ export default async function Kam({ searchParams }: { searchParams: Promise<{ sa
           <thead>
             <tr>
               <th>KAM</th><th className="nr">PSF active</th>
-              <th className="nr">De vândut în săpt.</th><th className="nr">Vândut în săpt.</th><th className="nr">Ritm</th>
+              <th className="nr">De vândut în perioadă</th><th className="nr">Vândut în perioadă</th><th className="nr">Ritm</th>
               <th className="nr">De vândut la zi</th><th className="nr">Vândut la zi</th><th className="nr">Acuratețe la zi</th>
               <th className="nr">Vândut din volum</th>
             </tr>
@@ -64,9 +58,10 @@ export default async function Kam({ searchParams }: { searchParams: Promise<{ sa
         </table>
       </div>
       <p className="slab">
-        Ritmul compară săptămâna cu ținta ei; acuratețea la zi compară tot ce s-a vândut de la începutul
+        Ritmul compară perioada cu ținta ei; acuratețea la zi compară tot ce s-a vândut de la începutul
         fiecărei perioade cu cât trebuia vândut până acum. La finalul perioadei, acuratețea la zi e KPI-ul din dashboard.
       </p>
     </main>
   );
 }
+

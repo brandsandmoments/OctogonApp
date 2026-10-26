@@ -1,24 +1,34 @@
 import Link from 'next/link';
+import { Fragment } from 'react';
 import { cere, poateModifica } from '../lib/sesiune';
-import { branduriActive, centralizator } from '../lib/centralizator';
+import { branduriActive, centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 
 export const dynamic = 'force-dynamic';
 
-type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string };
+type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string; stadiu?: string };
 
 /**
  * Centralizatorul: toate liniile PSF și PSC, pe mărimi, cu drumul fiecăreia —
  * cerut → planificat → croit → bandă → intrat. Filtrele stau în adresă, ca un link
  * trimis pe WhatsApp să arate exact ce vede cel care l-a trimis.
+ *
+ * Filele sunt stadiile: necroite, croite, în lucru, gata. Necroitele se grupează pe
+ * model, pentru că la croit mai multe PSF și PSC pe același model se pot tăia
+ * împreună.
  */
 export default async function Centralizator({ searchParams }: { searchParams: Promise<Cautare> }) {
   await cere('centralizator');
   const comandaNoua = await poateModifica('comenzi');
   const f = await searchParams;
-  const [randuri, branduri] = await Promise.all([
-    centralizator({ ...f, toate: f.toate === '1' }),
+  const peModel = f.stadiu === 'necroita';
+  const [{ randuri, numarate, toate: toateLiniile }, branduri] = await Promise.all([
+    centralizatorPeStadii({ ...f, toate: f.toate === '1', peModel }),
     branduriActive(),
   ]);
+  const adresa = (stadiu?: string) => {
+    const q = new URLSearchParams(Object.entries({ ...f, stadiu }).filter(([, v]) => v) as [string, string][]);
+    return `/centralizator${q.size ? `?${q}` : ''}`;
+  };
 
   const suma = (k: 'cerut' | 'planificat' | 'croit' | 'banda' | 'intrat') => randuri.reduce((s, r) => s + r[k], 0);
   const comenzi = new Set(randuri.map((r) => r.comanda)).size;
@@ -27,7 +37,17 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
     <main className="lat">
       <h1>Centralizator</h1>
 
+      <nav className="file">
+        <Link href={adresa()} className={!f.stadiu ? 'activ' : ''}>Toate · {toateLiniile}</Link>
+        {(Object.keys(STADII_LINIE) as StadiuLinie[]).map((k) => (
+          <Link key={k} href={adresa(k)} className={f.stadiu === k ? 'activ' : ''}>
+            {STADII_LINIE[k]} · {numarate[k]}
+          </Link>
+        ))}
+      </nav>
+
       <form className="filtre">
+        {f.stadiu && <input type="hidden" name="stadiu" value={f.stadiu} />}
         <select name="tip" defaultValue={f.tip ?? ''} aria-label="Tip">
           <option value="">PSF + PSC</option>
           <option value="PSF">PSF</option>
@@ -70,9 +90,24 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
           <tbody>
             {randuri.map((r, i) => {
               const lipsesc = Math.max(0, r.cerut - r.intrat);
-              const nouaComanda = i === 0 || randuri[i - 1].comanda !== r.comanda;
+              const nouaComanda = i === 0 || randuri[i - 1].comanda !== r.comanda || randuri[i - 1].linie_id !== r.linie_id && peModel;
+              const model = r.model ?? r.produs;
+              const nouModel = peModel && (i === 0 || (randuri[i - 1].model ?? randuri[i - 1].produs) !== model);
+              const deModel = nouModel ? randuri.filter((x) => (x.model ?? x.produs) === model) : [];
               return (
-                <tr key={i} className={nouaComanda ? 'prima' : ''}>
+                <Fragment key={i}>
+                {nouModel && (
+                  <tr className="grupa-model">
+                    <td colSpan={5}>
+                      <strong>{model}</strong>{' '}
+                      <span className="slab">{new Set(deModel.map((x) => x.comanda)).size} comenzi · {new Set(deModel.map((x) => x.produs)).size} produse</span>
+                    </td>
+                    <td className="nr"><strong>{deModel.reduce((a, x) => a + x.cerut, 0)}</strong></td>
+                    <td className="nr">{deModel.reduce((a, x) => a + x.planificat, 0) || '—'}</td>
+                    <td colSpan={4} />
+                  </tr>
+                )}
+                <tr className={nouaComanda ? 'prima' : ''}>
                   <td>
                     {nouaComanda && (
                       <>
@@ -101,6 +136,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                       : r.intrat > r.cerut ? <span className="slab">+{r.intrat - r.cerut}</span> : '—'}
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>

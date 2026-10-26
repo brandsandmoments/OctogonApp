@@ -87,3 +87,12 @@ main.lat { max-width: 90rem; }
 @media print { .bara-sus { display: none; } }
 .fara-chenar { border: 0; padding: 0; margin: 0; min-width: 0; }
 .culori-celula { white-space: normal; max-width: 16rem; }
+
+.navigare { border-bottom: 1px solid var(--linie); font-size: .9rem; }
+.navigare .sectiuni, .navigare .file-sectiune { display: flex; gap: .25rem; padding: 0 1rem; overflow-x: auto; white-space: nowrap; }
+.navigare a { padding: .5rem .75rem; text-decoration: none; color: var(--slab); border-bottom: 2px solid transparent; }
+.navigare .sectiuni a.activ { color: var(--text); font-weight: 700; border-bottom-color: currentColor; }
+.navigare .file-sectiune { border-top: 1px solid var(--linie); font-size: .85rem; }
+.navigare .file-sectiune a.activ { color: var(--text); font-weight: 600; }
+@media print { .navigare { display: none; } }
+.centralizator tr.grupa-model td { border-top: 2px solid var(--text); background: color-mix(in srgb, var(--linie) 35%, transparent); }

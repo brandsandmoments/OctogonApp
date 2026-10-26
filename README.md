@@ -102,7 +102,7 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Alimentarea benzii: loturile croite intră pe bandă, accesoriile scad din stoc
 - [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
 - [x] Import din dashboard al istoricului: planificări, loturi croite, tranșe pe bandă
-- [x] Eficiența KAM, săptămânal, din vânzările Shopify; sincronizarea magazinelor (cu tokenuri în .env)
+- [x] Eficiența KAM, pe săptămână, lună, trimestru și an, din vânzările Shopify; sincronizarea magazinelor (cu tokenuri în .env)
 - [x] Dezvoltarea de produs: tipare de făcut, mostre gata, aprobarea KAM-ului, intrarea în catalog
 - [ ] Expedierea: comenzile intrate și nelivrate
 - [ ] Intrările în depozit din dashboard
@@ -123,19 +123,25 @@ npm run dev
 tranzacție care începe prin `set_config('app.firma_id', …, true)` — legat de
 tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 
+Meniul urmează drumul comenzii, pe secțiuni — **Comenzi** (PSF, PSC), **Asigură
+stoc** (centralizator, planificare, croit, bandă), **Depozit produse finite**,
+**Eficiență**, **Dezvoltare produs**, **Materii prime**, **Oameni și conturi** —, iar
+ecranele unei secțiuni sunt file sub ea (`app/lib/acces.ts`, `SECTIUNI`). Fiecare om
+vede doar secțiunile la care are drept.
+
 | Ecran | Ce arată |
 |---|---|
-| `/comenzi` | pozițiile deschise cu progresul lor: cerut, intrat, lipsesc, motiv |
+| `/comenzi` | comenzile date, pe file PSF și PSC: cerut, croit, intrat, stadiul liniilor |
 | `/etichete/<comanda>` | coala A4 de etichete a comenzii, gata de tipărit |
 | `/scanare` | recepția pe telefon: scanezi eticheta, confirmi ce a intrat |
-| `/centralizator` | toate liniile PSF și PSC: cerut, planificat, croit, pe bandă, intrat, lipsesc |
+| `/centralizator` | toate liniile PSF și PSC, pe stadii (necroite, croite, în lucru, gata); necroitele grupate pe model |
 | `/comenzi/noua` | PSF sau PSC nouă, cu grila de mărimi |
 | `/necesar/<comanda>` | materia primă și accesoriile unei comenzi, plus ce lipsește din rețete |
 | `/modele`, `/modele/<id>` | modelele, consumul pe bucată, materialul fiecărei culori |
 | `/materiale` | nomenclatorul de materii prime și accesorii |
 | `/planificare`, `/planificare/<id>` | ce e de planificat; acoperirea cu stofă; lansarea spre croit; încheierea |
 | `/croit`, `/croit/<lot>` | tot ce e în croit, de croit, croite, rămas de croit; fișa lotului cu etapele și croitul efectiv |
-| `/kam`, `/kam/<kam>` | eficiența KAM pe săptămâni: ritmul și acuratețea la zi a fiecărui PSF |
+| `/kam`, `/kam/<kam>` | eficiența KAM pe săptămână, lună, trimestru sau an: ritmul și acuratețea la zi a fiecărui PSF |
 | `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
 | `/inventar`, `/inventar/<id>` | numărătoarea fizică; la închidere, diferențele devin ajustări |
@@ -324,12 +330,13 @@ rândurile care se contrazic. Se poate rula de mai multe ori.
 
 Cine dă un PSF își asumă și perioada în care se vinde ce a pus în el: la PSF,
 KAM-ul și perioada de vânzare a fiecărei linii sunt obligatorii. Din vânzările
-reale se măsoară, în fiecare săptămână (luni–duminică), cât de bine a citit piața:
+reale se măsoară, pe săptămână (luni–duminică), lună, trimestru sau an, cât de
+bine a citit piața. O perioadă în curs se socotește până la ultima zi cu vânzări:
 
 | | |
 |---|---|
 | **De vândut** | volumul PSF împărțit egal pe zilele perioadei |
-| **Ritmul săptămânii** | vândut în săptămână ÷ de vândut în săptămână |
+| **Ritmul perioadei** | vândut în perioadă ÷ de vândut în perioadă |
 | **Acuratețea la zi** | 1 − \|vândut până acum − de vândut până acum\| ÷ de vândut până acum |
 
 La finalul perioadei, acuratețea la zi e exact KPI-ul din dashboard (KPI_KAM).
