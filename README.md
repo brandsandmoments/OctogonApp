@@ -22,8 +22,9 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0007_campuri_din_dashboard.sql` | familia și prețul materialului, stofa principală a modelului |
 | `db/migrations/0008_stoc_si_inventar.sql` | fișa de magazie, rezervarea din planificări, inventarul, parametrii de pierderi |
 | `db/migrations/0009_planificare_si_croit.sql` | ce i se cere lotului, când s-a croit, încheierea planificării |
+| `db/migrations/0010_alimentare_banda.sql` | tranșele de pe bandă, consumul de accesorii, rezervarea lor până la bandă |
 | `scripts/import-dashboard.mts` | importul din dashboard-ul Google Sheets |
-| `db/test_izolare.sql` | douăzeci și una de verificări de purtare, rulate pe Postgres 16 |
+| `db/test_izolare.sql` | douăzeci și patru de verificări de purtare, rulate pe Postgres 16 |
 
 ## Cele două decizii care traversează tot
 
@@ -90,7 +91,7 @@ recepție de zero bucăți — și calculează corect *cerut 7, intrat 4, lipses
 - [x] Introducerea PSF/PSC, centralizatorul, rețete pe model, necesarul pe comandă
 - [x] Stoc și inventar pe materii prime și accesorii: rezervare la planificare, scădere la croit 
 - [x] Planificarea și croitul (tot ce e în croit / de croit / croite / rămas de croit)
-- [ ] Alimentarea benzii: loturile croite intră pe bandă, accesoriile scad din stoc
+- [x] Alimentarea benzii: loturile croite intră pe bandă, accesoriile scad din stoc
 - [x] Import din dashboard: catalog, modele, rețete, materiale, comenzi PSF/PSC
 - [ ] Import din cele trei magazine Shopify; planificarea, croitul și recepțiile din dashboard
 
@@ -115,13 +116,14 @@ tranzacție, deci nu rămâne setat pe conexiunea întoarsă în pool.
 | `/comenzi` | pozițiile deschise cu progresul lor: cerut, intrat, lipsesc, motiv |
 | `/etichete/<comanda>` | coala A4 de etichete a comenzii, gata de tipărit |
 | `/scanare` | recepția pe telefon: scanezi eticheta, confirmi ce a intrat |
-| `/centralizator` | toate liniile PSF și PSC: cerut, planificat, croit, intrat, lipsesc |
+| `/centralizator` | toate liniile PSF și PSC: cerut, planificat, croit, pe bandă, intrat, lipsesc |
 | `/comenzi/noua` | PSF sau PSC nouă, cu grila de mărimi |
 | `/necesar/<comanda>` | materia primă și accesoriile unei comenzi, plus ce lipsește din rețete |
 | `/modele`, `/modele/<id>` | modelele, consumul pe bucată, materialul fiecărei culori |
 | `/materiale` | nomenclatorul de materii prime și accesorii |
 | `/planificare`, `/planificare/<id>` | ce e de planificat; acoperirea cu stofă; lansarea spre croit; încheierea |
 | `/croit`, `/croit/<lot>` | tot ce e în croit, de croit, croite, rămas de croit; fișa lotului cu etapele și croitul efectiv |
+| `/banda`, `/banda/<tranșă>` | de alimentat, pe bandă, predate; drumul fiecărei tranșe până la depozit |
 | `/stoc`, `/stoc/<id>` | stoc, rezervat, disponibil, de aprovizionat; fișa de magazie a fiecărui material |
 | `/inventar`, `/inventar/<id>` | numărătoarea fizică; la închidere, diferențele devin ajustări |
 
@@ -211,6 +213,22 @@ cu motiv din listă dacă diferă de cerut. Într-o singură tranzacție:
 
 O planificare încheiată **contează doar cu ce a croit**: restul redevine de
 planificat, pentru că comanda tot îl cere. Rezervarea ei de material se eliberează.
+
+## Alimentarea benzii
+
+Un lot croit intră pe bandă în una sau mai multe tranșe (`psf-ms-sep-1/P1/C1/B1`,
+`/B2`) — niciodată mai mult decât s-a croit. **Accesoriile ies din depozit aici**,
+nu la croit; până atunci rămân rezervate, deci rezervarea lor ține cât lotul e
+croit și încă neintrat pe bandă.
+
+O tranșă trece prin intrare în producție, ieșire din producție, CTC și predare
+la depozit, fiecare cu ora ei. Ordinea o păzește baza: nu iese din producție ce
+n-a intrat.
+
+**Data estimată în depozit**, ca în dashboard: ore-om = bucăți × minute pe bucată
+÷ 60; zile = ore-om ÷ (persoane × ore pe zi), rotunjit în sus, de la intrarea în
+producție. Orele pe zi sunt un parametru al firmei (8). Fără persoane sau minute
+pe bucată nu se estimează nimic — o dată inventată e mai rea decât niciuna.
 
 ## Stocul de materiale
 

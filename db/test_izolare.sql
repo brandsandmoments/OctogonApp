@@ -208,5 +208,33 @@ SELECT 'acoperit ' || pp.cantitate || ' din ' || cc.cantitate || ' | de planific
   JOIN comanda_cantitate cc ON cc.linie_id = pp.linie_id AND cc.marime_id = pp.marime_id
  WHERE pp.linie_id = 'eeeeeeee-0000-0000-0000-000000000001';
 
+\echo '--- 22. nasturii (accesoriu) raman rezervati dupa croit, pana la banda: 4 croite x 6 = 24'
+INSERT INTO produs_material (firma_id, produs_id, model_id, componenta_id, material_id, tip, unitate) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'cccccccc-0000-0000-0000-000000000001',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-0000000000c2',
+   '99999999-0000-0000-0000-0000000000a2', 'accesoriu', 'buc');
+UPDATE lot_croit SET croit_la = now() WHERE id = '99999999-0000-0000-0000-0000000000d1';
+SELECT 'nasturi rezervati ' || coalesce(sum(rezervat), 0) FROM rezervare_material
+ WHERE material_id = '99999999-0000-0000-0000-0000000000a2';
+
+\echo '--- 23. cele 4 intra pe banda, 24 de nasturi ies din stoc: rezervarea scade la 0'
+INSERT INTO alimentare_banda (id, firma_id, lot_id, numar) VALUES
+  ('99999999-0000-0000-0000-0000000000e1', '11111111-1111-1111-1111-111111111111',
+   '99999999-0000-0000-0000-0000000000d1', 1);
+INSERT INTO alimentare_cantitate (firma_id, alimentare_id, marime_id, cantitate) VALUES
+  ('11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-0000000000e1',
+   'bbbbbbbb-0000-0000-0000-000000000001', 4);
+INSERT INTO miscare_stoc (firma_id, material_id, tip, cantitate, alimentare_id) VALUES
+  ('11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-0000000000a2',
+   'consum_banda', -24, '99999999-0000-0000-0000-0000000000e1');
+SELECT 'nasturi rezervati ' || coalesce(sum(rezervat), 0) || ' | stoc ' ||
+       (SELECT stoc FROM stoc_material WHERE material_id = '99999999-0000-0000-0000-0000000000a2')
+  FROM rezervare_material WHERE material_id = '99999999-0000-0000-0000-0000000000a2';
+
+\echo '--- 24. iese din productie inainte sa intre (asteptat: EROARE, drumul pe banda are un singur sens)'
+\set ON_ERROR_STOP off
+UPDATE alimentare_banda SET iesit_productie_la = now() WHERE id = '99999999-0000-0000-0000-0000000000e1';
+\set ON_ERROR_STOP on
+
 \echo ''
 \echo '=== gata'

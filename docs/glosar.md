@@ -4,6 +4,34 @@ Numele din schemă sunt în română; descrierile sunt în engleză și stau în
 date, nu într-un fișier care se desincronizează. `SELECT * FROM glosar;` le arată
 oricând. Fișierul ăsta e aceeași informație, pentru citit pe hârtie.
 
+## `alimentare_banda`
+
+Line feeding tranche: part of a cut batch sent into sewing. A batch may go in several tranches (…/C1/B1, B2).
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `numar` | Tranche number within the cutting batch |
+| `alimentat_la` | Fed to the line at |
+| `alimentat_de` | Fed by |
+| `responsabil` | Line lead responsible, as free text until users exist |
+| `persoane` | People assigned on the line |
+| `timp_min_buc` | Production minutes per piece |
+| `intrat_productie_la` | Entered production at |
+| `iesit_productie_la` | Left production at |
+| `ctc_la` | Through quality control and packing at |
+| `predat_depozit_la` | Handed to the warehouse at |
+| `observatii` | Notes |
+
+## `alimentare_cantitate`
+
+Pieces fed to the line in one tranche, per size. Never more than was cut.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `cantitate` | Pieces fed |
+
 ## `brand`
 
 Brand. A company may run several (Parseea, Maison Loulou, Sleevy).
@@ -230,7 +258,7 @@ Stock ledger for raw materials and accessories. Stock is the sum of this table, 
 | coloană | english |
 |---|---|
 | `firma_id` | Owning company. Row-level security filters every query by it. |
-| `tip` | Movement kind: intrare (receipt from supplier), consum_croit (used in cutting), ajustare_inventar (stock count correction), iesire (other issue), retur_furnizor (return to supplier) |
+| `tip` | Movement kind: intrare (receipt from supplier), consum_croit (raw material used in cutting), consum_banda (accessories used on the line), ajustare_inventar (stock count correction), iesire (other issue), retur_furnizor (return to supplier) |
 | `cantitate` | Signed quantity in the material's unit: positive in, negative out. The sign must match the kind. |
 | `data` | Movement date |
 | `furnizor` | Supplier, on receipts and returns |
@@ -241,6 +269,7 @@ Stock ledger for raw materials and accessories. Stock is the sum of this table, 
 | `observatii` | Notes |
 | `creat_de` | Recorded by |
 | `creat_la` | Recorded at |
+| `alimentare_id` | Line feeding tranche that consumed it. Required on line consumption. |
 
 ## `model`
 

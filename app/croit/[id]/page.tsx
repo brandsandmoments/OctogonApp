@@ -55,6 +55,7 @@ export default async function LotPagina({
         {lot.produs} · {lot.cod_sku} · P{lot.prioritate} · cerut în depozit {lot.data_ceruta} · primit {lot.primit_la}
         {croit && <> · <strong>croit {lot.croit_la}</strong></>}
         {' · '}<Link href={`/planificare/${lot.planificare_id}`}>planificarea</Link>
+        {croit && <>{' · '}<Link href={`/banda/alimenteaza?lot=${lot.id}`}>dă pe bandă</Link></>}
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
 

@@ -112,7 +112,8 @@ END LOOP;
 INSERT INTO parametru (firma_id, cheie, valoare, descriere) VALUES
     (f, 'pierderi_tehnologice',     0.05, 'Pierderi tehnologice la croit'),
     (f, 'defecte_material',         0.08, 'Defecte de material'),
-    (f, 'neconformitati_productie', 0.07, 'Neconformitati in productie')
+    (f, 'neconformitati_productie', 0.07, 'Neconformitati in productie'),
+    (f, 'ore_pe_zi',                8,    'Ore de lucru pe zi, pentru data estimata in depozit')
 ON CONFLICT (firma_id, cheie) DO NOTHING;
 
 END $seed$;

@@ -15,6 +15,7 @@ export type RandCentralizator = {
   cerut: number;
   planificat: number;
   croit: number;
+  banda: number;
   intrat: number;
   inchisa: boolean;
 };
@@ -23,7 +24,8 @@ export type Filtre = { tip?: string; brand?: string; cauta?: string; toate?: boo
 
 /**
  * Toate pozițiile din toate comenzile, PSF și PSC, într-un singur tabel: ce s-a
- * cerut, cât s-a planificat, cât s-a croit, cât a intrat în depozit.
+ * cerut, cât s-a planificat, cât s-a croit, cât a intrat pe bandă, cât a intrat
+ * în depozit.
  *
  * Fiecare coloană e o sumă separată, calculată în subinterogarea ei. Cu toate
  * tabelele legate într-un singur JOIN, o poziție cu două recepții și două loturi
@@ -40,6 +42,13 @@ export async function centralizator(f: Filtre): Promise<RandCentralizator[]> {
            JOIN lot_croit lc         ON lc.planificare_id = pl.id
            JOIN lot_croit_efectiv le ON le.lot_id = lc.id
           GROUP BY pl.linie_id, le.marime_id),
+     banda AS (
+         SELECT pl.linie_id, ac.marime_id, sum(ac.cantitate)::int AS q
+           FROM planificare pl
+           JOIN lot_croit lc            ON lc.planificare_id = pl.id
+           JOIN alimentare_banda ab     ON ab.lot_id = lc.id
+           JOIN alimentare_cantitate ac ON ac.alimentare_id = ab.id
+          GROUP BY pl.linie_id, ac.marime_id),
      intrat AS (
          SELECT e.linie_id, e.marime_id, sum(r.cantitate)::int AS q,
                 bool_or(r.inchide_pozitia) AS inchisa
@@ -53,6 +62,7 @@ export async function centralizator(f: Filtre): Promise<RandCentralizator[]> {
             cc.cantitate AS cerut,
             coalesce(pl.q, 0) AS planificat,
             coalesce(cr.q, 0) AS croit,
+            coalesce(bd.q, 0) AS banda,
             coalesce(i.q, 0)  AS intrat,
             coalesce(i.inchisa, false) AS inchisa
        FROM comanda_cantitate cc
@@ -63,6 +73,7 @@ export async function centralizator(f: Filtre): Promise<RandCentralizator[]> {
        JOIN marime m         ON m.id  = cc.marime_id
        LEFT JOIN planificat pl ON pl.linie_id = cl.id AND pl.marime_id = cc.marime_id
        LEFT JOIN croit cr      ON cr.linie_id = cl.id AND cr.marime_id = cc.marime_id
+       LEFT JOIN banda bd      ON bd.linie_id = cl.id AND bd.marime_id = cc.marime_id
        LEFT JOIN intrat i      ON i.linie_id  = cl.id AND i.marime_id  = cc.marime_id
       WHERE ($1::text IS NULL OR c.tip::text = $1)
         AND ($2::text IS NULL OR b.nume = $2)

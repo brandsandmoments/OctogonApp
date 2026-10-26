@@ -7,7 +7,7 @@ import '../../formulare.css';
 export const dynamic = 'force-dynamic';
 
 const TIPURI: Record<string, string> = {
-  intrare: 'Intrare', consum_croit: 'Consum croit', ajustare_inventar: 'Ajustare inventar',
+  intrare: 'Intrare', consum_croit: 'Consum croit', consum_banda: 'Consum bandă', ajustare_inventar: 'Ajustare inventar',
   iesire: 'Ieșire', retur_furnizor: 'Retur furnizor',
 };
 

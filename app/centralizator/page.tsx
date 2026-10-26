@@ -7,7 +7,7 @@ type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string };
 
 /**
  * Centralizatorul: toate liniile PSF și PSC, pe mărimi, cu drumul fiecăreia —
- * cerut → planificat → croit → intrat. Filtrele stau în adresă, ca un link
+ * cerut → planificat → croit → bandă → intrat. Filtrele stau în adresă, ca un link
  * trimis pe WhatsApp să arate exact ce vede cel care l-a trimis.
  */
 export default async function Centralizator({ searchParams }: { searchParams: Promise<Cautare> }) {
@@ -17,7 +17,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
     branduriActive(),
   ]);
 
-  const suma = (k: 'cerut' | 'planificat' | 'croit' | 'intrat') => randuri.reduce((s, r) => s + r[k], 0);
+  const suma = (k: 'cerut' | 'planificat' | 'croit' | 'banda' | 'intrat') => randuri.reduce((s, r) => s + r[k], 0);
   const comenzi = new Set(randuri.map((r) => r.comanda)).size;
 
   return (
@@ -44,7 +44,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
 
       <p className="sumar">
         {comenzi} comenzi · {randuri.length} poziții · cerut {suma('cerut')} · planificat {suma('planificat')}
-        {' · '}croit {suma('croit')} · intrat {suma('intrat')} buc
+        {' · '}croit {suma('croit')} · pe bandă {suma('banda')} · intrat {suma('intrat')} buc
       </p>
 
       <div className="tabel-derulant">
@@ -59,6 +59,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
               <th className="nr">Cerut</th>
               <th className="nr">Planif.</th>
               <th className="nr">Croit</th>
+              <th className="nr">Bandă</th>
               <th className="nr">Intrat</th>
               <th className="nr">Lipsesc</th>
             </tr>
@@ -89,6 +90,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                   <td className="nr">{r.cerut}</td>
                   <td className={`nr ${r.planificat < r.cerut ? 'slab' : ''}`}>{r.planificat || '—'}</td>
                   <td className={`nr ${r.croit < r.planificat ? 'slab' : ''}`}>{r.croit || '—'}</td>
+                  <td className={`nr ${r.banda < r.croit ? 'slab' : ''}`}>{r.banda || '—'}</td>
                   <td className="nr">{r.intrat || '—'}</td>
                   <td className="nr">
                     {r.inchisa ? <span className="slab">închisă</span>

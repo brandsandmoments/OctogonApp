@@ -122,7 +122,7 @@ export async function fisaMaterial(id: string): Promise<FisaMaterial | null> {
               ms.cantitate::text AS cantitate,
               (sum(ms.cantitate) OVER (ORDER BY ms.data, ms.creat_la, ms.id))::numeric(12,3)::text AS sold,
               ms.furnizor, ms.document, ms.pret_unitar::text AS pret_unitar,
-              coalesce(lc_ref.ref, 'inventar ' || to_char(i.data, 'YYYY-MM-DD')) AS referinta,
+              coalesce(lc_ref.ref, ab_ref.ref, 'inventar ' || to_char(i.data, 'YYYY-MM-DD')) AS referinta,
               ms.observatii
          FROM miscare_stoc ms
          LEFT JOIN inventar i ON i.id = ms.inventar_id
@@ -131,6 +131,12 @@ export async function fisaMaterial(id: string): Promise<FisaMaterial | null> {
                 FROM lot_croit lc JOIN planificare pl ON pl.id = lc.planificare_id
                 JOIN comanda_linie cl ON cl.id = pl.linie_id JOIN comanda c ON c.id = cl.comanda_id
                WHERE lc.id = ms.lot_id) lc_ref ON true
+         LEFT JOIN LATERAL (
+              SELECT c.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot || '/B' || ab.numar AS ref
+                FROM alimentare_banda ab JOIN lot_croit lc ON lc.id = ab.lot_id
+                JOIN planificare pl ON pl.id = lc.planificare_id
+                JOIN comanda_linie cl ON cl.id = pl.linie_id JOIN comanda c ON c.id = cl.comanda_id
+               WHERE ab.id = ms.alimentare_id) ab_ref ON true
         WHERE ms.material_id = $1
         ORDER BY ms.data DESC, ms.creat_la DESC, ms.id DESC`, [id]);
     const { rows: rezervari } = await c.query<Rezervare>(
