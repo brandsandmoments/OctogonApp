@@ -79,7 +79,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
 
       <p className="sumar">
         {comenzi} comenzi · {randuri.length} poziții · cerut {suma('cerut')} · planificat {suma('planificat')}
-        {' · '}croit {suma('croit')} · pe bandă {suma('banda')} · intrat {suma('intrat')} buc
+        {' · '}croit {suma('croit')} · pe bandă {suma('banda')} · în depozit {suma('intrat')} buc
       </p>
 
       <div className="tabel-derulant">
@@ -95,7 +95,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
               <th className="nr">Planif.</th>
               <th className="nr">Croit</th>
               <th className="nr">Bandă</th>
-              <th className="nr">Intrat</th>
+              <th className="nr">În depozit</th>
               <th className="nr">Lipsesc</th>
             </tr>
           </thead>

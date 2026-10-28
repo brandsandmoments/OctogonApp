@@ -105,6 +105,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     nume: 'Materii prime',
     ecrane: [
       { href: '/stoc', nume: 'Stoc', ce: 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor', zona: 'materiale' },
+      { href: '/stoc/cumparaturi', nume: 'Lista de cumpărături', ce: 'ce lipsește din stoc, pe furnizori: materii prime și accesorii', zona: ['materiale', 'necesar', 'planificare'] },
       { href: '/inventar', nume: 'Inventar', ce: 'numărătoare fizică; diferențele devin ajustări', zona: 'materiale' },
       { href: '/modele', nume: 'Modele și rețete', ce: 'consumul pe bucată și materialul fiecărei culori', zona: 'necesar' },
       { href: '/materiale', nume: 'Materiale', ce: 'nomenclatorul de materii prime și accesorii', zona: 'necesar' },

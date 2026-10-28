@@ -238,7 +238,6 @@ Product sheet line: a material or accessory of the model, with supplier, code, c
 | `unitate` | Unit |
 | `consum` | Consumption per piece |
 | `principal` | Main fabric |
-| `se_croieste` | Spread and cut on the table |
 | `furnizor` | Supplier |
 | `cod` | Supplier code, when the same for every colour |
 | `material_id` | Catalogue material, when the same for every colour |
@@ -385,6 +384,7 @@ Raw material (fabric, lining) or accessory (zip, button, label) kept in stock.
 | `tip` | Kind: materie_prima (raw material, fabric) or accesoriu (accessory, trim) |
 | `cod` | Material code, internal or supplier's |
 | `denumire` | Material name |
+| `culoare_id` | Colour of the material: a fabric or a button in red is a different material from the same in ivory, with its own stock |
 | `unitate` | Unit of measure: m, kg, buc (pieces), set, m2 |
 | `furnizor` | Supplier |
 | `activ` | Active |
@@ -432,12 +432,11 @@ Recipe line of a model: which component, how much per finished piece. The materi
 |---|---|
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `nume` | Component name: main fabric, lining, zip |
-| `tip` | Raw material or accessory |
+| `tip` | Raw material (fabric, lining: spread and cut on the table, consumed at cutting) or accessory (thread, zips, buttons, interfacing: consumed at line feeding) |
 | `unitate` | Unit the consumption is expressed in |
 | `consum` | Consumption per finished piece, in that unit |
 | `ordine` | Display order |
 | `principal` | Main fabric of the model: the one cutting depends on. At most one per model. |
-| `se_croieste` | Spread and cut on the table (fabric, lining, interfacing). Cutting operations and metres are recorded for these components. |
 
 ## `motiv`
 
@@ -490,6 +489,16 @@ Planned quantity per size. What will actually be cut, which may be less than ord
 | `planificare_id` | References planificare. |
 | `marime_id` | References marime. |
 | `cantitate` | Quantity, pieces |
+
+## `planificare_material`
+
+Materials the planner confirmed are on hand for a planning batch, before sending it to cutting. Stock in the app may lag reality.
+
+| coloană | english |
+|---|---|
+| `firma_id` | Owning company. Row-level security filters every query by it. |
+| `bifat_de` | Who confirmed it |
+| `bifat_la` | When |
 
 ## `produs`
 

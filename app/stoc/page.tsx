@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { cere, poateModifica } from '../lib/sesiune';
 import { redirect } from 'next/navigation';
 import { cantitate, numarDinFormular } from '../lib/format';
-import { adaugaMiscare, factorPierderi, familii, listaStoc, materialeSelect } from '../lib/stoc';
+import { adaugaMiscare, familii, listaStoc, materialeSelect } from '../lib/stoc';
 import '../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -30,8 +30,8 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('materiale');
   const f = await searchParams;
-  const [randuri, fam, materiale, factor] = await Promise.all([
-    listaStoc({ ...f, lipsa: f.lipsa === '1' }), familii(), materialeSelect(), factorPierderi(),
+  const [randuri, fam, materiale] = await Promise.all([
+    listaStoc({ ...f, lipsa: f.lipsa === '1' }), familii(), materialeSelect(),
   ]);
   const deCumparat = randuri.filter((r) => Number(r.de_aprovizionat) > 0).length;
 
@@ -39,8 +39,8 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
     <main className="formular lat">
       <h1>Stoc materiale</h1>
       <p className="sumar">
-        {randuri.length} materiale · {deCumparat} de aprovizionat · pierderi socotite:{' '}
-        {Math.round((factor - 1) * 100)}% · <Link href="/inventar">inventar</Link>
+        {randuri.length} materiale · {deCumparat} de aprovizionat · <Link href="/stoc/cumparaturi">lista de cumpărături</Link> ·{' '}
+        <Link href="/inventar">inventar</Link>
       </p>
 
       <details className="caseta" open={Boolean(f.eroare)}>

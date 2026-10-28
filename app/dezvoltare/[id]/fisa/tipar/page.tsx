@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { cost, fisa, pretPeCuloare } from '../../../../lib/fisa';
 import { cere } from '../../../../lib/sesiune';
-import Tipareste from './Tipareste';
+import Tipareste from '../../../../Tipareste';
 import './tipar.css';
 
 export const dynamic = 'force-dynamic';

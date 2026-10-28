@@ -43,7 +43,7 @@ export default async function FisaPagina({
     const compId = s('id') || undefined;
     const e = await salveazaComponenta(id, {
       id: compId, nume: s('nume'), tip: s('tip'), unitate: s('unitate'), consum: numarDinFormular(s('consum')) ?? 0,
-      principal: s('principal') === '1', seCroieste: s('se_croieste') === '1', furnizor: s('furnizor'), cod: s('cod'),
+      principal: s('principal') === '1', furnizor: s('furnizor'), cod: s('cod'),
       materialId: s('material'), pret: s('pret').trim() ? numarDinFormular(s('pret')) ?? -1 : null,
     });
     if (e || !compId) inapoi(id, e, '#componente');
@@ -178,8 +178,8 @@ function Fragmente({ tip, f, m, salveaza, sterge }: {
       <h2>{tip === 'materie_prima' ? 'Materii prime' : 'Accesorii'}</h2>
       <p className="slab">
         {tip === 'materie_prima'
-          ? 'Material de bază 1, 2, contrast 1, 2, căptușeală 1, 2, termo… Consumul e pe bucată.'
-          : 'Etichete, pungi, nasturi, fermoare… Consumul e pe bucată.'}
+          ? 'Ce se întinde și se taie: material de bază 1, 2, contrast 1, 2, căptușeală 1, 2. Consumul e pe bucată.'
+          : 'Tot restul: ață, thermo, fermoare, nasturi, balene, etichete, pungi. Consumul e pe bucată.'}
       </p>
       {lista.map((c) => <Componenta key={c.id} c={c} f={f} m={m} materiale={materiale} salveaza={salveaza} sterge={sterge} />)}
       <details className="caseta">
@@ -221,7 +221,6 @@ function Componenta({ c, tip, f, m, materiale, salveaza, sterge }: {
           {t === 'materie_prima' && (
             <>
               <label className="bifa-linie"><input type="checkbox" name="principal" value="1" defaultChecked={c?.principal} /> material de bază principal</label>
-              <label className="bifa-linie"><input type="checkbox" name="se_croieste" value="1" defaultChecked={c ? c.se_croieste : true} /> se întinde și se taie</label>
             </>
           )}
         </div>

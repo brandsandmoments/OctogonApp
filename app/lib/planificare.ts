@@ -323,19 +323,62 @@ export async function detaliiPlanificare(id: string): Promise<DetaliiPlanificare
   });
 }
 
+export type MaterialDeBifat = AcoperireMaterial & { tip: 'materie_prima' | 'accesoriu'; bifat: boolean };
+
+/**
+ * Materialele unei planificări încă netrimise, cu ce arată stocul și cu bifa
+ * planificatorului — „îl avem", chiar dacă stocul din aplicație nu-l arată încă
+ * (un sul adus ieri, neinventariat).
+ */
+export async function materialeDeBifat(planificari: string[]): Promise<Map<string, MaterialDeBifat[]>> {
+  return caFirma(firmaCurenta(), async (c) => {
+    const pe = new Map<string, MaterialDeBifat[]>();
+    for (const id of planificari) {
+      const lista = await acoperire(c, id);
+      const { rows } = await c.query<{ material_id: string; tip: 'materie_prima' | 'accesoriu'; bifat: boolean }>(
+        `SELECT m.id AS material_id, m.tip::text AS tip,
+                EXISTS (SELECT 1 FROM planificare_material b WHERE b.planificare_id = $1 AND b.material_id = m.id) AS bifat
+           FROM material m WHERE m.id = ANY ($2::uuid[])`, [id, lista.map((a) => a.material_id)]);
+      const bifate = new Map(rows.map((x) => [x.material_id, x]));
+      pe.set(id, lista.map((a) => ({ ...a, tip: bifate.get(a.material_id)!.tip, bifat: bifate.get(a.material_id)!.bifat }))
+        .sort((a, b) => a.tip.localeCompare(b.tip) || a.denumire.localeCompare(b.denumire)));
+    }
+    return pe;
+  });
+}
+
+/** Bifele „avem materialul" ale unei planificări: exact cele trimise, restul se debifează. */
+export async function bifeazaMateriale(planificareId: string, materiale: string[]): Promise<void> {
+  await caFirma(firmaCurenta(), async (c) => {
+    await c.query(`DELETE FROM planificare_material WHERE planificare_id = $1 AND NOT (material_id = ANY ($2::uuid[]))`,
+      [planificareId, materiale]);
+    await c.query(
+      `INSERT INTO planificare_material (firma_id, planificare_id, material_id)
+       SELECT firma_curenta(), $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING`, [planificareId, materiale]);
+  });
+}
+
 /**
  * Trimite planificarea la croit, la coada celor trimise. Croitul hotărăște apoi ce
  * taie odată: toată, o parte, sau împreună cu alte comenzi pe același model.
- * Se refuză dacă stofa principală nu ajunge.
+ * Pleacă doar cu toate materialele bifate „avem".
  */
 export async function trimiteLaCroit(id: string): Promise<string | null> {
   return caFirma(firmaCurenta(), async (c) => {
-    const { rows: [pl] } = await c.query<{ stadiu: string }>(
-      `SELECT stadiu::text FROM planificare WHERE id = $1 FOR UPDATE`, [id]);
+    const { rows: [pl] } = await c.query<{ stadiu: string; cod: string }>(
+      `SELECT pl.stadiu::text, c.numar || '/P' || pl.numar_transa AS cod
+         FROM planificare pl JOIN comanda_linie cl ON cl.id = pl.linie_id JOIN comanda c ON c.id = cl.comanda_id
+        WHERE pl.id = $1 FOR UPDATE OF pl`, [id]);
     if (!pl) return 'Planificarea nu există.';
-    if (!['gata_de_lansat', 'blocat_materiale'].includes(pl.stadiu)) return 'Planificarea e deja la croit sau închisă.';
-    const lipsa = (await acoperire(c, id)).filter((a) => a.principal && !a.acoperit);
-    if (lipsa.length > 0) return `Nu ajunge stofa: ${lipsa.map((a) => a.denumire).join(', ')}.`;
+    if (!['gata_de_lansat', 'blocat_materiale'].includes(pl.stadiu)) return `${pl.cod}: e deja la croit sau închisă.`;
+    const { rows: nebifate } = await c.query<{ denumire: string }>(
+      `SELECT m.denumire FROM rezervare_material r JOIN material m ON m.id = r.material_id
+        WHERE r.planificare_id = $1
+          AND NOT EXISTS (SELECT 1 FROM planificare_material b WHERE b.planificare_id = $1 AND b.material_id = r.material_id)
+        ORDER BY m.denumire`, [id]);
+    if (nebifate.length > 0) {
+      return `${pl.cod}: bifează întâi că avem ${nebifate.length === 1 ? nebifate[0].denumire : `${nebifate.length} materiale (${nebifate.slice(0, 3).map((x) => x.denumire).join(', ')}…)`}.`;
+    }
     await c.query(`LOCK TABLE planificare IN SHARE ROW EXCLUSIVE MODE`);
     await c.query(
       `UPDATE planificare SET stadiu = 'lansat_spre_croit',

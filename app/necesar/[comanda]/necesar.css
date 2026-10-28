@@ -1,0 +1,12 @@
+.necesar .variatie h2 { margin-top: 1.5rem; }
+.necesar tr.tip-rand td { font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: var(--slab); padding-top: .9rem; }
+.necesar h3 { font-size: .9rem; margin: 1rem 0 .25rem; }
+@media print {
+  @page { size: A4; margin: 12mm; }
+  .nu-tipari { display: none; }
+  body { background: #fff; color: #000; }
+  .necesar { max-width: none; padding: 0; }
+  .necesar table { font-size: .75rem; }
+  .necesar .variatie, .necesar .total { break-inside: avoid; }
+  .necesar .lipsa { color: #000; }
+}

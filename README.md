@@ -20,7 +20,7 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0005_inchidere_pe_zero.sql` | o poziție se poate închide cu zero bucăți, cu motiv și observații |
 | `db/migrations/0006_modele_materiale_retete.sql` | modele, materiale, rețete și necesarul pe comandă |
 | `db/migrations/0007_campuri_din_dashboard.sql` | familia și prețul materialului, stofa principală a modelului |
-| `db/migrations/0008_stoc_si_inventar.sql` | fișa de magazie, rezervarea din planificări, inventarul, parametrii de pierderi |
+| `db/migrations/0008_stoc_si_inventar.sql` | fișa de magazie, rezervarea din planificări, inventarul, parametrii |
 | `db/migrations/0009_planificare_si_croit.sql` | ce i se cere lotului, când s-a croit, încheierea planificării |
 | `db/migrations/0010_alimentare_banda.sql` | tranșele de pe bandă, consumul de accesorii, rezervarea lor până la bandă |
 | `db/migrations/0011_vanzari_si_eficienta_kam.sql` | vânzările, magazinele Shopify, ținta zilnică a fiecărui PSF |
@@ -28,6 +28,8 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
 | `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
 | `db/migrations/0015_taiere.sql` | taierea: mai multe PSF și PSC pe același model, tăiate împreună |
+| `db/migrations/0019_material_pe_culoare.sql` | un material pe fiecare culoare: stofa roșie și cea ivoire au stoc și necesar separat |
+| `db/migrations/0018_materie_prima_doar_stofa.sql` | materie primă = stofă și căptușeală, restul accesorii; fără pierderi; bifa „avem materialul” |
 | `db/migrations/0017_fisa_de_produs.sql` | referințele cererii de tipar (linkuri, observații, poze) și fișa de produs |
 | `db/migrations/0016_croit_pe_taiere.sql` | taierile le face croitul; întins, tăiat, termocolat, împerecheat, metri și defecte pe culoare; operatorii de croit |
 | `db/oameni_octogon.sql` | oamenii Octogon și drepturile lor, cum le-a dat conducerea |
@@ -211,8 +213,18 @@ componenta pentru o culoare anume („Jerseu negru"). Cheile compuse fac imposib
 un nasture pus în locul stofei, o stofă socotită în bucăți sau componenta altui
 model — fără nicio linie de cod.
 
-Necesarul unei comenzi = bucăți cerute × consum, adunat pe material, calculat în
-vederea `necesar_comanda`. Un produs fără model, un model fără rețetă sau o
+**Materie primă** e doar ce se întinde și se taie: stofa, căptușeala, dantela,
+mesh-ul — scade din stoc la croit. **Accesoriile** sunt tot restul: ață, thermo,
+fermoare, nasturi, balene, bureți, etichete, pungi — scad la alimentarea benzii.
+
+Necesarul unei comenzi = bucăți cerute × consum, calculat în vederea
+`necesar_comanda`, **pe fiecare variație** (culoare): la Amalya Negru nasturi negri,
+la Amalya Ivory nasturi albi. **Fiecare culoare e alt material** (0019): „STOFA
+DAMARIS · ROSU" și „STOFA DAMARIS · IVOIRE", cu stoc, necesar și rând separat pe lista
+de cumpărături — 18 m roșie și 10 m albă, nu 28 m de stofă. Rămân comune doar
+accesoriile identice pe orice culoare: etichete, stickere, pungi, acul, balene,
+cupe, bureți, pernuțe, umerași, thermo, elastic. Sub variații, totalul pe material. Pierderile nu se
+mai adaugă. Necesarul se tipărește pe A4. Un produs fără model, un model fără rețetă sau o
 componentă fără material **nu dispar din sumă**: ecranul le arată deasupra
 tabelului, pentru că un necesar care tace despre ele pare complet și nu e.
 
@@ -224,12 +236,12 @@ ce se întinde și se taie odată.
 
 **Planificarea** arată ce mai e de planificat grupat pe model; planifică tot ce a
 rămas pe comenzile bifate, sau alte cantități pe una singură. Pentru fiecare
-planificare se vede pe loc dacă stofa ajunge, apoi se trimite la croit, iar
-planificatorul ține ordinea în care vrea să fie croite. Stocul se împarte în ordinea
-priorității comenzii, apoi a datei planificării: când stofa nu ajunge pentru toți,
-urgentele trec primele. **Doar stofa principală oprește lansarea**; restul
-materialelor dau avertisment — ca în dashboard, unde statusul materiei prime și
-cel al accesoriilor sunt separate.
+planificare se vede pe loc dacă stocul o acoperă; stocul se împarte în ordinea
+priorității comenzii, apoi a datei planificării, deci urgentele trec primele.
+**Înainte de croit, planificatorul bifează fiecare material „îl avem"** — și pe cele
+aduse, dar încă neinventariate, pentru că stocul din aplicație nu e mereu la zi. Doar
+cu toate bifate planificarea pleacă la croit; se pot trimite mai multe deodată, iar
+planificatorul ține ordinea în care vrea să fie croite.
 
 **Taierile le face croitul.** Din „rămas de croit" — ce a trimis planificarea și
 n-a intrat încă în nicio taiere, grupat pe model — șefa de croit hotărăște ce taie
@@ -239,9 +251,8 @@ intră rămâne de croit. Baza refuză o taiere cu două modele. Cât n-a încep
 pot scoate comenzi din ea sau adăuga altele.
 
 **Croitul** are patru file — toate, croite, rămas de croit, taieri (cele în
-lucru) — iar taierile se pot grupa pe săptămâni, luni sau ani. Pe **fișa taierii**, pentru fiecare material care
-se întinde și se taie (stofa de bază, căptușeala, paietele, mesh-ul, termoul — în
-rețetă, „se croiește"):
+lucru) — iar taierile se pot grupa pe săptămâni, luni sau ani. Pe **fișa taierii**, pentru fiecare materie primă
+(stofa de bază, căptușeala, paietele, mesh-ul):
 
 | | |
 |---|---|
@@ -441,10 +452,12 @@ singură — nu există rezervări uitate.
 | **Rezervat** | rest de croit din planificările active × consum |
 | **Disponibil** | stoc − rezervat |
 | **Neplanificat** | ce cer comenzile deschise și n-a intrat încă în planificare × consum |
-| **De aprovizionat** | (rezervat + neplanificat) × (1 + pierderi) − stoc |
+| **De aprovizionat** | rezervat + neplanificat − stoc |
 
-Pierderile sunt parametri ai firmei (`parametru`), nu numere în cod: 5% tehnologic,
-8% defecte de material, 7% neconformități, ca în fila TINTE din dashboard.
+**Lista de cumpărături** (`/stoc/cumparaturi`) e tot ce e de aprovizionat, pe
+furnizori, materii prime și accesorii, cu prețul aproximativ. Fără furnizor,
+materialele rămân cu tipul, denumirea și produsele care le cer, ca să se caute unul.
+Se tipărește pe A4.
 
 **Inventarul** se numără pe o listă; un câmp gol înseamnă nenumărat, nu zero, deci
 un inventar parțial (doar stofele) nu golește restul stocului. La închidere,

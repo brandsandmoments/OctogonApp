@@ -23,18 +23,11 @@ export type FiltreStoc = { tip?: string; familie?: string; cauta?: string; lipsa
  *   stoc          — suma fișei de magazie
  *   rezervat      — ce mai e de croit din planificările active × consum
  *   neplanificat  — ce cer comenzile deschise și încă n-a intrat în planificare × consum
- *   de aprovizionat — (rezervat + neplanificat) cu pierderile firmei, minus stocul
- *
- * Pierderile (parametru: pierderi_tehnologice, defecte_material,
- * neconformitati_productie) se adaugă doar la aprovizionare, nu la rezervare:
- * rezervarea spune cât e promis, aprovizionarea cât trebuie cumpărat ca să ajungă.
+ *   de aprovizionat — rezervat + neplanificat, minus stocul
  */
 export async function listaStoc(f: FiltreStoc): Promise<RandStoc[]> {
   return interogare<RandStoc>(
-    `WITH pierderi AS (
-         SELECT 1 + coalesce(sum(valoare), 0) AS factor FROM parametru
-          WHERE cheie IN ('pierderi_tehnologice', 'defecte_material', 'neconformitati_productie')),
-     rezervat AS (
+    `WITH rezervat AS (
          SELECT material_id, sum(rezervat) AS q FROM rezervare_material GROUP BY material_id),
      planificat AS (
          SELECT linie_id, marime_id, cantitate AS q FROM planificat_pe_pozitie),
@@ -53,7 +46,7 @@ export async function listaStoc(f: FiltreStoc): Promise<RandStoc[]> {
             s.stoc::text AS stoc,
             coalesce(r.q, 0)::numeric(12,3)::text AS rezervat,
             coalesce(n.q, 0)::numeric(12,3)::text AS neplanificat,
-            greatest((coalesce(r.q, 0) + coalesce(n.q, 0)) * (SELECT factor FROM pierderi) - s.stoc, 0)
+            greatest(coalesce(r.q, 0) + coalesce(n.q, 0) - s.stoc, 0)
               ::numeric(12,3)::text AS de_aprovizionat
        FROM material m
        JOIN stoc_material s  ON s.material_id = m.id
@@ -63,7 +56,7 @@ export async function listaStoc(f: FiltreStoc): Promise<RandStoc[]> {
         AND ($1::text IS NULL OR m.tip::text = $1)
         AND ($2::text IS NULL OR m.familie = $2)
         AND ($3::text IS NULL OR m.cod ILIKE '%' || $3 || '%' OR m.denumire ILIKE '%' || $3 || '%')
-        AND (NOT $4 OR (coalesce(r.q, 0) + coalesce(n.q, 0)) * (SELECT factor FROM pierderi) > s.stoc)
+        AND (NOT $4 OR coalesce(r.q, 0) + coalesce(n.q, 0) > s.stoc)
       ORDER BY m.tip, m.denumire`,
     [f.tip || null, f.familie || null, f.cauta?.trim() || null, Boolean(f.lipsa)],
   );
@@ -73,14 +66,6 @@ export async function familii(): Promise<string[]> {
   return (await interogare<{ familie: string }>(
     `SELECT DISTINCT familie FROM material WHERE familie IS NOT NULL AND activ ORDER BY familie`,
   )).map((r) => r.familie);
-}
-
-export async function factorPierderi(): Promise<number> {
-  const [r] = await interogare<{ factor: string }>(
-    `SELECT (1 + coalesce(sum(valoare), 0))::text AS factor FROM parametru
-      WHERE cheie IN ('pierderi_tehnologice', 'defecte_material', 'neconformitati_productie')`,
-  );
-  return Number(r.factor);
 }
 
 // ---------------------------------------------------------------- fișa unui material
@@ -324,4 +309,30 @@ export async function inchideInventar(id: string): Promise<string | null> {
     await c.query(`UPDATE inventar SET inchis_la = now(), inchis_de = utilizator_curent() WHERE id = $1`, [id]);
     return null;
   });
+}
+
+// ---------------------------------------------------------------- lista de cumpărături
+
+export type DeCumparat = RandStoc & { furnizor: string | null; pret: string | null; produse: string[] };
+
+/**
+ * Ce trebuie cumpărat ca să ajungă stocul pentru tot ce e planificat și tot ce
+ * cer comenzile deschise, pe furnizori. Unde materialul n-are furnizor, rămâne
+ * tipul lui, denumirea și produsele care îl cer — cu ele se caută unul.
+ */
+export async function listaCumparaturi(): Promise<DeCumparat[]> {
+  const lipsa = await listaStoc({ lipsa: true });
+  if (lipsa.length === 0) return [];
+  const extra = await interogare<{ id: string; furnizor: string | null; pret: string | null; produse: string[] }>(
+    `SELECT m.id, m.furnizor, m.pret_referinta::text AS pret,
+            coalesce((SELECT array_agg(DISTINCT p.denumire ORDER BY p.denumire)
+                        FROM produs_material pm
+                        JOIN produs p         ON p.id = pm.produs_id
+                        JOIN comanda_linie cl ON cl.produs_id = p.id
+                        JOIN comanda c        ON c.id = cl.comanda_id AND c.stare IN ('lansata', 'in_productie')
+                       WHERE pm.material_id = m.id), '{}') AS produse
+       FROM material m WHERE m.id = ANY ($1::uuid[])`, [lipsa.map((r) => r.id)]);
+  const pe = new Map(extra.map((x) => [x.id, x]));
+  return lipsa.map((r) => ({ ...r, furnizor: pe.get(r.id)?.furnizor ?? null, pret: pe.get(r.id)?.pret ?? null,
+                             produse: pe.get(r.id)?.produse ?? [] }));
 }

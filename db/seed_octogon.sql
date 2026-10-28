@@ -108,12 +108,8 @@ LOOP
     ON CONFLICT (firma_id, cod) DO NOTHING;
 END LOOP;
 
--- ---- parametri: pierderile din TINTE!B17:B19. Necesarul de aprovizionat le
---      adaugă peste necesarul brut, ca în dashboard (5% + 8% + 7% = 20%).
+-- ---- parametri. Pierderile din TINTE (5% + 8% + 7%) nu se mai socotesc (0018).
 INSERT INTO parametru (firma_id, cheie, valoare, descriere) VALUES
-    (f, 'pierderi_tehnologice',     0.05, 'Pierderi tehnologice la croit'),
-    (f, 'defecte_material',         0.08, 'Defecte de material'),
-    (f, 'neconformitati_productie', 0.07, 'Neconformitati in productie'),
     (f, 'ore_pe_zi',                8,    'Ore de lucru pe zi, pentru data estimata in depozit'),
     -- pragurile KAM din TINTE (KAM_ACC, KAM_VND): galben de la, verde de la
     (f, 'kam_acuratete_galben',     0.70, 'Acuratete forecast PSF: galben de la'),

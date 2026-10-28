@@ -4,10 +4,11 @@ import { Fragment } from 'react';
 import Pliere from '../Pliere';
 import { cere, poateModifica } from '../lib/sesiune';
 import {
-  deplanificat, mutaLaCroit, planificaTot, planificariActive, trimiteLaCroit,
+  bifeazaMateriale, deplanificat, materialeDeBifat, mutaLaCroit, planificaTot, planificariActive, trimiteLaCroit,
   type LinieDePlanificat, type PlanificareRezumat,
 } from '../lib/planificare';
 import { STADII } from '../lib/stadii';
+import { cantitate } from '../lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
   const [active, deplan] = await Promise.all([planificariActive(), deplanificat(cauta)]);
   const deTrimis = active.filter((p) => ['gata_de_lansat', 'blocat_materiale', 'fara_cantitate'].includes(p.stadiu));
   const laCroit = active.filter((p) => ['lansat_spre_croit', 'in_croit'].includes(p.stadiu));
+  const materiale = await materialeDeBifat(deTrimis.map((p) => p.id));
 
   const peModel = new Map<string, LinieDePlanificat[]>();
   for (const l of deplan) peModel.set(l.model_cheie, [...(peModel.get(l.model_cheie) ?? []), l]);
@@ -41,10 +43,24 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
     await cere('planificare', 'modifica');
     inapoi(await planificaTot(date.getAll('linie').map(String)));
   }
+  // Mai multe deodată: cele bifate pleacă, cele cu materiale nebifate rămân și spun de ce.
   async function trimite(date: FormData) {
     'use server';
     await cere('planificare', 'modifica');
-    inapoi(await trimiteLaCroit(String(date.get('id'))));
+    const erori: string[] = [];
+    for (const id of date.getAll('id').map(String)) {
+      const e = await trimiteLaCroit(id);
+      if (e) erori.push(e);
+    }
+    inapoi(erori.length ? erori.join(' ') : date.getAll('id').length ? null : 'Bifează ce trimiți la croit.');
+  }
+  async function bifeaza(date: FormData) {
+    'use server';
+    await cere('planificare', 'modifica');
+    const id = String(date.get('planificare'));
+    const toate = date.get('toate') === '1';
+    await bifeazaMateriale(id, toate ? date.getAll('toate_materialele').map(String) : date.getAll('material').map(String));
+    inapoi();
   }
   async function muta(date: FormData) {
     'use server';
@@ -115,14 +131,58 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
 
       <h2>De trimis la croit</h2>
       {deTrimis.length === 0 ? <p className="slab">Nimic de trimis.</p> : (
-        <Tabel lista={deTrimis} coloana={(p) => (
-          <form action={trimite} className="in-rand">
-            <fieldset disabled={!m || p.stofa_lipsa} className="fara-chenar">
-              <input type="hidden" name="id" value={p.id} />
-              <button>Trimite la croit</button>
-            </fieldset>
-          </form>
-        )} />
+        <>
+          <p className="slab">
+            Deschide fiecare planificare și bifează materialele pe care le avem — și pe cele aduse, dar încă
+            neinventariate. Pleacă la croit doar cu toate bifate; se pot trimite mai multe deodată.
+          </p>
+          <form action={trimite} id="trimite" />
+          {deTrimis.map((p) => {
+            const lista = materiale.get(p.id) ?? [];
+            const bifate = lista.filter((x) => x.bifat).length;
+            const gata = bifate === lista.length;
+            return (
+              <details key={p.id} className="caseta de-trimis">
+                <summary>
+                  <input type="checkbox" name="id" value={p.id} form="trimite" disabled={!m || !gata} aria-label={`Trimite ${p.cod}`} />{' '}
+                  <strong>{p.cod}</strong> · {p.produs} · {p.planificat} buc · termen {p.data_ceruta} ·{' '}
+                  <span className={gata ? 'slab' : 'lipsa'}>avem {bifate}/{lista.length} materiale</span>
+                </summary>
+                <form action={bifeaza}><fieldset disabled={!m} className="fara-chenar">
+                  <input type="hidden" name="planificare" value={p.id} />
+                  {lista.map((x) => <input key={x.material_id} type="hidden" name="toate_materialele" value={x.material_id} />)}
+                  <table>
+                    <thead><tr><th>Avem</th><th>Material</th><th className="nr">Necesar</th><th className="nr">În stoc</th><th /></tr></thead>
+                    <tbody>
+                      {(['materie_prima', 'accesoriu'] as const).map((tip) => {
+                        const r = lista.filter((x) => x.tip === tip);
+                        if (!r.length) return null;
+                        return [
+                          <tr key={tip} className="tip-rand"><td colSpan={5}>{tip === 'materie_prima' ? 'Materie primă' : 'Accesorii'}</td></tr>,
+                          ...r.map((x) => (
+                            <tr key={x.material_id}>
+                              <td><input type="checkbox" name="material" value={x.material_id} defaultChecked={x.bifat} aria-label={x.denumire} /></td>
+                              <td><Link href={`/stoc/${x.material_id}`}>{x.denumire}</Link> <span className="slab">{x.cod}</span></td>
+                              <td className="nr">{cantitate(x.necesar)} <span className="slab">{x.unitate}</span></td>
+                              <td className="nr">{cantitate(x.stoc)}</td>
+                              <td>{x.acoperit ? <span className="slab">acoperit din stoc</span> : <span className="lipsa">lipsă în stoc</span>}</td>
+                            </tr>
+                          )),
+                        ];
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="actiuni">
+                    <button className="secundar">Salvează bifele</button>
+                    <button className="secundar" name="toate" value="1">Le avem pe toate</button>
+                    <Link href={`/necesar/${encodeURIComponent(p.comanda)}`} className="buton">Necesarul comenzii</Link>
+                  </div>
+                </fieldset></form>
+              </details>
+            );
+          })}
+          <p><button form="trimite" className="buton" disabled={!m}>Trimite la croit cele bifate</button></p>
+        </>
       )}
 
       <h2>La croit, în ordinea de croit</h2>

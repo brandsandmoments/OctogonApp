@@ -18,9 +18,18 @@ export type RandNecesar = {
   culoare: string | null;
   unitate: string;
   necesar: string; // numeric vine ca text din pg: fără pierderi de zecimale
-  cu_pierderi: string;
   disponibil: string; // stoc minus tot ce e rezervat de planificările active
   produse: string[];
+};
+
+/** Necesarul unei variații (produs = model × culoare): fiecare componentă cu materialul ei. */
+export type Variatie = {
+  produs_id: string;
+  produs: string;
+  cod_sku: string;
+  bucati: number;
+  randuri: { tip: 'materie_prima' | 'accesoriu'; componenta: string; material_id: string; cod: string; denumire: string;
+             unitate: string; consum: string; necesar: string; disponibil: string }[];
 };
 
 export type Gol = {
@@ -31,7 +40,7 @@ export type Gol = {
   componenta: string | null;
 };
 
-export type Necesar = { antet: AntetComanda; randuri: RandNecesar[]; goluri: Gol[] };
+export type Necesar = { antet: AntetComanda; randuri: RandNecesar[]; variatii: Variatie[]; goluri: Gol[] };
 
 /**
  * Necesarul unei comenzi, pe material, plus tot ce împiedică un necesar complet.
@@ -55,13 +64,9 @@ export async function necesarComanda(numar: string): Promise<Necesar | null> {
     if (!antet) return null;
 
     const { rows: randuri } = await c.query<RandNecesar>(
-      `WITH pierderi AS (
-           SELECT 1 + coalesce(sum(valoare), 0) AS factor FROM parametru
-            WHERE cheie IN ('pierderi_tehnologice', 'defecte_material', 'neconformitati_productie'))
-       SELECT m.tip::text AS tip, m.id AS material_id, m.cod, m.denumire,
+      `SELECT m.tip::text AS tip, m.id AS material_id, m.cod, m.denumire,
               cu.nume AS culoare, m.unitate::text AS unitate,
               sum(n.necesar)::text AS necesar,
-              (sum(n.necesar) * (SELECT factor FROM pierderi))::numeric(12,3)::text AS cu_pierderi,
               (min(s.stoc) - coalesce((SELECT sum(r.rezervat) FROM rezervare_material r
                                         WHERE r.material_id = m.id), 0))::numeric(12,3)::text AS disponibil,
               array_agg(DISTINCT p.denumire ORDER BY p.denumire) AS produse
@@ -76,6 +81,28 @@ export async function necesarComanda(numar: string): Promise<Necesar | null> {
       [numar],
     );
 
+    // Pe variație: la Amalya Negru nasturi negri, la Amalya Ivory nasturi albi.
+    const { rows: pe } = await c.query<Omit<Variatie, 'randuri'> & Variatie['randuri'][number]>(
+      `SELECT p.id AS produs_id, p.denumire AS produs, p.cod_sku, n.bucati::int AS bucati,
+              m.tip::text AS tip, n.componenta, m.id AS material_id, m.cod, m.denumire, m.unitate::text AS unitate,
+              n.consum::text AS consum, n.necesar::text AS necesar,
+              (s.stoc - coalesce((SELECT sum(r.rezervat) FROM rezervare_material r WHERE r.material_id = m.id), 0))
+                ::numeric(12,3)::text AS disponibil
+         FROM necesar_comanda n
+         JOIN produs p        ON p.id = n.produs_id
+         JOIN material m      ON m.id = n.material_id
+         JOIN stoc_material s ON s.material_id = m.id
+        WHERE n.comanda = $1
+        ORDER BY p.denumire, m.tip, n.componenta`,
+      [numar],
+    );
+    const variatii = new Map<string, Variatie>();
+    for (const { produs_id, produs, cod_sku, bucati, ...x } of pe) {
+      const v = variatii.get(produs_id) ?? { produs_id, produs, cod_sku, bucati, randuri: [] };
+      v.randuri.push(x);
+      variatii.set(produs_id, v);
+    }
+
     const { rows: goluri } = await c.query<Gol>(
       `SELECT p.denumire AS produs, p.cod_sku, n.bucati,
               CASE WHEN n.model_id IS NULL      THEN 'fara_model'
@@ -89,6 +116,6 @@ export async function necesarComanda(numar: string): Promise<Necesar | null> {
       [numar],
     );
 
-    return { antet, randuri, goluri };
+    return { antet, randuri, variatii: [...variatii.values()], goluri };
   });
 }

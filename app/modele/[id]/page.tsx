@@ -49,7 +49,7 @@ export default async function ModelPagina({
       await stergeComponenta(s('componenta'));
       inapoi(id, null);
     }
-    inapoi(id, await schimbaConsum(s('componenta'), Number(s('consum').replace(',', '.')), date.get('se_croieste') === '1'));
+    inapoi(id, await schimbaConsum(s('componenta'), Number(s('consum').replace(',', '.'))));
   }
 
   async function lega(date: FormData) {
@@ -91,9 +91,6 @@ export default async function ModelPagina({
                   <input type="hidden" name="componenta" value={c.id} />
                   <input name="consum" defaultValue={Number(c.consum)} inputMode="decimal" aria-label={`Consum ${c.nume}`} />
                   <span>{c.unitate}</span>
-                  {c.tip === 'materie_prima' && (
-                    <label className="slab"><input type="checkbox" name="se_croieste" value="1" defaultChecked={c.se_croieste} /> se croiește</label>
-                  )}
                   <button className="mic">Salvează</button>
                   <button className="mic" name="sterge" value="1" aria-label={`Șterge ${c.nume}`}>×</button>
                 </fieldset></form>

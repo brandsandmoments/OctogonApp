@@ -270,7 +270,7 @@ export async function taieriLaCroit(vedere: VedereCroit): Promise<TaiereLaCroit[
             to_char(coalesce(t.trimis_la, t.creat_la), 'YYYY-MM-DD') AS facuta_la,
             CASE WHEN l.deschise = 0 THEN to_char(l.croit_la, 'YYYY-MM-DD') END AS croit_la,
             l.cerut, l.croit, l.deschise AS loturi_deschise,
-            (SELECT count(*) FROM model_componenta mc WHERE mc.model_id = l.model_id AND mc.se_croieste)::int AS componente,
+            (SELECT count(*) FROM model_componenta mc WHERE mc.model_id = l.model_id AND mc.tip = 'materie_prima')::int AS componente,
             (SELECT count(*) FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'intins' AND o.terminat_la IS NOT NULL)::int AS intinse,
             (SELECT count(*) FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'taiat' AND o.terminat_la IS NOT NULL)::int AS taiate,
             EXISTS (SELECT 1 FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'imperecheat' AND o.terminat_la IS NOT NULL) AS imperecheat
@@ -344,7 +344,7 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
     if (!taiere) return null;
     const { rows: componente } = await c.query<FisaTaiere['componente'][number]>(
       `SELECT id, nume, principal FROM model_componenta
-        WHERE model_id = $1 AND se_croieste ORDER BY principal DESC, nume`, [taiere.model_id]);
+        WHERE model_id = $1 AND tip = 'materie_prima' ORDER BY principal DESC, nume`, [taiere.model_id]);
     const { rows: operatii } = await c.query<OperatieScrisa>(
       `SELECT o.id, o.componenta_id, o.operatie::text AS operatie, o.operator_id, u.nume AS operator,
               to_char(o.inceput_la AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD"T"HH24:MI') AS inceput_la,
@@ -369,7 +369,7 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
          JOIN produs p            ON p.id = b.produs_id
          LEFT JOIN culoare cu     ON cu.id = p.culoare_id
          JOIN produs_material pm  ON pm.produs_id = b.produs_id
-         JOIN model_componenta mc ON mc.id = pm.componenta_id AND mc.se_croieste
+         JOIN model_componenta mc ON mc.id = pm.componenta_id AND mc.tip = 'materie_prima'
          JOIN material m          ON m.id = pm.material_id
          LEFT JOIN taiere_material tm ON tm.taiere_id = $1 AND tm.componenta_id = pm.componenta_id AND tm.produs_id = b.produs_id
         ORDER BY coalesce(cu.nume, p.denumire)`, [id]);

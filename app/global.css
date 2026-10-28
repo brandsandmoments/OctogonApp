@@ -107,3 +107,6 @@ tr.grupa-model td { border-top: 2px solid var(--text); background: color-mix(in 
 tr.grupa-model.pliabil { cursor: pointer; }
 tr.grupa-model.pliabil td:first-child::before { content: '▸'; display: inline-block; width: 1.1em; color: var(--slab); }
 tr.grupa-model.pliabil.deschis td:first-child::before { content: '▾'; }
+tr.tip-rand td { font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: var(--slab); padding-top: .8rem; }
+details.de-trimis { margin: .35rem 0; }
+details.de-trimis summary { cursor: pointer; }

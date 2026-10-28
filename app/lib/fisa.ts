@@ -68,7 +68,6 @@ export type ComponentaFisa = {
   unitate: string;
   consum: string;
   principal: boolean;
-  se_croieste: boolean;
   furnizor: string | null;
   cod: string | null;
   material_id: string | null;
@@ -106,7 +105,7 @@ export async function fisa(id: string): Promise<Fisa | null> {
         ORDER BY ordine`, [d.de_la, d.pana_la]);
     const { rows: comp } = await c.query<Omit<ComponentaFisa, 'culori'>>(
       `SELECT fc.id, fc.ordine, fc.nume, fc.tip::text AS tip, fc.unitate::text AS unitate, fc.consum::text AS consum,
-              fc.principal, fc.se_croieste, fc.furnizor, fc.cod, fc.material_id, m.denumire AS material,
+              fc.principal, fc.furnizor, fc.cod, fc.material_id, m.denumire AS material,
               coalesce(fc.pret, m.pret_referinta)::text AS pret
          FROM fisa_componenta fc LEFT JOIN material m ON m.id = fc.material_id
         WHERE fc.dezvoltare_id = $1 ORDER BY fc.tip, fc.ordine`, [id]);
@@ -160,7 +159,6 @@ export type ComponentaNoua = {
   unitate: string;
   consum: number;
   principal: boolean;
-  seCroieste: boolean;
   furnizor: string;
   cod: string;
   materialId: string;
@@ -181,18 +179,18 @@ export async function salveazaComponenta(dezvoltareId: string, x: ComponentaNoua
       }
       // O singură stofă principală pe fișă.
       if (x.principal) await c.query(`UPDATE fisa_componenta SET principal = false WHERE dezvoltare_id = $1`, [dezvoltareId]);
-      const v = [dezvoltareId, x.nume.trim(), x.tip, x.unitate, x.consum, x.principal, x.seCroieste && x.tip === 'materie_prima',
+      const v = [dezvoltareId, x.nume.trim(), x.tip, x.unitate, x.consum, x.principal && x.tip === 'materie_prima',
         x.furnizor.trim() || null, x.cod.trim() || null, x.materialId || null, x.pret];
       if (x.id) {
         await c.query(
-          `UPDATE fisa_componenta SET nume = $2, tip = $3, unitate = $4, consum = $5, principal = $6, se_croieste = $7,
-                  furnizor = $8, cod = $9, material_id = $10, pret = $11
-            WHERE id = $12 AND dezvoltare_id = $1`, [...v, x.id]);
+          `UPDATE fisa_componenta SET nume = $2, tip = $3, unitate = $4, consum = $5, principal = $6,
+                  furnizor = $7, cod = $8, material_id = $9, pret = $10
+            WHERE id = $11 AND dezvoltare_id = $1`, [...v, x.id]);
       } else {
         await c.query(
-          `INSERT INTO fisa_componenta (firma_id, dezvoltare_id, nume, tip, unitate, consum, principal, se_croieste,
+          `INSERT INTO fisa_componenta (firma_id, dezvoltare_id, nume, tip, unitate, consum, principal,
                                         furnizor, cod, material_id, pret, ordine)
-           VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+           VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                    (SELECT coalesce(max(ordine), 0) + 1 FROM fisa_componenta WHERE dezvoltare_id = $1))`, v);
       }
       return null;
@@ -254,18 +252,18 @@ export async function fisaInReteta(
   c: PoolClient, dezvoltareId: string, modelId: string, produse: { culoare: string; produs_id: string }[],
 ): Promise<void> {
   const { rows: comp } = await c.query<{ id: string; nume: string; tip: string; unitate: string; consum: string;
-    principal: boolean; se_croieste: boolean; furnizor: string | null; cod: string | null; material_id: string | null; pret: string | null }>(
-    `SELECT id, nume, tip::text, unitate::text, consum::text, principal, se_croieste, furnizor, cod, material_id, pret::text
+    principal: boolean; furnizor: string | null; cod: string | null; material_id: string | null; pret: string | null }>(
+    `SELECT id, nume, tip::text, unitate::text, consum::text, principal, furnizor, cod, material_id, pret::text
        FROM fisa_componenta WHERE dezvoltare_id = $1 ORDER BY tip, ordine`, [dezvoltareId]);
   let ordine = 0;
   for (const fc of comp) {
     const { rows: [mc] } = await c.query<{ id: string }>(
-      `INSERT INTO model_componenta (firma_id, model_id, nume, tip, unitate, consum, ordine, principal, se_croieste)
-       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO model_componenta (firma_id, model_id, nume, tip, unitate, consum, ordine, principal)
+       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (model_id, nume) DO UPDATE
-          SET consum = EXCLUDED.consum, principal = EXCLUDED.principal, se_croieste = EXCLUDED.se_croieste
+          SET consum = EXCLUDED.consum, principal = EXCLUDED.principal
        RETURNING id`,
-      [modelId, fc.nume.toUpperCase(), fc.tip, fc.unitate, fc.consum, ++ordine, fc.principal, fc.se_croieste]);
+      [modelId, fc.nume.toUpperCase(), fc.tip, fc.unitate, fc.consum, ++ordine, fc.principal]);
     for (const p of produse) {
       const { rows: [pc] } = await c.query<{ material_id: string | null; cod: string | null; denumire: string | null; pret: string | null }>(
         `SELECT material_id, cod, denumire, pret::text FROM fisa_culoare_material WHERE componenta_id = $1 AND culoare = $2`,
