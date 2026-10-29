@@ -110,3 +110,9 @@ tr.grupa-model.pliabil.deschis td:first-child::before { content: '▾'; }
 tr.tip-rand td { font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: var(--slab); padding-top: .8rem; }
 details.de-trimis { margin: .35rem 0; }
 details.de-trimis summary { cursor: pointer; }
+.cauta-material { position: relative; display: inline-flex; gap: .25rem; align-items: center; min-width: 16rem; }
+.cauta-material input:not([type=hidden]) { width: 100%; }
+.lista-cauta { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 22rem; max-height: 18rem; overflow: auto; margin: .15rem 0 0; padding: 0;
+  list-style: none; background: var(--fundal); border: 1px solid var(--linie); border-radius: .35rem; box-shadow: 0 4px 14px rgb(0 0 0 / .25); }
+.lista-cauta li { padding: .35rem .6rem; cursor: pointer; font-size: .85rem; }
+.lista-cauta li.activ { background: color-mix(in srgb, var(--linie) 60%, transparent); }

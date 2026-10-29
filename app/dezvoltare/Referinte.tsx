@@ -1,9 +1,13 @@
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { adaugaReferinta, referinte, stergeReferinta } from '../lib/fisa';
 import { cere } from '../lib/sesiune';
 
-const inapoi = (id: string, e?: string | null): never =>
+// O redirecționare pe aceeași adresă, cu altă ancoră, nu reîncarcă pagina: o cerem explicit.
+const inapoi = (id: string, e?: string | null): never => {
+  revalidatePath(`/dezvoltare/${id}`);
   redirect(`/dezvoltare/${id}${e ? `?eroare=${encodeURIComponent(e)}` : ''}#referinte`);
+};
 
 /**
  * Referințele cererii de tipar: linkuri de Drive (clipuri, foldere), observații,

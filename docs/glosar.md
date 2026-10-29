@@ -138,6 +138,7 @@ A model in development: pattern to make, sample, approval. Replaces the Situatie
 | `creat_de` | Created by |
 | `creat_la` | Created at |
 | `manopera` | Labour cost per piece, on the product sheet |
+| `timp_min_buc` | Working time per piece, in minutes, on the product sheet |
 
 ## `dezvoltare_pas`
 
@@ -423,6 +424,7 @@ Garment model, shared by all its colours: Trening Echo. The recipe belongs here,
 | `denumire` | Model name |
 | `activ` | Active |
 | `creat_la` | Created at |
+| `timp_min_buc` | Working time per piece, in minutes: the basis for the line time estimate |
 
 ## `model_componenta`
 

@@ -1,17 +1,23 @@
 import Link from 'next/link';
+import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import {
-  cost, fisa, materialPeCuloare, salveazaComponenta, salveazaManopera, salveazaMasuri, stergeComponentaFisa,
+  cost, fisa, materialNou, materialPeCuloare, pretPeCuloare, salveazaComponenta, salveazaManopera, salveazaMasuri, stergeComponentaFisa,
   type ComponentaFisa, type Fisa,
 } from '../../../lib/fisa';
+import { Fragment } from 'react';
+import CautaMaterial from '../../../CautaMaterial';
 import { numarDinFormular } from '../../../lib/format';
 import { cere, poateModifica } from '../../../lib/sesiune';
 import '../../../formulare.css';
 
 export const dynamic = 'force-dynamic';
 
-const inapoi = (id: string, e?: string | null, ancora = ''): never =>
+// O redirecționare pe aceeași adresă, cu altă ancoră, nu reîncarcă pagina: o cerem explicit.
+const inapoi = (id: string, e?: string | null, ancora = ''): never => {
+  revalidatePath(`/dezvoltare/${id}/fisa`);
   redirect(`/dezvoltare/${id}/fisa${e ? `?eroare=${encodeURIComponent(e)}` : ''}${ancora}`);
+};
 const lei = (n: number) => n.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const UNITATI = ['m', 'm2', 'kg', 'buc', 'set'];
 const MASURI_IMPLICITE = ['BUST', 'TALIE', 'ȘOLD', 'LUNGIME'];
@@ -76,8 +82,17 @@ export default async function FisaPagina({
   async function manopera(date: FormData) {
     'use server';
     await cere('dezvoltare', 'modifica');
-    const v = String(date.get('manopera') ?? '').trim();
-    inapoi(id, await salveazaManopera(id, v ? numarDinFormular(v) ?? -1 : null), '#cost');
+    const v = (k: string) => { const x = String(date.get(k) ?? '').trim(); return x ? numarDinFormular(x) ?? -1 : null; };
+    inapoi(id, await salveazaManopera(id, v('manopera'), v('timp')), '#cost');
+  }
+  async function materialNomenclator(date: FormData) {
+    'use server';
+    await cere('dezvoltare', 'modifica');
+    const s = (k: string) => String(date.get(k) ?? '');
+    inapoi(id, await materialNou({
+      tip: s('tip'), cod: s('cod'), denumire: s('denumire'), culoare: s('culoare'), unitate: s('unitate'),
+      furnizor: s('furnizor'), pret: s('pret').trim() ? numarDinFormular(s('pret')) ?? -1 : null,
+    }), '#componente');
   }
 
   const masuriRanduri = f.masuri.length ? [...f.masuri, { id: 'nou1', nume: '', valori: {} }]
@@ -111,7 +126,7 @@ export default async function FisaPagina({
 
       <section id="componente">
         {(['materie_prima', 'accesoriu'] as const).map((tip) => (
-          <Fragmente key={tip} tip={tip} f={f} m={m} salveaza={componenta} sterge={sterge} />
+          <Fragmente key={tip} tip={tip} f={f} m={m} salveaza={componenta} sterge={sterge} material={materialNomenclator} />
         ))}
       </section>
 
@@ -141,7 +156,9 @@ export default async function FisaPagina({
         <h2>Cost pe bucată</h2>
         <form action={manopera} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
           <label><span>Manoperă pe bucată (lei)</span><input name="manopera" defaultValue={d.manopera ? Number(d.manopera) : ''} inputMode="decimal" /></label>
-          <div className="actiuni"><button className="secundar">Salvează manopera</button></div>
+          <label><span>Timp de lucru pe bucată (minute)</span><input name="timp" defaultValue={d.timp_min_buc ? Number(d.timp_min_buc) : ''} inputMode="decimal" /></label>
+          <div className="actiuni"><button className="secundar">Salvează</button></div>
+          <p className="slab lat">Timpul pe bucată trece pe model la aprobare și din el se socotește cât stă o tranșă pe bandă.</p>
         </fieldset></form>
         <table>
           <thead><tr><th>Culoare</th><th className="nr">Materii prime</th><th className="nr">Accesorii</th><th className="nr">Manoperă</th><th className="nr">Total</th><th /></tr></thead>
@@ -166,13 +183,17 @@ export default async function FisaPagina({
   );
 }
 
-/** Materiile prime sau accesoriile fișei: câte un formular pe componentă, plus unul pentru o componentă nouă. */
-function Fragmente({ tip, f, m, salveaza, sterge }: {
+/**
+ * Materiile prime sau accesoriile fișei: un tabel cu ce s-a salvat — componenta,
+ * consumul, furnizorul, materialul fiecărei culori, prețul —, fiecare rând cu
+ * „editează"; dedesubt, o componentă nouă și un material nou în nomenclator.
+ */
+function Fragmente({ tip, f, m, salveaza, sterge, material }: {
   tip: 'materie_prima' | 'accesoriu'; f: Fisa; m: boolean;
-  salveaza: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>;
+  salveaza: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>; material: (d: FormData) => Promise<void>;
 }) {
   const lista = f.componente.filter((c) => c.tip === tip);
-  const materiale = f.materiale.filter((x) => x.tip === tip);
+  const prima = f.dezvoltare.culori[0] ?? '';
   return (
     <>
       <h2>{tip === 'materie_prima' ? 'Materii prime' : 'Accesorii'}</h2>
@@ -181,17 +202,85 @@ function Fragmente({ tip, f, m, salveaza, sterge }: {
           ? 'Ce se întinde și se taie: material de bază 1, 2, contrast 1, 2, căptușeală 1, 2. Consumul e pe bucată.'
           : 'Tot restul: ață, thermo, fermoare, nasturi, balene, etichete, pungi. Consumul e pe bucată.'}
       </p>
-      {lista.map((c) => <Componenta key={c.id} c={c} f={f} m={m} materiale={materiale} salveaza={salveaza} sterge={sterge} />)}
-      <details className="caseta">
-        <summary>Adaugă {tip === 'materie_prima' ? 'o materie primă' : 'un accesoriu'}</summary>
-        <Componenta c={null} tip={tip} f={f} m={m} materiale={materiale} salveaza={salveaza} sterge={sterge} />
-      </details>
+      {lista.length === 0 ? <p className="slab">Nimic adăugat încă.</p> : (
+        <div className="tabel-derulant">
+          <table className="componente-fisa">
+            <thead>
+              <tr><th>Componentă</th><th className="nr">Consum / buc</th><th>Furnizor · cod</th><th>Material, pe culori</th>
+                  <th className="nr">Preț</th><th className="nr">Preț / buc</th></tr>
+            </thead>
+            <tbody>
+              {lista.map((c) => {
+                const pret = pretPeCuloare(c, prima);
+                return (
+                  <Fragment key={c.id}>
+                    <tr>
+                      <td><strong>{c.nume}</strong>{c.principal && <span className="slab"> · principal</span>}</td>
+                      <td className="nr">{Number(c.consum)} {c.unitate}</td>
+                      <td className="slab">{[c.furnizor, c.cod].filter(Boolean).join(' · ') || '—'}</td>
+                      <td>
+                        {c.material ? <span>{c.material} <span className="slab">· toate culorile</span></span>
+                          : f.dezvoltare.culori.map((cul) => {
+                            const x = c.culori.find((y) => y.culoare === cul);
+                            return (
+                              <div key={cul}><span className="slab">{cul}:</span>{' '}
+                                {x ? (x.material ?? `${x.denumire} (nou)`) : <span className="lipsa">fără material</span>}</div>
+                            );
+                          })}
+                      </td>
+                      <td className="nr">{pret === null ? <span className="lipsa">—</span> : lei(pret)}</td>
+                      <td className="nr">{pret === null ? '—' : lei(Number(c.consum) * pret)}</td>
+                    </tr>
+                    {m && (
+                      <tr className="editeaza">
+                        <td colSpan={6}>
+                          <details>
+                            <summary className="slab">editează {c.nume}</summary>
+                            <Componenta c={c} f={f} m={m} salveaza={salveaza} sterge={sterge} />
+                          </details>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {m && (
+        <>
+          <details className="caseta">
+            <summary>Adaugă {tip === 'materie_prima' ? 'o materie primă' : 'un accesoriu'}</summary>
+            <Componenta c={null} tip={tip} f={f} m={m} salveaza={salveaza} sterge={sterge} />
+          </details>
+          <details className="caseta">
+            <summary>Material nou în nomenclator</summary>
+            <form action={material} className="antet-comanda">
+              <input type="hidden" name="tip" value={tip} />
+              <label><span>Denumire</span><input name="denumire" required placeholder={tip === 'materie_prima' ? 'Stofa Damaris' : 'Nasturi mari'} /></label>
+              <label><span>Culoare</span>
+                <input name="culoare" list={`culori-${tip}`} placeholder="ex. Roșu; gol dacă e la fel pe toate" />
+                <datalist id={`culori-${tip}`}>{f.dezvoltare.culori.map((c) => <option key={c} value={c} />)}</datalist>
+              </label>
+              <label><span>Cod</span><input name="cod" placeholder="din denumire, dacă e gol" /></label>
+              <label><span>Unitate</span>
+                <select name="unitate" defaultValue={tip === 'materie_prima' ? 'm' : 'buc'}>{UNITATI.map((u) => <option key={u}>{u}</option>)}</select>
+              </label>
+              <label><span>Furnizor</span><input name="furnizor" /></label>
+              <label><span>Preț / unitate (lei)</span><input name="pret" inputMode="decimal" className="bucati" /></label>
+              <div className="actiuni"><button className="secundar">Adaugă în nomenclator</button></div>
+              <p className="slab lat">Apoi se alege, scriind, în componentă sau la culoarea ei.</p>
+            </form>
+          </details>
+        </>
+      )}
     </>
   );
 }
 
-function Componenta({ c, tip, f, m, materiale, salveaza, sterge }: {
-  c: ComponentaFisa | null; tip?: string; f: Fisa; m: boolean; materiale: Fisa['materiale'];
+function Componenta({ c, tip, f, m, salveaza, sterge }: {
+  c: ComponentaFisa | null; tip?: string; f: Fisa; m: boolean;
   salveaza: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>;
 }) {
   const t = c?.tip ?? tip!;
@@ -212,35 +301,26 @@ function Componenta({ c, tip, f, m, materiale, salveaza, sterge }: {
           <label><span>Furnizor</span><input name="furnizor" defaultValue={c?.furnizor ?? ''} /></label>
           <label><span>Cod furnizor</span><input name="cod" defaultValue={c?.cod ?? ''} /></label>
           <label><span>Preț / unitate (lei)</span><input name="pret" defaultValue={c?.pret ? Number(c.pret) : ''} inputMode="decimal" className="bucati" /></label>
-          <label className="lat"><span>Material din nomenclator (același pe toate culorile)</span>
-            <select name="material" defaultValue={c?.material_id ?? ''}>
-              <option value="">— diferă pe culori, sau nou —</option>
-              {materiale.map((x) => <option key={x.id} value={x.id}>{x.denumire} · {x.cod} ({x.unitate})</option>)}
-            </select>
+          <label className="lat"><span>Material din nomenclator, dacă e același pe toate culorile (altfel, gol)</span>
+            <CautaMaterial nume="material" tip={t} ales={c?.material_id ? { id: c.material_id, denumire: c.material ?? '' } : null} />
           </label>
           {t === 'materie_prima' && (
-            <>
-              <label className="bifa-linie"><input type="checkbox" name="principal" value="1" defaultChecked={c?.principal} /> material de bază principal</label>
-            </>
+            <label className="bifa-linie"><input type="checkbox" name="principal" value="1" defaultChecked={c?.principal} /> material de bază principal</label>
           )}
         </div>
         {c && f.dezvoltare.culori.length > 0 && !c.material_id && (
           <table className="grila">
-            <thead><tr><th>Culoare</th><th>Material din nomenclator</th><th>sau cod nou</th><th>denumire nouă</th><th>Preț</th></tr></thead>
+            <thead><tr><th>Culoare</th><th>Material din nomenclator</th><th>sau denumire nouă</th><th>cod nou</th><th>Preț</th></tr></thead>
             <tbody>
               {f.dezvoltare.culori.map((cul) => {
                 const x = c.culori.find((y) => y.culoare === cul);
                 return (
                   <tr key={cul}>
                     <td>{cul}<input type="hidden" name="culoare" value={cul} /></td>
-                    <td>
-                      <select name={`material:${cul}`} defaultValue={x?.material_id ?? ''}>
-                        <option value="">—</option>
-                        {materiale.map((y) => <option key={y.id} value={y.id}>{y.denumire} · {y.cod}</option>)}
-                      </select>
-                    </td>
-                    <td><input name={`cod:${cul}`} defaultValue={x?.material_id ? '' : x?.cod ?? ''} className="bucati" /></td>
+                    <td><CautaMaterial nume={`material:${cul}`} tip={t} eticheta={`Material ${cul}`}
+                          ales={x?.material_id ? { id: x.material_id, denumire: x.material ?? '' } : null} placeholder={`ex. ${c.nume} ${cul}`} /></td>
                     <td><input name={`denumire:${cul}`} defaultValue={x?.denumire ?? ''} placeholder={`${c.nume} ${cul}`} /></td>
+                    <td><input name={`cod:${cul}`} defaultValue={x?.material_id ? '' : x?.cod ?? ''} className="bucati" /></td>
                     <td><input name={`pret:${cul}`} defaultValue={x?.pret ? Number(x.pret) : ''} inputMode="decimal" className="bucati" /></td>
                   </tr>
                 );
@@ -248,6 +328,7 @@ function Componenta({ c, tip, f, m, materiale, salveaza, sterge }: {
             </tbody>
           </table>
         )}
+        {!c && <p className="slab">După „Adaugă", componenta apare în tabelul de sus; acolo, la „editează”, se alege materialul fiecărei culori.</p>}
         <div className="actiuni"><button className={c ? 'secundar' : 'principal'}>{c ? 'Salvează' : 'Adaugă'}</button></div>
       </fieldset></form>
       {c && m && (

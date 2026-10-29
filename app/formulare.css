@@ -145,3 +145,5 @@
 .referinte li { margin: .25rem 0; }
 .componenta-fisa { border-top: 1px solid var(--linie); padding: .5rem 0 .75rem; }
 .fara-poza { width: 9rem; height: 12rem; border: 1px dashed var(--linie); border-radius: .35rem; display: flex; align-items: center; justify-content: center; color: var(--slab); font-size: .8rem; }
+.componente-fisa tr.editeaza td { border-bottom: 1px solid var(--linie); padding-top: 0; }
+.componente-fisa tr:not(.editeaza) td { border-bottom: 0; }

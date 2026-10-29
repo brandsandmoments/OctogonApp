@@ -32,7 +32,7 @@ export type Sectiune = keyof typeof SECTIUNI;
 export type RandDezvoltare = {
   id: string; model: string; brand: string; categorie: string | null; culori: string[]; tip: string;
   prioritate: number; termen: string | null; intarziat: boolean; kam: string | null; stare: string;
-  ultimul_pas_la: string | null; marimi: string | null; fisa_gata: boolean;
+  ultimul_pas_la: string | null; marimi: string | null; fisa_gata: boolean; cerut_la: string;
 };
 
 const SELECT = `
@@ -41,7 +41,8 @@ const SELECT = `
          d.termen < CURRENT_DATE AND s.stare NOT IN ('aprobat', 'anulat', 'mostra_gata') AS intarziat,
          u.nume AS kam, s.stare, to_char(s.ultimul_pas_la, 'YYYY-MM-DD') AS ultimul_pas_la,
          CASE WHEN d.marime_de_la IS NOT NULL THEN m1.cod || ' – ' || m2.cod END AS marimi,
-         coalesce(s.fisa_gata, false) AS fisa_gata
+         coalesce(s.fisa_gata, false) AS fisa_gata,
+         to_char(d.creat_la AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD') AS cerut_la
     FROM dezvoltare d
     JOIN dezvoltare_stare s ON s.dezvoltare_id = d.id
     JOIN brand b ON b.id = d.brand_id
@@ -53,7 +54,7 @@ const SELECT = `
 export async function lista(sectiune: Sectiune): Promise<RandDezvoltare[]> {
   return interogare<RandDezvoltare>(
     `${SELECT} WHERE s.stare = ANY($1)
-      ORDER BY d.prioritate, d.termen NULLS LAST, b.nume, d.model`, [[...SECTIUNI[sectiune].stari]]);
+      ORDER BY d.creat_la DESC, d.model`, [[...SECTIUNI[sectiune].stari]]);
 }
 
 export async function numarePeSectiuni(): Promise<Record<string, number>> {

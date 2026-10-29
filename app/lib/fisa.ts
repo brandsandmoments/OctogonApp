@@ -79,18 +79,17 @@ export type ComponentaFisa = {
 
 export type Fisa = {
   dezvoltare: { id: string; model: string; brand: string; categorie: string | null; culori: string[];
-                manopera: string | null; stare: string; model_id: string | null };
+                manopera: string | null; timp_min_buc: string | null; stare: string; model_id: string | null };
   marimi: string[];
   componente: ComponentaFisa[];
   masuri: { id: string; nume: string; valori: Record<string, string> }[];
   poze: { id: string; culoare: string | null; text: string | null }[];
-  materiale: { id: string; cod: string; denumire: string; tip: string; unitate: string; pret: string | null }[];
 };
 
 export async function fisa(id: string): Promise<Fisa | null> {
   return caFirma(firmaCurenta(), async (c) => {
     const { rows: [d] } = await c.query<Fisa['dezvoltare'] & { de_la: number | null; pana_la: number | null }>(
-      `SELECT d.id, d.model, b.nume AS brand, ca.nume AS categorie, d.culori, d.manopera::text AS manopera,
+      `SELECT d.id, d.model, b.nume AS brand, ca.nume AS categorie, d.culori, d.manopera::text AS manopera, d.timp_min_buc::text AS timp_min_buc,
               s.stare, d.model_id, md.ordine AS de_la, mp.ordine AS pana_la
          FROM dezvoltare d
          JOIN brand b ON b.id = d.brand_id
@@ -120,15 +119,12 @@ export async function fisa(id: string): Promise<Fisa | null> {
       `SELECT id, nume, valori FROM fisa_masura WHERE dezvoltare_id = $1 ORDER BY ordine`, [id]);
     const { rows: poze } = await c.query<Fisa['poze'][number]>(
       `SELECT id, culoare, text FROM dezvoltare_referinta WHERE dezvoltare_id = $1 AND tip = 'poza' ORDER BY creat_la`, [id]);
-    const { rows: materiale } = await c.query<Fisa['materiale'][number]>(
-      `SELECT id, cod, denumire, tip::text AS tip, unitate::text AS unitate, pret_referinta::text AS pret
-         FROM material WHERE activ ORDER BY denumire`);
     const { de_la: _a, pana_la: _b, ...dez } = d;
     return {
       dezvoltare: dez,
       marimi: marimi.map((m) => m.cod),
       componente: comp.map((x) => ({ ...x, culori: cul.filter((y) => y.componenta_id === x.id) })),
-      masuri, poze, materiale,
+      masuri, poze,
     };
   });
 }
@@ -235,9 +231,11 @@ export async function salveazaMasuri(dezvoltareId: string, masuri: { nume: strin
   });
 }
 
-export async function salveazaManopera(dezvoltareId: string, manopera: number | null): Promise<string | null> {
+/** Manopera pe bucată și timpul de lucru pe bucată (minute), care trece pe model la aprobare. */
+export async function salveazaManopera(dezvoltareId: string, manopera: number | null, timp: number | null): Promise<string | null> {
   if (manopera !== null && !(manopera >= 0)) return 'Manopera nu e un număr valid.';
-  await interogare(`UPDATE dezvoltare SET manopera = $2 WHERE id = $1`, [dezvoltareId, manopera]);
+  if (timp !== null && !(timp > 0)) return 'Timpul pe bucată nu e un număr valid.';
+  await interogare(`UPDATE dezvoltare SET manopera = $2, timp_min_buc = $3 WHERE id = $1`, [dezvoltareId, manopera, timp]);
   return null;
 }
 
@@ -255,6 +253,9 @@ export async function fisaInReteta(
     principal: boolean; furnizor: string | null; cod: string | null; material_id: string | null; pret: string | null }>(
     `SELECT id, nume, tip::text, unitate::text, consum::text, principal, furnizor, cod, material_id, pret::text
        FROM fisa_componenta WHERE dezvoltare_id = $1 ORDER BY tip, ordine`, [dezvoltareId]);
+  await c.query(
+    `UPDATE model SET timp_min_buc = coalesce((SELECT timp_min_buc FROM dezvoltare WHERE id = $1), timp_min_buc) WHERE id = $2`,
+    [dezvoltareId, modelId]);
   let ordine = 0;
   for (const fc of comp) {
     const { rows: [mc] } = await c.query<{ id: string }>(
@@ -285,5 +286,39 @@ export async function fisaInReteta(
          ON CONFLICT (produs_id, componenta_id) DO UPDATE SET material_id = EXCLUDED.material_id`,
         [p.produs_id, modelId, mc.id, material, fc.tip, fc.unitate]);
     }
+  }
+}
+
+/**
+ * Material nou în nomenclator, scris din fișă: cod, denumire, culoare, unitate,
+ * furnizor și preț. Codul, dacă lipsește, se face din denumire.
+ */
+export async function materialNou(d: {
+  tip: string; cod: string; denumire: string; culoare: string; unitate: string; furnizor: string; pret: number | null;
+}): Promise<string | null> {
+  if (!d.denumire.trim()) return 'Scrie denumirea materialului.';
+  if (d.pret !== null && !(d.pret >= 0)) return 'Prețul nu e un număr valid.';
+  const den = (d.culoare.trim() ? `${d.denumire.trim()} · ${d.culoare.trim()}` : d.denumire.trim()).toUpperCase();
+  const cod = (d.cod.trim() || den).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  try {
+    await caFirma(firmaCurenta(), async (c) => {
+      let culoare: string | null = null;
+      if (d.culoare.trim()) {
+        const { rows: [cu] } = await c.query<{ id: string }>(
+          `WITH gasita AS (SELECT id FROM culoare WHERE lower(nume) = lower($1) LIMIT 1),
+                noua AS (INSERT INTO culoare (firma_id, nume) SELECT firma_curenta(), $1
+                          WHERE NOT EXISTS (SELECT 1 FROM gasita) RETURNING id)
+           SELECT id FROM gasita UNION ALL SELECT id FROM noua`, [d.culoare.trim()]);
+        culoare = cu.id;
+      }
+      await c.query(
+        `INSERT INTO material (firma_id, tip, cod, denumire, culoare_id, unitate, furnizor, pret_referinta)
+         VALUES (firma_curenta(), $1, $2, $3, $4, $5, nullif($6, ''), $7)`,
+        [d.tip, cod, den, culoare, d.unitate, d.furnizor.trim(), d.pret]);
+    });
+    return null;
+  } catch (e) {
+    if ((e as { code?: string }).code === '23505') return `Codul ${cod} există deja în nomenclator.`;
+    throw e;
   }
 }

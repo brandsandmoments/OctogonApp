@@ -28,6 +28,7 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
 | `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
 | `db/migrations/0015_taiere.sql` | taierea: mai multe PSF și PSC pe același model, tăiate împreună |
+| `db/migrations/0020_timp_pe_bucata.sql` | timpul de lucru pe bucată, din fișa de produs, pe model |
 | `db/migrations/0019_material_pe_culoare.sql` | un material pe fiecare culoare: stofa roșie și cea ivoire au stoc și necesar separat |
 | `db/migrations/0018_materie_prima_doar_stofa.sql` | materie primă = stofă și căptușeală, restul accesorii; fără pierderi; bifa „avem materialul” |
 | `db/migrations/0017_fisa_de_produs.sql` | referințele cererii de tipar (linkuri, observații, poze) și fișa de produs |
@@ -369,6 +370,9 @@ denumire propuse și modificabile, gata de rețetă.
 npm run import:tipare -- situatie_tipare.xlsx
 ```
 
+Cererile se văd în ordinea în care au fost făcute, cu data cererii și termenul.
+Pozele și un link de Drive se pot pune chiar la cerere.
+
 **Referințele cererii**: linkuri de Drive (clipuri, foldere), observații și poze.
 Pozele stau în aplicație (până la 8 MB fiecare); o poză cu o culoare aleasă e poza
 produsului în culoarea aceea și intră în fișa de produs. Clipurile rămân pe Drive.
@@ -377,7 +381,11 @@ produsului în culoarea aceea și intră în fișa de produs. Clipurile rămân 
 master, ca „Palton Eloria.xlsx": materiile prime (material de bază 1, 2, contrast,
 căptușeală…) și accesoriile, fiecare cu furnizor, cod, consum pe bucată și preț;
 materialul fiecărei culori, din nomenclator sau unul nou; tabelul de dimensiuni;
-manopera pe bucată. Costul pe bucată, pe culoare, se calculează. Fișa se descarcă
+manopera și **timpul de lucru pe bucată** (trece pe model, pentru estimarea benzii).
+Materialul se caută scriind („tafta negru"); unul nou intră în nomenclator direct
+din fișă, cu culoare, furnizor și preț. Componentele salvate stau într-un tabel —
+componenta, consumul, furnizorul, materialul fiecărei culori, prețul —, fiecare cu
+„editează". Costul pe bucată, pe culoare, se calculează. Fișa se descarcă
 în **Excel** (cu pozele și formulele) sau se tipărește / salvează ca **PDF**. La
 aprobarea mostrei, fișa devine **rețeta modelului**: componentele, consumurile și
 materialul fiecărei culori; materialele noi intră în nomenclator.

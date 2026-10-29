@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { poate } from '../lib/acces';
 import { creeaza, lista, nomenclatoare, numarePeSectiuni, SECTIUNI, STARI, TIPURI, type Sectiune } from '../lib/dezvoltare';
+import { adaugaReferinta } from '../lib/fisa';
 import { cere } from '../lib/sesiune';
 import CampuriCerere, { cerereDinFormular } from './CampuriCerere';
 import '../formulare.css';
@@ -13,6 +14,16 @@ async function cerereNoua(f: FormData) {
   await cere(['dezvoltare', 'comenzi'], 'vede'); // dreptul exact îl verifică creeaza()
   const r = await creeaza(cerereDinFormular(f));
   if ('eroare' in r) redirect(`/dezvoltare?eroare=${encodeURIComponent(r.eroare)}`);
+  // Pozele de referință, încărcate odată cu cererea; culoarea li se pune apoi, din referințe.
+  for (const fisier of f.getAll('poza')) {
+    if (!(fisier instanceof File) || fisier.size === 0) continue;
+    const e = await adaugaReferinta(r.id, {
+      tip: 'poza', fisier: Buffer.from(await fisier.arrayBuffer()), mime: fisier.type, text: '', culoare: '',
+    });
+    if (e) redirect(`/dezvoltare/${r.id}?eroare=${encodeURIComponent(`${fisier.name}: ${e}`)}#referinte`);
+  }
+  const link = String(f.get('link_referinta') ?? '').trim();
+  if (link) await adaugaReferinta(r.id, { tip: 'link', url: link, text: 'referință' });
   redirect(`/dezvoltare/${r.id}`);
 }
 
@@ -47,6 +58,8 @@ export default async function Dezvoltare({ searchParams }: { searchParams: Promi
           <summary>Cerere nouă de tipar</summary>
           <form action={cerereNoua} className="antet-comanda">
             <CampuriCerere nom={nom} />
+            <label><span>Poze cu produsul (până la 8 MB fiecare)</span><input name="poza" type="file" accept="image/*" multiple /></label>
+            <label><span>Link de Drive (clip, folder)</span><input name="link_referinta" type="url" placeholder="https://drive.google.com/…" /></label>
             <div className="actiuni"><button className="principal">Trimite cererea</button></div>
           </form>
         </details>
@@ -57,7 +70,7 @@ export default async function Dezvoltare({ searchParams }: { searchParams: Promi
           <table className="centralizator">
             <thead>
               <tr><th>Model</th><th>Brand</th><th>Categorie</th><th>Culori</th><th>Tip</th><th>Prioritate</th>
-                  <th>Termen</th><th>KAM</th><th>Stare</th></tr>
+                  <th>Cerută la</th><th>Termen</th><th>KAM</th><th>Stare</th></tr>
             </thead>
             <tbody>
               {randuri.map((r) => (
@@ -68,6 +81,7 @@ export default async function Dezvoltare({ searchParams }: { searchParams: Promi
                   <td className="culori-celula">{r.culori.join(', ')}</td>
                   <td className="slab">{TIPURI[r.tip]}</td>
                   <td>{r.prioritate === 1 ? <strong>Urgent</strong> : PRIORITATE[r.prioritate]}</td>
+                  <td className="slab">{r.cerut_la}</td>
                   <td className={r.intarziat ? 'lipsa' : 'slab'}>{r.termen ?? '—'}{r.intarziat && ' · depășit'}</td>
                   <td className="slab">{r.kam ?? '—'}</td>
                   <td>{STARI[r.stare]}{r.fisa_gata && <span className="slab"> · fișă</span>}</td>
