@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { esteAdmin } from '../../lib/acces';
 import { cere } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { numarDinFormular } from '../../lib/format';
@@ -13,7 +14,8 @@ export default async function PlanificareNoua({
 }: {
   searchParams: Promise<{ linie?: string; eroare?: string }>;
 }) {
-  await cere('planificare', 'modifica');
+  const u = await cere('planificare', 'modifica');
+  const master = esteAdmin(u);
   const { linie: linieId, eroare } = await searchParams;
   if (!linieId) notFound();
   const d = await liniePentruPlanificare(linieId);
@@ -22,12 +24,12 @@ export default async function PlanificareNoua({
 
   async function salveaza(date: FormData) {
     'use server';
-    await cere('planificare', 'modifica');
+    const eu = await cere('planificare', 'modifica');
     const cantitati = new Map(
       [...date.entries()].filter(([k]) => k.startsWith('q:'))
         .map(([k, v]) => [k.slice(2), numarDinFormular(v) ?? 0]),
     );
-    const r = await creeazaPlanificare(linieId!, cantitati, String(date.get('observatii') ?? ''));
+    const r = await creeazaPlanificare(linieId!, cantitati, String(date.get('observatii') ?? ''), esteAdmin(eu));
     if ('eroare' in r) redirect(`/planificare/nou?linie=${linieId}&eroare=${encodeURIComponent(r.eroare)}`);
     redirect(`/planificare/${r.id}`);
   }
@@ -54,7 +56,7 @@ export default async function PlanificareNoua({
                   <td className="nr">
                     {/* Propunerea e tot restul; planificatorul scade ce nu intră acum. */}
                     <input name={`q:${m.marime_id}`} defaultValue={m.rest || ''} inputMode="numeric"
-                      className="bucati" disabled={m.rest === 0} aria-label={`Planifică ${m.marime}`} />
+                      className="bucati" disabled={m.rest === 0 && !master} aria-label={`Planifică ${m.marime}`} />
                   </td>
                 </tr>
               ))}

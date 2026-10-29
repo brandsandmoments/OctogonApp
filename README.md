@@ -28,6 +28,7 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
 | `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
 | `db/migrations/0015_taiere.sql` | taierea: mai multe PSF și PSC pe același model, tăiate împreună |
+| `db/migrations/0021_numerotare_lunara.sql` | numere date de aplicație, pe lună: psf-ms-26-noi-1, t-26-noi-12 |
 | `db/migrations/0020_timp_pe_bucata.sql` | timpul de lucru pe bucată, din fișa de produs, pe model |
 | `db/migrations/0019_material_pe_culoare.sql` | un material pe fiecare culoare: stofa roșie și cea ivoire au stoc și necesar separat |
 | `db/migrations/0018_materie_prima_doar_stofa.sql` | materie primă = stofă și căptușeală, restul accesorii; fără pierderi; bifa „avem materialul” |
@@ -202,6 +203,17 @@ coala unei comenzi reale au fost extrase din HTML, randate ca imagini și citite
 înapoi cu un cititor de coduri de bare. Așa s-a descoperit și că fără zona liberă
 din jurul codului nu se citește niciunul.
 
+## Numere, căutare, motive
+
+**Numerele le dă aplicația**, pe lună: comenzile `psf-ms-26-noi-1` (tip, codul
+brandului, anul, luna, nr. de ordine pe tip și brand), taierile `t-26-noi-12`; de
+la 1 în fiecare lună. Fiecare listă are o **bară de căutare** pe cuvinte, fără
+diacritice („sophie neg"). La stingerea unei comenzi (în croit sau în depozit),
+**motivul se alege din listă sau se scrie liber**; un motiv scris de mână se ține
+sub „Altele", cu vorbele omului în observații. Peste cantitatea din PSF sau PSC
+**planifică doar un cont master**; în croit, o taiere nu poate cere mai mult decât
+a rămas.
+
 ## Rețete și necesar
 
 Rețeta e a **modelului**, nu a produsului. „Trening Echo" consumă la fel în roșu,
@@ -285,16 +297,17 @@ tot îl cere. Rezervarea ei de material se eliberează.
 
 Un lot croit intră pe bandă în una sau mai multe tranșe (`psf-ms-sep-1/P1/C1/B1`,
 `/B2`) — niciodată mai mult decât s-a croit. **Accesoriile ies din depozit aici**,
-nu la croit; până atunci rămân rezervate, deci rezervarea lor ține cât lotul e
-croit și încă neintrat pe bandă.
+singure, fără să le mai treacă cineva; până atunci rămân rezervate.
 
 O tranșă trece prin intrare în producție, ieșire din producție, CTC și predare
 la depozit, fiecare cu ora ei. Ordinea o păzește baza: nu iese din producție ce
 n-a intrat.
 
-**Data estimată în depozit**, ca în dashboard: ore-om = bucăți × minute pe bucată
-÷ 60; zile = ore-om ÷ (persoane × ore pe zi), rotunjit în sus, de la intrarea în
-producție. Orele pe zi sunt un parametru al firmei (8). Fără persoane sau minute
+La alimentare se trec operatorii care lucrează la produs și câți sunt. Minutele pe
+bucată vin din fișa de produs a modelului. **Orele de lucru** = bucăți × minute pe
+bucată ÷ 60, cu +20% sub 50 de bucăți și −15% peste 200; **data estimată în
+depozit** = ore ÷ (operatori × ore pe zi), rotunjit în sus, de la intrarea în
+producție. Orele pe zi sunt un parametru al firmei (8). Fără operatori sau minute
 pe bucată nu se estimează nimic — o dată inventată e mai rea decât niciuna.
 
 ## Conturi și roluri

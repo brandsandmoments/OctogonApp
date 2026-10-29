@@ -10,3 +10,13 @@ export function numarDinFormular(v: FormDataEntryValue | null): number | null {
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
 }
+
+const simplu = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Caută pe cuvinte, fără diacritice: „sophie neg" se potrivește cu „Rochie Sophie Negru · psf-ps-26-noi-2". */
+export function potriveste(cauta: string | undefined, ...campuri: (string | null | undefined)[]): boolean {
+  const cuvinte = simplu(cauta ?? '').split(/\s+/).filter(Boolean);
+  if (cuvinte.length === 0) return true;
+  const unde = simplu(campuri.filter(Boolean).join(' '));
+  return cuvinte.every((w) => unde.includes(w));
+}

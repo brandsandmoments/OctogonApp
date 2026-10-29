@@ -38,7 +38,6 @@ export type LinieNoua = {
 };
 
 export type ComandaNoua = {
-  numar: string;
   tip: 'PSF' | 'PSC';
   brandId: string;
   kamId: string;
@@ -65,8 +64,6 @@ export function normalizeazaNumar(brut: string): string {
  * orfan pe care structura asta a fost făcută să nu-l mai permită.
  */
 export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda> {
-  const numar = normalizeazaNumar(cmd.numar);
-  if (!numar) return { ok: false, eroare: 'Scrie numărul comenzii.' };
   if (!cmd.brandId) return { ok: false, eroare: 'Alege brandul.' };
   if (!cmd.dataLansare) return { ok: false, eroare: 'Data lansării e obligatorie.' };
 
@@ -97,6 +94,16 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
 
   try {
     return await caFirma(firmaCurenta(), async (c) => {
+      // Numărul îl dă aplicația: psf-ms-26-noi-4 — tip, brand, anul și luna lansării,
+      // nr. de ordine în luna aceea, pe tip și brand. Blocarea ține pe loc a doua
+      // comandă salvată în aceeași clipă, ca să nu primească același număr.
+      const { rows: [{ prefix }] } = await c.query<{ prefix: string }>(
+        `SELECT lower($1) || '-' || b.cod || '-' || to_char($3::date, 'YY') || '-' || luna_scurta($3::date) || '-' AS prefix
+           FROM brand b WHERE b.id = $2`, [cmd.tip, cmd.brandId, cmd.dataLansare]);
+      await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [prefix]);
+      const { rows: [{ numar }] } = await c.query<{ numar: string }>(
+        `SELECT $1 || (coalesce(max(substr(numar, length($1) + 1)::int), 0) + 1) AS numar
+           FROM comanda WHERE numar LIKE $1 || '%' AND substr(numar, length($1) + 1) ~ '^[0-9]+$'`, [prefix]);
       const { rows: [{ id }] } = await c.query<{ id: string }>(
         `INSERT INTO comanda (firma_id, numar, tip, brand_id, data_lansare, prioritate, stare, observatii, kam_id)
          VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, '')::uuid)
@@ -122,7 +129,7 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
     });
   } catch (e) {
     if ((e as { code?: string }).code === '23505') {
-      return { ok: false, eroare: `Comanda ${numar} există deja.` };
+      return { ok: false, eroare: 'Numărul comenzii s-a ocupat chiar acum. Mai apasă o dată.' };
     }
     throw e;
   }

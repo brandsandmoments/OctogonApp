@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
+import Cauta from '../Cauta';
 import Grupare from '../Grupare';
+import { potriveste } from '../lib/format';
 import { comenziDepozit, type ComandaDepozit, type VedereDepozit } from '../lib/depozit';
 import { grupareDinAdresa, grupeaza } from '../lib/perioade';
 import { cere } from '../lib/sesiune';
@@ -19,12 +21,13 @@ const VEDERI: [VedereDepozit, string][] = [
  * când se stinge, cu observații. Se grupează pe termen (de stins) sau pe ziua
  * ultimei intrări (finalizate).
  */
-export default async function Depozit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; tip?: string }> }) {
+export default async function Depozit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; tip?: string; cauta?: string }> }) {
   await cere('receptie');
   const f = await searchParams;
   const vedere = (VEDERI.find(([v]) => v === f.vedere)?.[0] ?? 'de_stins') as VedereDepozit;
   const g = grupareDinAdresa(f.grupare);
-  const lista = (await comenziDepozit(vedere)).filter((c) => !f.tip || c.tip === f.tip);
+  const lista = (await comenziDepozit(vedere))
+    .filter((c) => (!f.tip || c.tip === f.tip) && potriveste(f.cauta, c.numar, c.brand, c.kam, c.produse));
   const zi = (c: ComandaDepozit) => (c.finalizata ? c.ultima_intrare ?? c.termen : c.termen);
   const grupe = g ? grupeaza(lista, zi, g) : [{ perioada: null, randuri: lista }];
   const adresa = (v: string) => `/depozit?vedere=${v}${g ? `&grupare=${g}` : ''}${f.tip ? `&tip=${f.tip}` : ''}`;
@@ -36,7 +39,8 @@ export default async function Depozit({ searchParams }: { searchParams: Promise<
         {VEDERI.map(([v, nume]) => <Link key={v} href={adresa(v)} className={v === vedere ? 'activ' : ''}>{nume}</Link>)}
       </nav>
       <div className="filtre">
-        <Grupare ales={g} pastreaza={{ vedere, tip: f.tip }} />
+        <Cauta valoare={f.cauta} pastreaza={{ vedere, tip: f.tip, grupare: f.grupare }} placeholder="caută: comandă, produs, SKU, KAM" />
+        <Grupare ales={g} pastreaza={{ vedere, tip: f.tip, cauta: f.cauta }} />
         <form className="filtre">
           <input type="hidden" name="vedere" value={vedere} />
           {g && <input type="hidden" name="grupare" value={g} />}

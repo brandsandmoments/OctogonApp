@@ -5,6 +5,8 @@ import { creeaza, lista, nomenclatoare, numarePeSectiuni, SECTIUNI, STARI, TIPUR
 import { adaugaReferinta } from '../lib/fisa';
 import { cere } from '../lib/sesiune';
 import CampuriCerere, { cerereDinFormular } from './CampuriCerere';
+import Cauta from '../Cauta';
+import { potriveste } from '../lib/format';
 import '../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -34,11 +36,12 @@ const PRIORITATE: Record<number, string> = { 1: 'Urgent', 2: 'Ridicată', 3: 'No
  * probă, corecturi, tipar gata), mostre gata — care așteaptă aprobarea KAM-ului —
  * și aprobate. Statusul vine din pașii fiecărui model, nu dintr-o coloană scrisă.
  */
-export default async function Dezvoltare({ searchParams }: { searchParams: Promise<{ sectiune?: string; eroare?: string }> }) {
+export default async function Dezvoltare({ searchParams }: { searchParams: Promise<{ sectiune?: string; eroare?: string; cauta?: string }> }) {
   const u = await cere(['dezvoltare', 'comenzi']);
-  const { sectiune: s = 'de_facut', eroare } = await searchParams;
+  const { sectiune: s = 'de_facut', eroare, cauta } = await searchParams;
   const sectiune = (s in SECTIUNI ? s : 'de_facut') as Sectiune;
-  const [randuri, numere, nom] = await Promise.all([lista(sectiune), numarePeSectiuni(), nomenclatoare()]);
+  const [toate, numere, nom] = await Promise.all([lista(sectiune), numarePeSectiuni(), nomenclatoare()]);
+  const randuri = toate.filter((r) => potriveste(cauta, r.model, r.brand, r.categorie, r.kam, ...r.culori));
   const poateCere = poate(u, 'dezvoltare', 'modifica') || poate(u, 'comenzi', 'modifica');
 
   return (
@@ -52,6 +55,7 @@ export default async function Dezvoltare({ searchParams }: { searchParams: Promi
         ))}
       </nav>
       {eroare && <p className="eroare">{eroare}</p>}
+      <Cauta valoare={cauta} pastreaza={{ sectiune }} placeholder="caută: model, brand, culoare, KAM" />
 
       {poateCere && (
         <details className="caseta" open={Boolean(eroare)}>

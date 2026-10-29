@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { caFirma } from './db';
 import { inregistreazaLot, Refuz } from './croit';
+import { motivLiber } from './motive';
 import { incheiePlanificare } from './planificare';
 import { firmaCurenta, interogare } from './sesiune';
 
@@ -98,7 +99,7 @@ export async function ramasDeCroit(planificari?: string[]): Promise<RamasDeCroit
 /** Taierile care încă se pot schimba: niciun lot croit. */
 export async function taieriDeschise(modelCheie: string): Promise<{ id: string; cod: string }[]> {
   return interogare(
-    `SELECT DISTINCT t.id, 'T' || t.numar AS cod, t.numar
+    `SELECT DISTINCT t.id, t.cod AS cod, t.numar
        FROM taiere t
        JOIN lot_croit lc     ON lc.taiere_id = t.id
        JOIN planificare pl   ON pl.id = lc.planificare_id
@@ -112,7 +113,7 @@ export async function taieriDeschise(modelCheie: string): Promise<{ id: string; 
 /** Toate taierile încă necroite, cu modelul lor: unde se mai poate adăuga. */
 export async function taieriDeschiseToate(): Promise<{ id: string; cod: string; model_cheie: string }[]> {
   return interogare(
-    `SELECT DISTINCT ON (t.id) t.id, 'T' || t.numar AS cod, coalesce(p.model_id, p.id)::text AS model_cheie
+    `SELECT DISTINCT ON (t.id) t.id, t.cod AS cod, coalesce(p.model_id, p.id)::text AS model_cheie
        FROM taiere t
        JOIN lot_croit lc     ON lc.taiere_id = t.id
        JOIN planificare pl   ON pl.id = lc.planificare_id
@@ -127,10 +128,15 @@ export type Alocare = { planificareId: string; marimi: Map<string, number> };
 async function taiereNoua(c: PoolClient): Promise<string> {
   // Numărul se ia sub blocare: două taieri simultane ar primi același T.
   await c.query(`LOCK TABLE taiere IN SHARE ROW EXCLUSIVE MODE`);
+  // Codul: t-26-noi-12, numerotat de la 1 în fiecare lună.
   const { rows: [{ id }] } = await c.query<{ id: string }>(
-    `INSERT INTO taiere (firma_id, numar, ordine, trimis_la, trimis_de)
-     VALUES (firma_curenta(), (SELECT coalesce(max(numar), 0) + 1 FROM taiere),
-             (SELECT coalesce(max(ordine), 0) + 1 FROM taiere), now(), utilizator_curent())
+    `WITH p AS (SELECT 't-' || to_char(now(), 'YY') || '-' || luna_scurta(current_date) || '-' AS prefix)
+     INSERT INTO taiere (firma_id, numar, ordine, trimis_la, trimis_de, cod)
+     SELECT firma_curenta(), (SELECT coalesce(max(numar), 0) + 1 FROM taiere),
+            (SELECT coalesce(max(ordine), 0) + 1 FROM taiere), now(), utilizator_curent(),
+            p.prefix || (SELECT coalesce(max(substr(cod, length(p.prefix) + 1)::int), 0) + 1 FROM taiere
+                          WHERE cod LIKE p.prefix || '%' AND substr(cod, length(p.prefix) + 1) ~ '^[0-9]+$')
+       FROM p
      RETURNING id`);
   return id;
 }
@@ -220,10 +226,12 @@ export async function scoateDinTaiere(taiereId: string, lotId: string): Promise<
  * Stinge o comandă din „rămas de croit": ce n-a fost croit nu se mai croiește —
  * n-a ajuns materialul, s-a renunțat la o mărime. Doar cu motiv și observații.
  */
-export async function inchideComanda(planificareId: string, motivId: string | null, observatii: string): Promise<string | null> {
-  if (!motivId) return 'Alege motivul.';
-  if (!observatii.trim()) return 'Scrie observațiile: ce s-a întâmplat.';
-  return caFirma(firmaCurenta(), (c) => incheiePlanificare(c, planificareId, motivId, observatii));
+export async function inchideComanda(planificareId: string, motivText: string, obs: string): Promise<string | null> {
+  if (!motivText.trim()) return 'Scrie motivul: din listă sau cu vorbele tale.';
+  return caFirma(firmaCurenta(), async (c) => {
+    const { motivId, observatii } = (await motivLiber(c, motivText, 'croit', obs))!;
+    return incheiePlanificare(c, planificareId, motivId, observatii);
+  });
 }
 
 // ---------------------------------------------------------------- lista taierilor
@@ -266,7 +274,7 @@ export async function taieriLaCroit(vedere: VedereCroit): Promise<TaiereLaCroit[
            LEFT JOIN model mo    ON mo.id = p.model_id
           WHERE pl.stadiu <> 'anulat'
           GROUP BY lc.taiere_id)
-     SELECT t.id, 'T' || t.numar AS cod, l.model, l.comenzi,
+     SELECT t.id, t.cod AS cod, l.model, l.comenzi,
             to_char(coalesce(t.trimis_la, t.creat_la), 'YYYY-MM-DD') AS facuta_la,
             CASE WHEN l.deschise = 0 THEN to_char(l.croit_la, 'YYYY-MM-DD') END AS croit_la,
             l.cerut, l.croit, l.deschise AS loturi_deschise,
@@ -331,7 +339,7 @@ export type FisaTaiere = {
 export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
   return caFirma(firmaCurenta(), async (c) => {
     const { rows: [taiere] } = await c.query<FisaTaiere['taiere'] & { model_id: string | null }>(
-      `SELECT t.id, 'T' || t.numar AS cod, to_char(coalesce(t.trimis_la, t.creat_la), 'YYYY-MM-DD HH24:MI') AS facuta_la,
+      `SELECT t.id, t.cod AS cod, to_char(coalesce(t.trimis_la, t.creat_la), 'YYYY-MM-DD HH24:MI') AS facuta_la,
               x.model, x.model_cheie, x.model_id
          FROM taiere t
          LEFT JOIN LATERAL (

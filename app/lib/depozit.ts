@@ -1,5 +1,6 @@
 import { caFirma } from './db';
 import { emite } from './etichete';
+import { motivLiber } from './motive';
 import { stingeDacaE } from './receptie';
 import { firmaCurenta, interogare } from './sesiune';
 
@@ -26,6 +27,7 @@ export type ComandaDepozit = {
   pozitii_stinse: number;
   ultima_intrare: string | null;
   finalizata: boolean;
+  produse: string;
 };
 
 const POZITII = `
@@ -51,7 +53,9 @@ export async function comenziDepozit(vedere: VedereDepozit): Promise<ComandaDepo
             count(*)::int AS pozitii,
             count(*) FILTER (WHERE p.inchisa OR p.intrat >= p.cerut)::int AS pozitii_stinse,
             to_char(max(p.ultima) AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD') AS ultima_intrare,
-            (c.stare = 'inchisa' OR bool_and(p.inchisa OR p.intrat >= p.cerut)) AS finalizata
+            (c.stare = 'inchisa' OR bool_and(p.inchisa OR p.intrat >= p.cerut)) AS finalizata,
+            (SELECT string_agg(pr.denumire || ' ' || pr.cod_sku, ' ') FROM comanda_linie cl JOIN produs pr ON pr.id = cl.produs_id
+              WHERE cl.comanda_id = c.id) AS produse
        FROM comanda c
        JOIN brand b           ON b.id = c.brand_id
        LEFT JOIN utilizator k ON k.id = c.kam_id
@@ -154,10 +158,10 @@ export async function intrareManuala(numar: string, cantitati: Map<string, numbe
  * deschisă se închide pe zero, cu motivul și observațiile date; comanda trece la
  * finalizate.
  */
-export async function stingeComanda(numar: string, motivId: string | null, observatii: string): Promise<string | null> {
-  if (!motivId) return 'Alege motivul.';
-  if (!observatii.trim()) return 'Scrie observațiile: ce s-a întâmplat.';
+export async function stingeComanda(numar: string, motivText: string, obs: string): Promise<string | null> {
+  if (!motivText.trim()) return 'Scrie motivul: din listă sau cu vorbele tale.';
   return caFirma(firmaCurenta(), async (c) => {
+    const { motivId, observatii } = (await motivLiber(c, motivText, 'receptie', obs))!;
     const { rows: [cm] } = await c.query<{ id: string }>(
       `SELECT id FROM comanda WHERE numar = $1 AND stare NOT IN ('anulata', 'inchisa') FOR UPDATE`, [numar]);
     if (!cm) return 'Comanda e deja stinsă.';

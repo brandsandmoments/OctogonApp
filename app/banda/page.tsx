@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
+import Cauta from '../Cauta';
 import Grupare from '../Grupare';
+import { potriveste } from '../lib/format';
 import { cere, poateModifica } from '../lib/sesiune';
 import { deAlimentat, transe } from '../lib/banda';
 import { grupareDinAdresa, grupeaza, type TipPerioada } from '../lib/perioade';
@@ -18,11 +20,11 @@ const VEDERI: [string, string][] = [
  * estimată în depozit și marja față de termen) și ce a ajuns la depozit. Se grupează
  * pe săptămâni, luni, trimestre sau ani: după croire, după alimentare, după predare.
  */
-export default async function Banda({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string }> }) {
+export default async function Banda({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; cauta?: string }> }) {
   await cere('banda');
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('banda');
-  const { vedere = 'de_alimentat', grupare } = await searchParams;
+  const { vedere = 'de_alimentat', grupare, cauta } = await searchParams;
   const g = grupareDinAdresa(grupare, 'saptamana');
   return (
     <main className="lat">
@@ -32,14 +34,15 @@ export default async function Banda({ searchParams }: { searchParams: Promise<{ 
           <Link key={v} href={`/banda?vedere=${v}${grupare ? `&grupare=${grupare}` : ''}`} className={v === vedere ? 'activ' : ''}>{nume}</Link>
         ))}
       </nav>
-      <Grupare ales={g} pastreaza={{ vedere }} />
-      {vedere === 'de_alimentat' ? <DeAlimentat m={m} g={g} /> : <Transe predate={vedere === 'predate'} g={g} />}
+      <Cauta valoare={cauta} pastreaza={{ vedere, grupare }} placeholder="caută: comandă, produs, lot" />
+      <Grupare ales={g} pastreaza={{ vedere, cauta }} />
+      {vedere === 'de_alimentat' ? <DeAlimentat m={m} g={g} cauta={cauta} /> : <Transe predate={vedere === 'predate'} g={g} cauta={cauta} />}
     </main>
   );
 }
 
-async function DeAlimentat({ m, g }: { m: boolean; g: TipPerioada | '' }) {
-  const lista = await deAlimentat();
+async function DeAlimentat({ m, g, cauta }: { m: boolean; g: TipPerioada | ''; cauta?: string }) {
+  const lista = (await deAlimentat()).filter((l) => potriveste(cauta, l.cod, l.comanda, l.produs));
   const grupe = g ? grupeaza(lista, (l) => l.croit_la, g) : [{ perioada: null, randuri: lista }];
   return (
     <>
@@ -83,8 +86,8 @@ async function DeAlimentat({ m, g }: { m: boolean; g: TipPerioada | '' }) {
   );
 }
 
-async function Transe({ predate, g }: { predate: boolean; g: TipPerioada | '' }) {
-  const lista = await transe(predate);
+async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada | ''; cauta?: string }) {
+  const lista = (await transe(predate)).filter((t) => potriveste(cauta, t.cod, t.comanda, t.produs, t.responsabil));
   const grupe = g ? grupeaza(lista, (t) => (predate ? t.predat_la : t.alimentat_la), g) : [{ perioada: null, randuri: lista }];
   return (
     <>

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { cere } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { alimenteaza, lotPentruAlimentare } from '../../lib/banda';
-import { cantitate, numarDinFormular } from '../../lib/format';
+import { numarDinFormular } from '../../lib/format';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export default async function Alimenteaza({
   if (!lotId) notFound();
   const d = await lotPentruAlimentare(lotId);
   if (!d) notFound();
-  const { lot, marimi, accesorii } = d;
+  const { lot, marimi } = d;
   const rest = marimi.reduce((s, m) => s + m.rest, 0);
 
   async function salveaza(date: FormData) {
@@ -63,28 +63,20 @@ export default async function Alimenteaza({
         </table>
 
         <div className="antet-comanda">
-          <label><span>Responsabil bandă</span><input name="responsabil" /></label>
-          <label><span>Persoane pe bandă</span><input name="persoane" inputMode="numeric" /></label>
-          <label><span>Minute pe bucată</span><input name="timp" inputMode="decimal" /></label>
+          <label className="lat"><span>Operatorii care lucrează la produs</span><input name="responsabil" placeholder="ex. Maria, Elena, Ioana" /></label>
+          <label><span>Număr de operatori</span><input name="persoane" inputMode="numeric" /></label>
+          <label><span>Minute pe bucată</span><input name="timp" inputMode="decimal" defaultValue={lot.timp_min_buc ? Number(lot.timp_min_buc) : ''} /></label>
           <label className="lat"><span>Observații</span><input name="observatii" /></label>
         </div>
-        <p className="slab">Cu persoanele și minutele pe bucată, aplicația estimează data în depozit și marja față de termen.</p>
+        <p className="slab">
+          Minutele pe bucată vin din fișa de produs{lot.timp_min_buc ? '' : ' (modelul n-are încă timpul trecut: scrie-l aici)'}. Timpul
+          tranșei = bucăți × minute pe bucată, cu +20% sub 50 de bucăți și −15% peste 200; împărțit la operatori și la orele
+          pe zi, dă data estimată în depozit și marja față de termen.
+        </p>
         {eroare && <p className="eroare">{eroare}</p>}
         <div className="actiuni"><button className="principal" disabled={rest === 0}>Dă pe bandă</button></div>
       </form>
 
-      {accesorii.length > 0 && (
-        <>
-          <h2>Accesorii care ies din depozit, pe bucată</h2>
-          <table>
-            <tbody>
-              {accesorii.map((a) => (
-                <tr key={a.denumire}><td>{a.denumire}</td><td className="nr">{cantitate(a.consum)} <span className="slab">{a.unitate}</span></td></tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
     </main>
   );
 }

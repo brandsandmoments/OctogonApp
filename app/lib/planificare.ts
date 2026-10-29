@@ -123,6 +123,7 @@ export type PlanificareRezumat = {
   stofa_lipsa: boolean;
   alte_lipsa: number;
   ordine_croit: number | null;
+  model: string;
 };
 
 /** Planificările care încă lucrează: neanulate și neîncheiate. */
@@ -138,11 +139,12 @@ export async function planificariActive(): Promise<PlanificareRezumat[]> {
             (SELECT count(*) FROM lot_croit lc WHERE lc.planificare_id = pl.id AND lc.croit_la IS NULL)::int AS loturi_deschise,
             EXISTS (SELECT 1 FROM a WHERE a.planificare_id = pl.id AND a.principal AND a.cumulat > a.stoc) AS stofa_lipsa,
             (SELECT count(*) FROM a WHERE a.planificare_id = pl.id AND NOT a.principal AND a.cumulat > a.stoc)::int AS alte_lipsa,
-            pl.ordine_croit
+            pl.ordine_croit, coalesce(mo.denumire, p.denumire) AS model
        FROM planificare pl
        JOIN comanda_linie cl ON cl.id = pl.linie_id
        JOIN comanda c        ON c.id = cl.comanda_id
        JOIN produs p         ON p.id = cl.produs_id
+       LEFT JOIN model mo    ON mo.id = p.model_id
       WHERE pl.stadiu NOT IN ('anulat', 'incheiat')
       ORDER BY pl.ordine_croit NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa`,
   );
@@ -182,7 +184,7 @@ export async function liniePentruPlanificare(linieId: string): Promise<LiniePlan
  * planificarea există (abia atunci are rezervarea ei).
  */
 export async function creeazaPlanificare(
-  linieId: string, cantitati: Map<string, number>, observatii: string,
+  linieId: string, cantitati: Map<string, number>, observatii: string, pesteComanda = false,
 ): Promise<{ id: string } | { eroare: string }> {
   const date = await liniePentruPlanificare(linieId);
   if (!date) return { eroare: 'Linia nu există.' };
@@ -193,7 +195,10 @@ export async function creeazaPlanificare(
   if (alese.length === 0) return { eroare: 'Planificarea nu are nicio cantitate.' };
   for (const m of alese) {
     if (!Number.isInteger(m.q) || m.q < 0) return { eroare: `Cantitate nevalidă la ${m.marime}.` };
-    if (m.q > m.rest) return { eroare: `La ${m.marime} au rămas de planificat doar ${m.rest}.` };
+    // Peste ce a cerut comanda planifică doar un cont master (bucăți de rezervă, o mostră în plus).
+    if (m.q > m.rest && !pesteComanda) {
+      return { eroare: `La ${m.marime} au rămas de planificat doar ${m.rest}. Peste comandă planifică doar un cont master.` };
+    }
   }
 
   return caFirma(firmaCurenta(), async (c) => {
@@ -311,7 +316,7 @@ export async function detaliiPlanificare(id: string): Promise<DetaliiPlanificare
       `SELECT lc.id, $2 || '/C' || lc.numar_lot AS cod,
               (SELECT coalesce(sum(cantitate), 0) FROM lot_croit_cantitate WHERE lot_id = lc.id)::int AS cerut,
               (SELECT sum(cantitate) FROM lot_croit_efectiv WHERE lot_id = lc.id)::int AS croit,
-              to_char(lc.croit_la, 'YYYY-MM-DD HH24:MI') AS croit_la, lc.taiere_id, 'T' || t.numar AS taiere
+              to_char(lc.croit_la, 'YYYY-MM-DD HH24:MI') AS croit_la, lc.taiere_id, t.cod AS taiere
          FROM lot_croit lc LEFT JOIN taiere t ON t.id = lc.taiere_id
         WHERE lc.planificare_id = $1 ORDER BY lc.numar_lot`, [id, plan.cod]);
     return {

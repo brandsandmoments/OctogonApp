@@ -42,7 +42,7 @@ export default async function ComandaDepozitPagina({
   async function stinge(date: FormData) {
     'use server';
     await cere('receptie', 'modifica');
-    inapoi(numar, await stingeComanda(numar, String(date.get('motiv') ?? '') || null, String(date.get('observatii') ?? '')));
+    inapoi(numar, await stingeComanda(numar, String(date.get('motiv') ?? ''), String(date.get('observatii') ?? '')));
   }
 
   return (
@@ -96,12 +96,10 @@ export default async function ComandaDepozitPagina({
           <form action={stinge} className="antet-comanda">
             <label>
               <span>Motiv</span>
-              <select name="motiv" defaultValue="" required>
-                <option value="">—</option>
-                {motive.map((x) => <option key={x.id} value={x.id}>{x.nume}</option>)}
-              </select>
+              <input name="motiv" list="motive-depozit" required placeholder="din listă sau scrie ce vrei" />
+              <datalist id="motive-depozit">{motive.map((x) => <option key={x.id} value={x.nume} />)}</datalist>
             </label>
-            <label><span>Observații</span><input name="observatii" required placeholder="ce s-a întâmplat" /></label>
+            <label><span>Observații</span><input name="observatii" placeholder="opțional" /></label>
             <div className="actiuni"><button className="secundar">Stinge comanda ({c.lipsesc} buc nu mai vin)</button></div>
           </form>
         </details>

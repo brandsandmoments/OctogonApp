@@ -22,7 +22,7 @@ export async function detaliiLot(id: string): Promise<DetaliiLot | null> {
               c.numar AS comanda, c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
               p.denumire AS produs, p.cod_sku, to_char(lc.data_primire, 'YYYY-MM-DD') AS primit_la,
               to_char(lc.croit_la, 'YYYY-MM-DD HH24:MI') AS croit_la, lc.observatii,
-              lc.taiere_id, 'T' || t.numar AS taiere
+              lc.taiere_id, t.cod AS taiere
          FROM lot_croit lc
          LEFT JOIN taiere t    ON t.id = lc.taiere_id
          JOIN planificare pl   ON pl.id = lc.planificare_id

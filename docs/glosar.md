@@ -41,6 +41,7 @@ Brand. A company may run several (Parseea, Maison Loulou, Sleevy).
 | `firma_id` | Owning company. Row-level security filters every query by it. |
 | `nume` | Brand name |
 | `activ` | Active |
+| `cod` | Short code used in order numbers: ms, ps, sl |
 
 ## `categorie`
 
@@ -570,6 +571,7 @@ A cut: what the cutting room spreads and cuts at once — part of an order, or o
 | `trimis_la` | When the cut was put together in the cutting room |
 | `trimis_de` | Who put it together |
 | `observatii` | Notes |
+| `cod` | Cut code: t-year-month-number, numbered from 1 each month |
 
 ## `taiere_material`
 

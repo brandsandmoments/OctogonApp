@@ -17,7 +17,6 @@ export default function FormularComanda({
   const [seLucreaza, porneste] = useTransition();
   const [eroare, setEroare] = useState<string>();
 
-  const [numar, setNumar] = useState('');
   const [tip, setTip] = useState<'PSF' | 'PSC'>(tipImplicit);
   const [brandId, setBrandId] = useState(branduri.length === 1 ? branduri[0].id : '');
   const [kamId, setKamId] = useState(kamImplicit);
@@ -40,7 +39,7 @@ export default function FormularComanda({
     setEroare(undefined);
     porneste(async () => {
       const r = await salveazaComanda({
-        numar, tip, brandId, kamId, dataLansare, prioritate, observatii, lanseaza, linii,
+        tip, brandId, kamId, dataLansare, prioritate, observatii, lanseaza, linii,
       });
       if (r.ok) router.push(`/necesar/${encodeURIComponent(r.numar)}`);
       else setEroare(r.eroare);
@@ -52,10 +51,7 @@ export default function FormularComanda({
       <h1>Comandă nouă</h1>
 
       <section className="antet-comanda">
-        <label>
-          <span>Număr</span>
-          <input value={numar} onChange={(e) => setNumar(e.target.value)} placeholder="psc-oct-26-2" />
-        </label>
+        <p className="slab lat">Numărul îl dă aplicația la salvare: {tip.toLowerCase()}-brand-an-lună-nr., ex. {tip.toLowerCase()}-ms-26-noi-4.</p>
         <fieldset className="comutator">
           <legend>Tip</legend>
           {(['PSF', 'PSC'] as const).map((t) => (

@@ -11,7 +11,7 @@ function inapoi(id: string, eroare: string | null): never {
   redirect(eroare ? `/banda/${id}?eroare=${encodeURIComponent(eroare)}` : `/banda/${id}`);
 }
 
-/** Fișa tranșei: bucățile, drumul pe bandă bifat etapă cu etapă, data estimată și accesoriile consumate. */
+/** Fișa tranșei: bucățile, drumul pe bandă bifat etapă cu etapă, timpul de lucru și data estimată. */
 export default async function TransaPagina({
   params, searchParams,
 }: {
@@ -24,7 +24,7 @@ export default async function TransaPagina({
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
   const d = await detaliiTransa(id);
   if (!d) notFound();
-  const { transa: t, marimi, accesorii } = d;
+  const { transa: t, marimi } = d;
   const total = marimi.reduce((s, m) => s + m.cantitate, 0);
 
   async function etapa(date: FormData) {
@@ -54,9 +54,11 @@ export default async function TransaPagina({
           <dt>Marjă față de termen</dt>
           <dd>{t.marja_zile === null ? '—' : `${t.marja_zile > 0 ? '+' : ''}${t.marja_zile}`} <span>zile</span></dd>
         </div>
-        <div><dt>Ore-om</dt><dd>{t.ore_om ? cantitate(t.ore_om) : '—'}</dd></div>
+        <div><dt>Ore de lucru</dt><dd>{t.ore_om ? cantitate(t.ore_om) : '—'}</dd></div>
+        <div><dt>Operatori</dt><dd>{t.persoane ?? '—'}</dd></div>
       </dl>
-      {!t.eta && <p className="slab">Fără persoane și minute pe bucată nu se estimează data în depozit.</p>}
+      {t.responsabil && <p className="slab">Lucrează: {t.responsabil}</p>}
+      {!t.eta && <p className="slab">Fără numărul de operatori și minutele pe bucată nu se estimează data în depozit.</p>}
 
       <h2>Pe bandă</h2>
       <ol className="etape">
@@ -74,21 +76,6 @@ export default async function TransaPagina({
         ))}
       </ol>
 
-      {accesorii.length > 0 && (
-        <>
-          <h2>Accesorii scăzute din stoc</h2>
-          <table>
-            <tbody>
-              {accesorii.map((a) => (
-                <tr key={a.material_id}>
-                  <td><Link href={`/stoc/${a.material_id}`}>{a.denumire}</Link></td>
-                  <td className="nr">{cantitate(a.consumat)} <span className="slab">{a.unitate}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
     </main>
   );
 }

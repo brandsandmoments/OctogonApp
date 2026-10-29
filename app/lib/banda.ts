@@ -72,16 +72,26 @@ export type Transa = {
 };
 
 /**
- * Data estimată în depozit, ca în dashboard: ore-om = bucăți × minute pe bucată / 60;
- * zile = ore-om / (persoane × ore pe zi), rotunjit în sus; de la intrarea în
- * producție (sau de la alimentare, dacă n-a intrat încă). Fără persoane sau timp
- * pe bucată nu se estimează nimic — o dată inventată e mai rea decât niciuna.
+ * Orele de lucru ale unei tranșe: bucăți × minute pe bucată / 60, ajustat după
+ * cantitate — sub 50 de bucăți +20% (pornirea cântărește mai mult), peste 200 −15%
+ * (mâna se încălzește). Minutele pe bucată vin din fișa de produs a modelului.
+ */
+const ORE_OM = `
+  ((SELECT sum(cantitate) FROM alimentare_cantitate WHERE alimentare_id = ab.id) * ab.timp_min_buc / 60.0
+   * CASE WHEN (SELECT sum(cantitate) FROM alimentare_cantitate WHERE alimentare_id = ab.id) < 50 THEN 1.2
+          WHEN (SELECT sum(cantitate) FROM alimentare_cantitate WHERE alimentare_id = ab.id) > 200 THEN 0.85
+          ELSE 1 END)`;
+
+/**
+ * Data estimată în depozit: zile = ore de lucru / (operatori × ore pe zi), rotunjit
+ * în sus; de la intrarea în producție (sau de la alimentare, dacă n-a intrat încă).
+ * Fără operatori sau timp pe bucată nu se estimează nimic — o dată inventată e mai
+ * rea decât niciuna.
  */
 const ETA = `
   CASE WHEN ab.persoane IS NOT NULL AND ab.timp_min_buc IS NOT NULL THEN
     (coalesce(ab.intrat_productie_la, ab.alimentat_la)::date
-      + ceil((SELECT sum(cantitate) FROM alimentare_cantitate WHERE alimentare_id = ab.id) * ab.timp_min_buc / 60.0
-             / (ab.persoane * coalesce((SELECT valoare FROM parametru WHERE cheie = 'ore_pe_zi'), 8)))::int)
+      + ceil(${ORE_OM} / (ab.persoane * coalesce((SELECT valoare FROM parametru WHERE cheie = 'ore_pe_zi'), 8)))::int)
   END`;
 
 const ETAPA = `
@@ -118,16 +128,17 @@ export async function transe(predate: boolean): Promise<Transa[]> {
 // ---------------------------------------------------------------- alimentare
 
 export type LotPentruAlimentare = {
-  lot: { id: string; cod: string; comanda: string; prioritate: number; data_ceruta: string; produs: string; cod_sku: string };
+  lot: { id: string; cod: string; comanda: string; prioritate: number; data_ceruta: string; produs: string; cod_sku: string;
+         timp_min_buc: string | null };
   marimi: { marime_id: string; marime: string; croit: number; alimentat: number; rest: number }[];
-  accesorii: { denumire: string; unitate: string; consum: string }[];
 };
 
 export async function lotPentruAlimentare(lotId: string): Promise<LotPentruAlimentare | null> {
   return caFirma(firmaCurenta(), async (c) => {
     const { rows: [lot] } = await c.query<LotPentruAlimentare['lot']>(
       `SELECT lc.id, c.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot AS cod, c.numar AS comanda,
-              c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta, p.denumire AS produs, p.cod_sku
+              c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta, p.denumire AS produs, p.cod_sku,
+              (SELECT mo.timp_min_buc::text FROM model mo WHERE mo.id = p.model_id) AS timp_min_buc
          FROM lot_croit lc
          JOIN planificare pl   ON pl.id = lc.planificare_id
          JOIN comanda_linie cl ON cl.id = pl.linie_id
@@ -139,17 +150,7 @@ export async function lotPentruAlimentare(lotId: string): Promise<LotPentruAlime
       `SELECT ra.marime_id, m.cod AS marime, ra.croit, ra.alimentat, ra.rest
          FROM lot_rest_de_alimentat ra JOIN marime m ON m.id = ra.marime_id
         WHERE ra.lot_id = $1 ORDER BY m.ordine`, [lotId]);
-    const { rows: accesorii } = await c.query<LotPentruAlimentare['accesorii'][number]>(
-      `SELECT mt.denumire, mt.unitate::text AS unitate, sum(mc.consum)::text AS consum
-         FROM lot_croit lc
-         JOIN planificare pl      ON pl.id = lc.planificare_id
-         JOIN comanda_linie cl    ON cl.id = pl.linie_id
-         JOIN produs_material pm  ON pm.produs_id = cl.produs_id AND pm.tip = 'accesoriu'
-         JOIN model_componenta mc ON mc.id = pm.componenta_id
-         JOIN material mt         ON mt.id = pm.material_id
-        WHERE lc.id = $1
-        GROUP BY mt.id, mt.denumire, mt.unitate ORDER BY mt.denumire`, [lotId]);
-    return { lot, marimi, accesorii };
+    return { lot, marimi };
   });
 }
 
@@ -237,8 +238,7 @@ export async function detaliiTransa(id: string): Promise<DetaliiTransa | null> {
               to_char(ab.ctc_la, 'YYYY-MM-DD HH24:MI') AS ctc_la,
               to_char(ab.predat_depozit_la, 'YYYY-MM-DD HH24:MI') AS predat_depozit_la,
               to_char(${ETA}, 'YYYY-MM-DD') AS eta, (cl.data_ceruta - ${ETA})::int AS marja_zile,
-              ((SELECT sum(cantitate) FROM alimentare_cantitate WHERE alimentare_id = ab.id) * ab.timp_min_buc / 60.0)
-                ::numeric(10,1)::text AS ore_om
+              ${ORE_OM}::numeric(10,1)::text AS ore_om
          FROM alimentare_banda ab
          JOIN lot_croit lc     ON lc.id = ab.lot_id
          JOIN planificare pl   ON pl.id = lc.planificare_id

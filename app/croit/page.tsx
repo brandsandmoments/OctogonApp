@@ -4,7 +4,9 @@ import { redirect } from 'next/navigation';
 import { inchideComanda, puneInTaiere, ramasDeCroit, taieriDeschiseToate, taieriLaCroit, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
 import { numarDinFormular } from '../lib/format';
 import { motiveCroit } from '../lib/planificare';
+import Cauta from '../Cauta';
 import Grupare from '../Grupare';
+import { potriveste } from '../lib/format';
 import Pliere from '../Pliere';
 import { grupareDinAdresa, perioada, type TipPerioada } from '../lib/perioade';
 import { cere, poateModifica } from '../lib/sesiune';
@@ -28,9 +30,9 @@ const VEDERI: [string, string][] = [
  * „Taieri" sunt cele făcute și încă necroite, „Croite" cele terminate; se pot
  * grupa pe săptămâni, luni, trimestre sau ani.
  */
-export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; eroare?: string }> }) {
+export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; eroare?: string; cauta?: string }> }) {
   await cere('croit');
-  const { vedere = 'toate', grupare, eroare } = await searchParams;
+  const { vedere = 'toate', grupare, eroare, cauta } = await searchParams;
   // Croitul pornește pe săptămâni, strâns: altfel sunt sute de taieri de derulat.
   const g = grupareDinAdresa(grupare, 'saptamana');
 
@@ -43,18 +45,19 @@ export default async function Croit({ searchParams }: { searchParams: Promise<{ 
         ))}
       </nav>
       {eroare && <p className="eroare">{eroare}</p>}
-      {vedere === 'ramas' ? <Ramas /> : (
+      <Cauta valoare={cauta} pastreaza={{ vedere, grupare }} placeholder="caută: model, comandă, produs, taiere" />
+      {vedere === 'ramas' ? <Ramas cauta={cauta} /> : (
         <>
-          <Grupare ales={g} pastreaza={{ vedere }} />
-          <Taieri vedere={vedere as VedereCroit} grupare={g} />
+          <Grupare ales={g} pastreaza={{ vedere, cauta }} />
+          <Taieri vedere={vedere as VedereCroit} grupare={g} cauta={cauta} />
         </>
       )}
     </main>
   );
 }
 
-async function Taieri({ vedere, grupare }: { vedere: VedereCroit; grupare: TipPerioada | '' }) {
-  const lista = await taieriLaCroit(vedere);
+async function Taieri({ vedere, grupare, cauta }: { vedere: VedereCroit; grupare: TipPerioada | ''; cauta?: string }) {
+  const lista = (await taieriLaCroit(vedere)).filter((t) => potriveste(cauta, t.cod, t.model, t.comenzi));
   const deCroit = lista.filter((t) => t.loturi_deschise > 0);
   const zi = (t: TaiereLaCroit) => t.croit_la ?? t.facuta_la;
   const grupa = (t: TaiereLaCroit) => (grupare ? perioada(grupare, zi(t)).nume : '');
@@ -110,16 +113,17 @@ async function Taieri({ vedere, grupare }: { vedere: VedereCroit; grupare: TipPe
   );
 }
 
-async function Ramas() {
+async function Ramas({ cauta }: { cauta?: string }) {
   const m = await poateModifica('croit');
-  const [lista, motive, deschise] = await Promise.all([ramasDeCroit(), motiveCroit(), taieriDeschiseToate()]);
+  const [toate, motive, deschise] = await Promise.all([ramasDeCroit(), motiveCroit(), taieriDeschiseToate()]);
+  const lista = toate.filter((r) => potriveste(cauta, r.cod, r.comanda, r.produs, r.model));
   const peModel = new Map<string, RamasDeCroit[]>();
   for (const r of lista) peModel.set(r.model_cheie, [...(peModel.get(r.model_cheie) ?? []), r]);
 
   async function stinge(date: FormData) {
     'use server';
     await cere('croit', 'modifica');
-    const e = await inchideComanda(String(date.get('planificare')), String(date.get('motiv') ?? '') || null,
+    const e = await inchideComanda(String(date.get('planificare')), String(date.get('motiv') ?? ''),
       String(date.get('observatii') ?? ''));
     redirect(`/croit?vedere=ramas${e ? `&eroare=${encodeURIComponent(e)}` : ''}`);
   }
@@ -148,6 +152,7 @@ async function Ramas() {
         {lista.reduce((s, r) => s + r.disponibil, 0)} buc rămase de croit · {lista.length} comenzi · {peModel.size} modele
       </p>
       <p className="filtre"><Pliere semn="ramas" /></p>
+      <datalist id="motive-croit">{motive.map((x) => <option key={x.id} value={x.nume} />)}</datalist>
       <p className="slab">
         Scrie, la fiecare mărime, câte bucăți tai acum — doar unele mărimi, sau doar o parte dintr-o mărime. „Tot” ia tot ce
         a rămas din comandă. Poți pune în aceeași taiere mai multe comenzi de pe același model (PSF cu PSF, PSF cu PSC).
@@ -224,12 +229,9 @@ async function Ramas() {
                                 <input type="hidden" name="planificare" value={r.planificare_id} />
                                 <label>
                                   <span>Motiv</span>
-                                  <select name="motiv" defaultValue="" required>
-                                    <option value="">—</option>
-                                    {motive.map((x) => <option key={x.id} value={x.id}>{x.nume}</option>)}
-                                  </select>
+                                  <input name="motiv" list="motive-croit" required placeholder="din listă sau scrie ce vrei" />
                                 </label>
-                                <label><span>Observații</span><input name="observatii" required placeholder="ex. nu a ajuns materialul" /></label>
+                                <label><span>Observații</span><input name="observatii" placeholder="opțional" /></label>
                                 <div className="actiuni"><button className="secundar">Închide: nu se mai croiește</button></div>
                               </form>
                             </details>

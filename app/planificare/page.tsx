@@ -34,6 +34,12 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
   const deTrimis = active.filter((p) => ['gata_de_lansat', 'blocat_materiale', 'fara_cantitate'].includes(p.stadiu));
   const laCroit = active.filter((p) => ['lansat_spre_croit', 'in_croit'].includes(p.stadiu));
   const materiale = await materialeDeBifat(deTrimis.map((p) => p.id));
+  // Pe modele, în ordinea în care apare primul din fiecare: croitul ia modelele pe rând.
+  const peModele = (lista: PlanificareRezumat[]) => {
+    const pe = new Map<string, PlanificareRezumat[]>();
+    for (const p of lista) pe.set(p.model, [...(pe.get(p.model) ?? []), p]);
+    return [...pe.values()].flat();
+  };
 
   const peModel = new Map<string, LinieDePlanificat[]>();
   for (const l of deplan) peModel.set(l.model_cheie, [...(peModel.get(l.model_cheie) ?? []), l]);
@@ -137,12 +143,15 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
             neinventariate. Pleacă la croit doar cu toate bifate; se pot trimite mai multe deodată.
           </p>
           <form action={trimite} id="trimite" />
-          {deTrimis.map((p) => {
+          {peModele(deTrimis).map((p, i, toate) => {
+            const model = i === 0 || toate[i - 1].model !== p.model ? <h3 className="model-grupa">{p.model}</h3> : null;
             const lista = materiale.get(p.id) ?? [];
             const bifate = lista.filter((x) => x.bifat).length;
             const gata = bifate === lista.length;
             return (
-              <details key={p.id} className="caseta de-trimis">
+              <Fragment key={p.id}>
+              {model}
+              <details className="caseta de-trimis">
                 <summary>
                   <input type="checkbox" name="id" value={p.id} form="trimite" disabled={!m || !gata} aria-label={`Trimite ${p.cod}`} />{' '}
                   <strong>{p.cod}</strong> · {p.produs} · {p.planificat} buc · termen {p.data_ceruta} ·{' '}
@@ -179,6 +188,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
                   </div>
                 </fieldset></form>
               </details>
+              </Fragment>
             );
           })}
           <p><button form="trimite" className="buton" disabled={!m}>Trimite la croit cele bifate</button></p>
@@ -187,7 +197,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
 
       <h2>La croit, în ordinea de croit</h2>
       {laCroit.length === 0 ? <p className="slab">Nimic la croit.</p> : (
-        <Tabel lista={laCroit} coloana={(p, i) => (
+        <Tabel lista={peModele(laCroit)} peModel coloana={(p, i) => (
           <form action={muta} className="in-rand">
             <fieldset disabled={!m} className="fara-chenar">
               <input type="hidden" name="id" value={p.id} />
@@ -201,7 +211,9 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
   );
 }
 
-function Tabel({ lista, coloana }: { lista: PlanificareRezumat[]; coloana: (p: PlanificareRezumat, i: number) => React.ReactNode }) {
+function Tabel({ lista, coloana, peModel = false }: {
+  lista: PlanificareRezumat[]; coloana: (p: PlanificareRezumat, i: number) => React.ReactNode; peModel?: boolean;
+}) {
   return (
     <div className="tabel-derulant">
       <table className="centralizator">
@@ -211,7 +223,11 @@ function Tabel({ lista, coloana }: { lista: PlanificareRezumat[]; coloana: (p: P
         </thead>
         <tbody>
           {lista.map((p, i) => (
-            <tr key={p.id}>
+            <Fragment key={p.id}>
+            {peModel && (i === 0 || lista[i - 1].model !== p.model) && (
+              <tr className="grupa-model"><td colSpan={8}><strong>{p.model}</strong></td></tr>
+            )}
+            <tr>
               <td><Link href={`/planificare/${p.id}`}>{p.cod}</Link> <span className="slab">P{p.prioritate}</span></td>
               <td className="slab">{p.data_ceruta}</td>
               <td>{p.produs}</td>
@@ -223,6 +239,7 @@ function Tabel({ lista, coloana }: { lista: PlanificareRezumat[]; coloana: (p: P
                 : <span className="slab">acoperit</span>}</td>
               <td>{coloana(p, i)}</td>
             </tr>
+            </Fragment>
           ))}
         </tbody>
       </table>

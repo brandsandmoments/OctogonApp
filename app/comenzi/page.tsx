@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
+import Cauta from '../Cauta';
 import Grupare from '../Grupare';
+import { potriveste } from '../lib/format';
 import { grupareDinAdresa, grupeaza } from '../lib/perioade';
 import { centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 import { cere, poateModifica } from '../lib/sesiune';
@@ -19,7 +21,7 @@ const TIPURI = {
  * mărimi sunt în centralizator. Se grupează pe săptămâni, luni, trimestre sau ani,
  * după ziua lansării.
  */
-export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string; grupare?: string }> }) {
+export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string; grupare?: string; cauta?: string }> }) {
   await cere('comenzi');
   const f = await searchParams;
   const tip: keyof typeof TIPURI = f.tip === 'PSC' ? 'PSC' : 'PSF';
@@ -30,20 +32,21 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
 
   type Comanda = {
     numar: string; brand: string; kam: string | null; lansare: string; prioritate: number; stare: string;
-    cerutLa: string; cerut: number; croit: number; intrat: number; stadii: Map<string, StadiuLinie>;
+    cerutLa: string; cerut: number; croit: number; intrat: number; stadii: Map<string, StadiuLinie>; produse: Set<string>;
   };
   const comenzi = new Map<string, Comanda>();
   for (const r of randuri) {
     const c = comenzi.get(r.comanda) ?? {
       numar: r.comanda, brand: r.brand, kam: r.kam, lansare: r.data_lansare, prioritate: r.prioritate, stare: r.stare,
-      cerutLa: r.data_ceruta, cerut: 0, croit: 0, intrat: 0, stadii: new Map(),
+      cerutLa: r.data_ceruta, cerut: 0, croit: 0, intrat: 0, stadii: new Map(), produse: new Set<string>(),
     };
+    c.produse.add(`${r.produs} ${r.cod_sku}`);
     c.cerut += r.cerut; c.croit += r.croit; c.intrat += r.intrat;
     if (r.data_ceruta < c.cerutLa) c.cerutLa = r.data_ceruta;
     c.stadii.set(r.linie_id, r.stadiu);
     comenzi.set(r.comanda, c);
   }
-  const lista = [...comenzi.values()].sort((a, b) => b.lansare.localeCompare(a.lansare) || a.numar.localeCompare(b.numar));
+  const lista = [...comenzi.values()].filter((c) => potriveste(f.cauta, c.numar, c.brand, c.kam, ...c.produse)).sort((a, b) => b.lansare.localeCompare(a.lansare) || a.numar.localeCompare(b.numar));
   // Comenzile pornesc pe săptămâni de lansare, strânse.
   const g = grupareDinAdresa(f.grupare, 'saptamana');
   const grupe = g ? grupeaza(lista, (c) => c.lansare, g) : [{ perioada: null, randuri: lista }];
@@ -62,7 +65,8 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
           {f.toate === '1' ? 'doar deschise' : 'și închise'}
         </Link>
       </p>
-      <Grupare ales={g} pastreaza={{ tip, toate: f.toate }} />
+      <Cauta valoare={f.cauta} pastreaza={{ tip, toate: f.toate, grupare: f.grupare }} placeholder="caută: comandă, produs, SKU, KAM" />
+      <Grupare ales={g} pastreaza={{ tip, toate: f.toate, cauta: f.cauta }} />
       {poateDa && (
         <p><Link href={`/comenzi/noua?tip=${tip}`} className="buton">+ {tip} nouă</Link></p>
       )}
