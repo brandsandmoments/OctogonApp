@@ -978,10 +978,13 @@ await caFirma(firmaDinMediu(), async (c) => {
   await importa(c, wb);
   await importaIstoric(c, wb);
   await importaVanzari(c, wb);
-  // Regulile de acum ale aplicației (0022): fiecare culoare pe materialul ei, fiecare
-  // lot croit într-o taiere, planificările trimise la coada croitului.
+  // Regulile de acum ale aplicației (0022, 0023): fiecare culoare pe materialul ei; ce
+  // e trimis la croit, dar netăiat, în „rămas de croit", unde croitul face taierile;
+  // fiecare lot croit într-o taiere; planificările trimise la coada croitului.
   numara('produse trecute pe materialul culorii lor',
     (await c.query<{ n: number }>(`SELECT imparte_materiale_pe_culori() AS n`)).rows[0].n);
+  numara('loturi necroite trecute în „rămas de croit"',
+    (await c.query<{ n: number }>(`SELECT loturi_necroite_la_ramas() AS n`)).rows[0].n);
   numara('taieri noi pentru loturile importate',
     (await c.query<{ n: number }>(`SELECT taieri_pentru_loturi() AS n`)).rows[0].n);
 });
