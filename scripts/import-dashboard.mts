@@ -176,15 +176,19 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
   // -- materiale, după cod
   const materiale = new Map<string, string>(); // denumire → id, pentru rețete
   for (const r of materialeSheet) {
-    const tip = r.c('Tip') === 'ACC' ? 'accesoriu' : 'materie_prima';
+    // Un material nou ia tipul după regula aplicației (0018: materie primă e doar ce se
+    // întinde și se taie), nu după MP-ul din sheet; unul existent își păstrează tipul.
+    // Un material care și-a primit culoarea în aplicație („ATA · NEGRU") își păstrează
+    // denumirea.
     const { rows: [m] } = await c.query<{ id: string; nou: boolean }>(
       `INSERT INTO material (firma_id, tip, cod, denumire, unitate, familie, pret_referinta)
-       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6)
+       VALUES (firma_curenta(), CASE WHEN $1 THEN 'accesoriu'::tip_material ELSE tip_material_dupa_nume($3, $4::unitate_masura) END,
+               $2, $3, $4, $5, $6)
        ON CONFLICT (firma_id, cod) DO UPDATE
-          SET denumire = EXCLUDED.denumire, familie = EXCLUDED.familie,
-              pret_referinta = EXCLUDED.pret_referinta
+          SET denumire = CASE WHEN material.culoare_id IS NULL THEN EXCLUDED.denumire ELSE material.denumire END,
+              familie = EXCLUDED.familie, pret_referinta = EXCLUDED.pret_referinta
        RETURNING id, (xmax = 0) AS nou`,
-      [tip, text(r.c('Cod')), text(r.c('Denumire')), text(r.c('UM')),
+      [r.c('Tip') === 'ACC', text(r.c('Cod')), text(r.c('Denumire')), text(r.c('UM')),
        text(r.c('Familie')), numar(r.c('Pret unitar referinta (RON)'))],
     );
     materiale.set(text(r.c('Denumire'))!, m.id);
@@ -263,14 +267,20 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       semnaleaza(`rețetă ${k}, rândul ${r.nr}: „${nume}" fără consum, sărită`);
       continue;
     }
+    // Tipul componentei e al materialului ei (altfel cheile compuse o refuză); fără
+    // material în nomenclator, regula aplicației. O componentă existentă își păstrează tipul.
     const { rows: [mc] } = await c.query<{ id: string; nou: boolean }>(
       `INSERT INTO model_componenta (firma_id, model_id, nume, tip, unitate, consum, ordine, principal)
-       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7)
+       VALUES (firma_curenta(), $1, $2,
+               coalesce((SELECT tip FROM material WHERE id = $8::uuid),
+                        CASE WHEN $3 THEN 'accesoriu'::tip_material ELSE tip_material_dupa_nume($2, $4::unitate_masura) END),
+               $4, $5, $6, $7 AND coalesce((SELECT tip FROM material WHERE id = $8::uuid), tip_material_dupa_nume($2, $4::unitate_masura)) = 'materie_prima')
        ON CONFLICT (model_id, nume) DO UPDATE
-          SET consum = EXCLUDED.consum, ordine = EXCLUDED.ordine, principal = EXCLUDED.principal
+          SET consum = EXCLUDED.consum, ordine = EXCLUDED.ordine,
+              principal = EXCLUDED.principal AND model_componenta.tip = 'materie_prima'
        RETURNING id, (xmax = 0) AS nou`,
-      [modele.get(k), nume, r.c('Tip') === 'ACC' ? 'accesoriu' : 'materie_prima', text(r.c('UM')),
-       consum, ++ordine, text(r.c('Principal'))?.toLowerCase() === 'da'],
+      [modele.get(k), nume, r.c('Tip') === 'ACC', text(r.c('UM')),
+       consum, ++ordine, text(r.c('Principal'))?.toLowerCase() === 'da', materiale.get(material) ?? null],
     );
     const lista = componente.get(k) ?? [];
     lista.push({ id: mc.id, material });
@@ -285,6 +295,14 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       const materialId = materiale.get(comp.material);
       if (!materialId) {
         semnaleaza(`materialul „${comp.material}" din rețeta ${p.model} nu e în NOM_MATERIALE`);
+        continue;
+      }
+      const { rows: [nepotrivit] } = await c.query<{ ce: string }>(
+        `SELECT mc.nume || ' e ' || mc.tip || ' în ' || mc.unitate || ', materialul ' || m.tip || ' în ' || m.unitate AS ce
+           FROM model_componenta mc, material m WHERE mc.id = $1 AND m.id = $2 AND (mc.tip <> m.tip OR mc.unitate <> m.unitate)`,
+        [comp.id, materialId]);
+      if (nepotrivit) {
+        semnaleaza(`rețeta ${p.model}: ${nepotrivit.ce} — material nealocat, de ales în aplicație`);
         continue;
       }
       const { rowCount } = await c.query(
@@ -326,6 +344,12 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
     for (const r of randuri(wb, fila)) {
       const id = text(r.c(col.id))?.toLowerCase();
       if (!id) continue;
+      // Un număr de comandă are prefix și liniuță (psf-ms-oct-71, psc-sep-26-3, ext-sep1);
+      // „f" e un ID suprascris din greșeală — rândul lui dublează altă comandă.
+      if (!/^[a-z]+-\S/.test(id)) {
+        semnaleaza(`${fila}, rândul ${r.nr}: ID „${id}" nu e un număr de comandă — rând sărit`);
+        continue;
+      }
       const numeProdus = text(r.c(col.produs));
       const obs = text(r.c(col.obs));
       if ([numeProdus, obs, text(r.c(col.cine))].some((v) => v && /exemplu/i.test(v))) {
@@ -420,10 +444,18 @@ async function importa(c: PoolClient, wb: ExcelJS.Workbook) {
       continue;
     }
     let dataLansare = minim(cmd.date);
-    if (!dataLansare) {
+    if (!dataLansare && cmd.ceruteLa.length) {
       dataLansare = minim(cmd.ceruteLa);
       cmd.observatii.add('Data lansării lipsea în sheet; s-a pus data cerută.');
       semnaleaza(`${cmd.tip} ${cmd.numar}: fără dată de lansare în sheet — folosită data cerută ${dataLansare}`);
+    }
+    if (!dataLansare) {
+      // Nici dată cerută: e o ciornă din sheet (forecast-ul lunii viitoare, încă nelansat).
+      // Nu intră: o comandă din aplicație nu se mai rescrie din sheet, deci datele puse
+      // mai târziu n-ar mai ajunge. Intră la importul de după ce primește data lansării.
+      semnaleaza(`${cmd.tip} ${cmd.numar}: fără dată de lansare și fără dată cerută — ciornă în sheet, neimportată`);
+      numara('ciorne din sheet, neimportate');
+      continue;
     }
     const brand = [...cmd.branduri.reduce((m, b) => m.set(b, (m.get(b) ?? 0) + 1), new Map<string, number>())]
       .sort((a, b) => b[1] - a[1])[0][0];
@@ -946,6 +978,12 @@ await caFirma(firmaDinMediu(), async (c) => {
   await importa(c, wb);
   await importaIstoric(c, wb);
   await importaVanzari(c, wb);
+  // Regulile de acum ale aplicației (0022): fiecare culoare pe materialul ei, fiecare
+  // lot croit într-o taiere, planificările trimise la coada croitului.
+  numara('produse trecute pe materialul culorii lor',
+    (await c.query<{ n: number }>(`SELECT imparte_materiale_pe_culori() AS n`)).rows[0].n);
+  numara('taieri noi pentru loturile importate',
+    (await c.query<{ n: number }>(`SELECT taieri_pentru_loturi() AS n`)).rows[0].n);
 });
 
 console.log('\nImport terminat.\n');

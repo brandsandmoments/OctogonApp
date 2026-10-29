@@ -28,6 +28,7 @@ se poate schimba ieftin mai târziu.
 | `db/migrations/0013_drepturi_pe_zone.sql` | drepturile pe om și pe zonă: vede sau modifică |
 | `db/migrations/0014_dezvoltare_produs.sql` | dezvoltarea de produs: tipare, mostre, aprobare, ca jurnal de pași |
 | `db/migrations/0015_taiere.sql` | taierea: mai multe PSF și PSC pe același model, tăiate împreună |
+| `db/migrations/0022_reguli_material_la_import.sql` | regulile de material (tip, culoare) și taierile, ca funcții pe care importul le aplică |
 | `db/migrations/0021_numerotare_lunara.sql` | numere date de aplicație, pe lună: psf-ms-26-noi-1, t-26-noi-12 |
 | `db/migrations/0020_timp_pe_bucata.sql` | timpul de lucru pe bucată, din fișa de produs, pe model |
 | `db/migrations/0019_material_pe_culoare.sql` | un material pe fiecare culoare: stofa roșie și cea ivoire au stoc și necesar separat |
@@ -504,6 +505,13 @@ câmpul greșit.
 - **Nimic nu se pierde în tăcere.** La final, raportul spune rând cu rând ce n-a
   putut fi potrivit: un produs care nu e în catalog, o comandă fără dată de lansare,
   o culoare scrisă altfel decât în listă.
+
+**La fiecare import se aplică regulile de acum ale aplicației** (0022): un material
+nou ia tipul după ce e (materie primă doar stofa și căptușeala), un produs nou trece
+pe materialul culorii lui, fiecare lot importat primește o taiere. O comandă fără
+dată de lansare și fără dată cerută e o ciornă din sheet (forecast-ul lunii
+viitoare) și nu intră — intră la importul de după ce primește data. Un ID care nu e
+un număr de comandă („f") se sare.
 
 **Istoricul nu scrie în fișa de magazie.** Stocul de materiale n-a fost ținut
 niciodată, deci un consum istoric ar duce stocul pe minus fără sens; stocul
