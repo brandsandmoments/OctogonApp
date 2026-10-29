@@ -1,0 +1,21 @@
+# Aplicația OctogonApp: Next.js în producție, ascultă doar local (Caddy o servește pe HTTPS).
+[Unit]
+Description=OctogonApp
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+User=octogon
+WorkingDirectory=/opt/octogon
+EnvironmentFile=/opt/octogon/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start -- -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=3
+# Puțin acces la sistem: aplicația scrie doar în dosarul ei.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

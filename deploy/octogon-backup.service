@@ -1,0 +1,7 @@
+[Unit]
+Description=Backup zilnic OctogonApp (pg_dump)
+
+[Service]
+Type=oneshot
+User=postgres
+ExecStart=/bin/bash /opt/octogon/deploy/backup.sh

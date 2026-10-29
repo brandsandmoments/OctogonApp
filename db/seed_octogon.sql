@@ -12,6 +12,9 @@ DECLARE
     f uuid := '0c706000-0000-4000-8000-000000000001';
     r record;
 BEGIN
+-- Izolarea pe firme e impusă și proprietarului tabelelor (FORCE ROW LEVEL SECURITY):
+-- seed-ul își declară firma, ca să ruleze și fără superuser, ca pe server.
+PERFORM set_config('app.firma_id', f::text, true);
 
 -- ---- branduri
 INSERT INTO brand (firma_id, nume)

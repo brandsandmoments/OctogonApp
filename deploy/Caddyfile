@@ -1,0 +1,10 @@
+# HTTPS automat (Let's Encrypt) pentru domeniul aplicației; certificatul se reînnoiește singur.
+{{DOMENIU}} {
+	encode zstd gzip
+	# Pozele de la cererile de tipar urcă până la 8 MB.
+	request_body {
+		max_size 12MB
+	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy 127.0.0.1:3000
+}
