@@ -36,9 +36,66 @@
 .buton.mic-buton { font-size: .78rem; padding: .2rem .5rem; white-space: nowrap; }
 .lansari { white-space: nowrap; } .lansari .buton + .buton { margin-left: .3rem; }
 
-/* Comenzile pe model, culoare și mărime */
-.pe-modele td { white-space: normal; }
-.comenzi-varianta span { display: inline-block; margin: 0 .5rem .1rem 0; font-size: .8rem; color: var(--slab); }
+/* Comenzile pe model, culoare și mărime: magazin · model · culoare · mărime | comenzi · bucăți · stoc */
+.pe-modele { width: 100%; font-size: .9rem; }
+.pe-modele td { white-space: normal; vertical-align: middle; padding: .5rem .6rem; }
+.pe-modele th.nr, .pe-modele td.nr { text-align: right; font-variant-numeric: tabular-nums; }
+.pe-modele td.pm-comenzi strong { font-size: 1.05rem; }
+.pe-modele .pm-unit { display: none; }
+.pe-modele tr.pm-varianta td { border-bottom: 1px solid #efebe3; }
+.pe-modele tr.pm-varianta td.pm-model { font-size: .78rem; padding-left: 1.6rem; }
+.pe-modele tr.pm-varianta td.pm-culoare { font-weight: 600; }
+.pe-modele td.pm-stoc.lipsa { color: var(--rosu); }
+.eticheta-magazin { display: inline-block; padding: .1rem .5rem; border-radius: .3rem; background: #fff; border: 1px solid var(--accent-linie);
+  font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.eticheta-marime { display: inline-block; min-width: 2.2rem; padding: .1rem .4rem; border-radius: .3rem; background: var(--bej);
+  text-align: center; font-weight: 700; font-size: .82rem; }
+.comenzi-varianta span { display: inline-block; margin: .1rem .3rem .1rem 0; padding: 0 .35rem; border-radius: .25rem;
+  background: #f6f4ef; font-size: .76rem; color: var(--slab); white-space: nowrap; }
+
+/* Tabletă: mai strâns, numerele comenzilor se înșiră pe mai multe rânduri */
+@media (max-width: 1024px) {
+  .pe-modele { font-size: .85rem; }
+  .pe-modele td { padding: .45rem .4rem; }
+  .pe-modele td.pm-lista { min-width: 9rem; }
+  .pe-modele tr.pm-varianta td.pm-model { padding-left: .8rem; }
+}
+
+/* Telefon: fiecare model e o fișă — magazinul, modelul și totalurile sus, apoi fiecare culoare și mărime pe un rând */
+@media (max-width: 760px) {
+  .tabel-derulant:has(.pe-modele) { max-height: none; overflow: visible; }
+  .pe-modele thead { display: none; }
+  .pe-modele, .pe-modele tbody { display: block; }
+  .pe-modele tr { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: .15rem .6rem; align-items: center; }
+  .pe-modele td, .tabel-derulant .pe-modele tbody td:first-child { display: block; position: static; padding: 0; border: 0; background: none; }
+  .pe-modele .pm-unit { display: inline; font-size: .72rem; font-weight: 400; color: var(--slab); }
+
+  .pe-modele tr.grupa-model { padding: .75rem .7rem; margin-top: .6rem; border: 1px solid var(--accent-linie); border-radius: .5rem; background: var(--bej);
+    grid-template-columns: 1fr auto auto auto; }
+  .pe-modele tr.grupa-model.deschis { border-radius: .5rem .5rem 0 0; }
+  .pe-modele tr.grupa-model td { border: 0; background: none !important; }
+  .pe-modele tr.grupa-model td.pm-magazin { grid-column: 1 / -1; grid-row: 1; }
+  .pe-modele tr.grupa-model td.pm-model { grid-column: 1 / 4; grid-row: 2; font-size: 1rem; }
+  .pe-modele tr.grupa-model td.pm-veche { grid-column: 4; grid-row: 2; text-align: right; }
+  .pe-modele tr.grupa-model td.pm-culoare { grid-column: 1; grid-row: 3; font-size: .78rem; }
+  .pe-modele tr.grupa-model td.pm-marime { display: none; }
+  .pe-modele tr.grupa-model td.pm-comenzi { grid-column: 2; grid-row: 3; }
+  .pe-modele tr.grupa-model td.pm-bucati { grid-column: 3; grid-row: 3; }
+  .pe-modele tr.grupa-model td.pm-stoc { grid-column: 4; grid-row: 3; }
+  .pe-modele tr.grupa-model td.pm-lista { display: none; }
+
+  .pe-modele tr.pm-varianta { padding: .55rem .7rem; border: 1px solid var(--linie); border-top: 0; background: #fff;
+    grid-template-columns: auto 1fr auto auto auto; }
+  .pe-modele tr.pm-varianta td { border: 0; }
+  .pe-modele tr.pm-varianta td.pm-magazin, .pe-modele tr.pm-varianta td.pm-model, .pe-modele tr.pm-varianta td.pm-veche { display: none; }
+  .pe-modele tr.pm-varianta td.pm-marime { grid-column: 1; grid-row: 1; }
+  .pe-modele tr.pm-varianta td.pm-culoare { grid-column: 2; grid-row: 1; }
+  .pe-modele tr.pm-varianta td.pm-comenzi { grid-column: 3; grid-row: 1; }
+  .pe-modele tr.pm-varianta td.pm-bucati { grid-column: 4; grid-row: 1; }
+  .pe-modele tr.pm-varianta td.pm-stoc { grid-column: 5; grid-row: 1; }
+  .pe-modele tr.pm-varianta td.pm-lista { display: block; grid-column: 1 / -1; grid-row: 2; }
+  .pe-modele tr[hidden] { display: none; }
+}
 
 /* Livrări: numerele care deschid listele, căutarea coletelor */
 a.numar-situatie { color: inherit; }

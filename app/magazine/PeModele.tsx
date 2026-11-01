@@ -3,7 +3,8 @@ import type { ComandaClasificata } from '../lib/magazine';
 import Pliere from '../Pliere';
 
 /**
- * Comenzile strânse pe model, apoi pe culoare și mărime: unde se adună cele mai multe
+ * Comenzile strânse pe model, apoi pe culoare și mărime — pe coloane: magazin, model,
+ * culoare, mărime, apoi la dreapta comenzi, bucăți și stoc. Unde se adună cele mai multe
  * comenzi, acolo e prioritatea (de restoc, de produs, de sunat). Modelele și
  * variantele se ordonează după numărul de comenzi, cele mai multe sus.
  *
@@ -34,35 +35,48 @@ export default function PeModele({ comenzi, doarLipsa, cuMagazin, semn }: {
 
   return (
     <>
-      <p className="filtre"><Pliere semn={semn} /></p>
+      <p className="filtre"><Pliere semn={semn} /> <span className="slab">clic pe un model îi arată culorile și mărimile</span></p>
       <div className="tabel-derulant">
         <table className="centralizator pe-modele">
           <thead>
-            <tr><th>Model · culoare · mărime</th><th className="nr">Comenzi</th><th className="nr">Bucăți</th><th className="nr">Stoc</th><th>Cea mai veche</th><th>Comenzile</th></tr>
+            <tr>
+              {cuMagazin && <th>Magazin</th>}
+              <th>Model</th><th>Culoare</th><th>Mărime</th>
+              <th className="nr">Comenzi</th><th className="nr">Bucăți</th><th className="nr">Stoc</th>
+              <th>Cea mai veche</th><th>Comenzile</th>
+            </tr>
           </thead>
           <tbody>
             {ordonate.map((m) => {
               const variante = [...m.variante.values()].sort((a, b) => b.comenzi.length - a.comenzi.length || b.bucati - a.bucati);
               const toateComenzile = [...new Set(variante.flatMap((v) => v.comenzi))];
               const veche = Math.max(...toateComenzile.map((c) => c.zile));
+              const stoc = variante.reduce((s, v) => s + Math.max(v.stoc, 0), 0);
+              const culori = new Set(variante.map((v) => v.culoare)).size;
               return (
                 <Fragment key={m.cheie}>
                   <tr className="grupa-model">
-                    <td><strong>{m.tip} · {m.model}</strong>{cuMagazin && <span className="slab"> · {m.magazin}</span>} <span className="slab">{variante.length} variante</span></td>
-                    <td className="nr"><strong>{toateComenzile.length}</strong></td>
-                    <td className="nr"><strong>{variante.reduce((s, v) => s + v.bucati, 0)}</strong></td>
-                    <td />
-                    <td>{varsta(veche)}</td>
-                    <td />
+                    {cuMagazin && <td className="pm-magazin"><span className="eticheta-magazin">{m.magazin}</span></td>}
+                    <td className="pm-model"><strong>{m.tip} {m.model}</strong></td>
+                    <td className="pm-culoare slab">{culori} {culori === 1 ? 'culoare' : 'culori'}</td>
+                    <td className="pm-marime slab">{variante.length} {variante.length === 1 ? 'variantă' : 'variante'}</td>
+                    <td className="nr pm-comenzi"><strong>{toateComenzile.length}</strong><span className="pm-unit"> comenzi</span></td>
+                    <td className="nr pm-bucati"><strong>{variante.reduce((s, v) => s + v.bucati, 0)}</strong><span className="pm-unit"> buc</span></td>
+                    <td className={`nr pm-stoc ${stoc <= 0 ? 'lipsa' : ''}`}><strong>{stoc}</strong><span className="pm-unit"> stoc</span></td>
+                    <td className="pm-veche">{varsta(veche)}</td>
+                    <td className="pm-lista" />
                   </tr>
                   {variante.map((v) => (
-                    <tr key={`${v.produs}${v.marime}`}>
-                      <td>{v.culoare} <strong>{v.marime}</strong> <span className="slab">· {v.produs}</span></td>
-                      <td className="nr"><strong>{v.comenzi.length}</strong></td>
-                      <td className="nr">{v.bucati}</td>
-                      <td className={`nr ${v.stoc <= 0 ? 'lipsa' : ''}`}>{v.stoc}</td>
-                      <td>{varsta(Math.max(...v.comenzi.map((c) => c.zile)))}</td>
-                      <td className="comenzi-varianta">
+                    <tr key={`${v.produs}${v.marime}`} className="pm-varianta">
+                      {cuMagazin && <td className="pm-magazin" />}
+                      <td className="pm-model" />
+                      <td className="pm-culoare">{v.culoare}</td>
+                      <td className="pm-marime"><span className="eticheta-marime">{v.marime}</span></td>
+                      <td className="nr pm-comenzi"><strong>{v.comenzi.length}</strong><span className="pm-unit"> com.</span></td>
+                      <td className="nr pm-bucati">{v.bucati}<span className="pm-unit"> buc</span></td>
+                      <td className={`nr pm-stoc ${v.stoc <= 0 ? 'lipsa' : ''}`}>{v.stoc}<span className="pm-unit"> stoc</span></td>
+                      <td className="pm-veche">{varsta(Math.max(...v.comenzi.map((c) => c.zile)))}</td>
+                      <td className="comenzi-varianta pm-lista">
                         {v.comenzi.sort((a, b) => b.zile - a.zile).map((c) => (
                           <span key={c.id} title={`${c.client ?? ''} · ${c.telefon ?? ''} · ${c.creata_la}`}>{c.nume}{c.dubla?.aceeasi_varianta ? ' ⚠' : ''}</span>
                         ))}
