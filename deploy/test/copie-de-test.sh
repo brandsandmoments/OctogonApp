@@ -42,6 +42,9 @@ sudo -u postgres psql -q -d octogon_test -v ON_ERROR_STOP=1 -v parola="$DEMO_PAR
 BEGIN;
 -- Clienții din magazine, anonimizați; la prima citire din Shopify primesc telefoane false stabile.
 UPDATE magazin_comanda SET client = 'Client ' || nume, telefon = NULL, nota = NULL;
+UPDATE magazin_livrare SET client = 'Client ' || comanda, telefon = NULL;
+-- Comenzile și coletele se recitesc de la zero, ca toate să primească telefoane false stabile.
+UPDATE magazin SET livrari_pana_la = NULL;
 -- Doar contul demo intră: sesiunile, tabletele și ceilalți oameni nu.
 DELETE FROM sesiune;
 DELETE FROM dispozitiv;
