@@ -34,6 +34,7 @@ export const ZONE = {
   dezvoltare: 'Dezvoltare produs',
   expediere: 'Expediere',
   aprobare: 'Aprobare PSF (date de KAM-i)',
+  retete: 'Rețete și proces tehnologic',
 } as const;
 export type Zona = keyof typeof ZONE | 'oameni';
 export type Nivel = 'vede' | 'modifica';
@@ -119,7 +120,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
       { href: '/stoc', nume: 'Stoc', ce: 'stoc, rezervat, disponibil, de aprovizionat; intrări de la furnizor', zona: 'materiale' },
       { href: '/stoc/cumparaturi', nume: 'Lista de cumpărături', ce: 'ce lipsește din stoc, pe furnizori: materii prime și accesorii', zona: ['materiale', 'necesar', 'planificare'] },
       { href: '/inventar', nume: 'Inventar', ce: 'numărătoare fizică; diferențele devin ajustări', zona: 'materiale' },
-      { href: '/modele', nume: 'Modele și rețete', ce: 'consumul pe bucată și materialul fiecărei culori', zona: 'necesar' },
+      { href: '/modele', nume: 'Modele și rețete', ce: 'din ce e făcut fiecare model, materialul pe culoare, procesul tehnologic și timpii', zona: ['necesar', 'retete', 'croit', 'dezvoltare'] },
       { href: '/materiale', nume: 'Materiale', ce: 'nomenclatorul de materii prime și accesorii', zona: 'necesar' },
     ],
   },

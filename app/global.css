@@ -177,3 +177,4 @@ h1 { font-size: 1.55rem; font-weight: 800; letter-spacing: -.01em; }
 .filtre input:focus, .filtre select:focus { outline: 2px solid var(--accent-linie); outline-offset: 0; }
 .goluri, .card, .numar-situatie { box-shadow: 0 1px 2px rgb(0 0 0 / .03); }
 .mesaj-ok { color: var(--verde-text); font-weight: 600; }
+.buton.activ-buton { background: var(--bej); border-color: var(--accent-linie); }

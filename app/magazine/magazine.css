@@ -32,7 +32,6 @@
 .marimi-stoc span strong { color: var(--text); }
 .marimi-stoc span.gol strong { color: var(--slab); font-weight: 500; }
 .marimi-stoc span.gol-cerut, .marimi-stoc span.gol-cerut strong { color: var(--rosu); }
-.buton.activ-buton { background: var(--bej); border-color: var(--accent-linie); }
 .produse-magazin td .insigna { margin: 0 .25rem .15rem 0; }
 .buton.mic-buton { font-size: .78rem; padding: .2rem .5rem; white-space: nowrap; }
 .lansari { white-space: nowrap; } .lansari .buton + .buton { margin-left: .3rem; }

@@ -46,6 +46,8 @@ SELECT firma_curenta(), u.id, d.zona, d.nivel::nivel_drept
     ('Adelina Neagu', 'comenzi', 'modifica'), ('Adelina Neagu', 'kam', 'vede'), ('Adelina Neagu', 'aprobare', 'modifica'),
     -- Aprobarea PSF-urilor date de KAM-i (0027): Adelina, Alex și Mădălina.
     ('Alexandru Stanciu', 'aprobare', 'modifica'), ('Madalina Bari', 'aprobare', 'modifica'),
+    -- Rețetele și procesul tehnologic (0028): șefa de croit și dezvoltarea produsului; conturile master le au oricum.
+    ('Adriana Corbu', 'retete', 'modifica'), ('Luminita Stanciu', 'retete', 'modifica'),
     ('Adelina Neagu', 'centralizator', 'vede'), ('Adelina Neagu', 'receptie', 'modifica'),
     ('Adelina Neagu', 'expediere', 'modifica'),
     -- dezvoltă produs; croit; centralizator; planificare comandă

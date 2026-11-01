@@ -159,3 +159,15 @@
 .stoc-marime { display: flex; flex-direction: column; align-items: flex-end; margin-top: .2rem; font-size: .68rem; line-height: 1.25; color: var(--slab); white-space: nowrap; }
 .stoc-marime .zero { color: var(--rosu); font-weight: 600; }
 .stoc-marime .asteapta { color: var(--rosu); }
+
+/* Modele și rețete: ce conține și procesul tehnologic */
+.caseta.ce-contine { background: #fff; padding: .75rem 1rem 1rem; }
+.caseta.ce-contine h2 { margin-top: .25rem; }
+.caseta.ce-contine h3 { font-size: .95rem; margin: 1rem 0 .25rem; }
+.proces-rezumat { margin: .25rem 0 0; padding-left: 1.4rem; }
+.proces-rezumat li { padding: .1rem 0; }
+.proces-rezumat li.total { list-style: none; margin-left: -1.4rem; margin-top: .3rem; border-top: 1px solid var(--linie); padding-top: .3rem; }
+.rand-operatie fieldset { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.rand-operatie input { font: inherit; font-size: .85rem; padding: .25rem .4rem; border: 1px solid var(--linie); border-radius: .3rem; background: #fff; }
+.rand-operatie input[name="denumire"] { min-width: 14rem; }
+.rand-operatie input.timp { width: 4.5rem; text-align: right; }
