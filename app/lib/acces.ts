@@ -33,6 +33,7 @@ export const ZONE = {
   materiale: 'Gestiune materii prime (stoc, intrări, inventar)',
   dezvoltare: 'Dezvoltare produs',
   expediere: 'Expediere',
+  aprobare: 'Aprobare PSF (date de KAM-i)',
 } as const;
 export type Zona = keyof typeof ZONE | 'oameni';
 export type Nivel = 'vede' | 'modifica';
@@ -68,6 +69,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     ecrane: [
       { href: '/comenzi', nume: 'PSF și PSC', ce: 'comenzile date: punere pe stoc din forecast și din comanda clientului', zona: 'comenzi' },
       { href: '/comenzi/noua', nume: 'Comandă nouă', ce: 'PSF sau PSC, cu grila de mărimi', zona: 'comenzi', nivel: 'modifica' },
+      { href: '/comenzi/aprobare', nume: 'PSF de aprobat', ce: 'PSF-urile date de KAM-i: aprobă sau respinge', zona: 'aprobare', nivel: 'modifica' },
     ],
   },
   {
@@ -93,6 +95,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     ecrane: [
       { href: '/magazine', nume: 'Comenzi din magazine', ce: 'comenzile intrate în magazinele Shopify: de trimis, de sunat, fără stoc, posibile duble', zona: 'expediere' },
       { href: '/magazine/produse', nume: 'Produse și vânzări', ce: 'stoc, vânzări pe 7 / 30 / 60 de zile, câte zile mai ține stocul', zona: 'expediere' },
+      { href: '/magazine/psc', nume: 'PSC din comenzi', ce: 'comenzile intrate pe modele: cât cer, stoc, în producție, de dat', zona: 'expediere' },
       { href: '/magazine/alerte', nume: 'Alerte', ce: 'ce se termină, ce nu se mișcă, ce e în trend', zona: 'expediere' },
       { href: '/magazine/legaturi', nume: 'Legături Shopify', ce: 'legarea magazinelor și sincronizarea', zona: 'oameni' },
     ],

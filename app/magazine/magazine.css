@@ -25,7 +25,6 @@
   border-radius: .35rem; background: transparent; color: inherit; min-width: 15rem; }
 .legaturi button, .legaturi .buton { font: inherit; font-size: .85rem; padding: .3rem .7rem; border: 1px solid var(--linie);
   border-radius: .35rem; background: transparent; color: inherit; cursor: pointer; font-weight: 600; }
-.mesaj-ok { color: var(--verde-text); font-weight: 600; }
 
 /* Produse și vânzări */
 .marimi-stoc { white-space: normal; min-width: 14rem; }
@@ -35,3 +34,4 @@
 .marimi-stoc span.gol-cerut, .marimi-stoc span.gol-cerut strong { color: var(--rosu); }
 .buton.activ-buton { background: var(--bej); border-color: var(--accent-linie); }
 .produse-magazin td .insigna { margin: 0 .25rem .15rem 0; }
+.buton.mic-buton { font-size: .78rem; padding: .2rem .5rem; white-space: nowrap; }

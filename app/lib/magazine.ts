@@ -1,3 +1,4 @@
+import { dePeDrum, peDrum } from './acoperire';
 import type { LinieNoua } from './comenzi';
 import { interogare } from './sesiune';
 
@@ -191,44 +192,72 @@ export async function comenziMagazine(): Promise<ComandaClasificata[]> {
   }));
 }
 
+export type RandCerere = {
+  model_cheie: string;     // id-ul modelului din catalog, sau titlul produsului când n-are model
+  model: string;
+  produs_id: string | null;
+  marime_id: string | null;
+  produs: string;
+  marime: string;
+  ordine: number;
+  cerut: number;           // bucăți cerute de comenzile deschise
+  comenzi: number;
+  stoc: number;            // stoc fizic în magazin
+  in_productie: number;    // pe PSC/PSF lansate, încă neintrate
+  de_aprobat: number;      // pe PSF-uri care așteaptă aprobarea
+  de_dat: number;          // ce mai trebuie comandat: cerut − stoc − în producție − de aprobat
+};
+
+/**
+ * Cererea din comenzile deschise ale unui magazin, pe produs și mărime, cu ce o
+ * acoperă deja: stocul fizic, ce e în producție și ce așteaptă aprobarea. Doar
+ * `de_dat` mai poate intra într-o PSC nouă — așa două PSC-uri nu cer aceleași bucăți.
+ */
+export async function cerereMagazin(magazinId: string): Promise<RandCerere[]> {
+  const [randuri, drum] = await Promise.all([
+    interogare<Omit<RandCerere, 'in_productie' | 'de_aprobat' | 'de_dat'>>(
+      `SELECT coalesce(mo.id::text, v.titlu_produs) AS model_cheie, coalesce(mo.denumire, v.titlu_produs) AS model,
+              v.produs_id, v.marime_id, coalesce(p.denumire, v.titlu_produs) AS produs,
+              coalesce(mz.cod, v.titlu_varianta, '—') AS marime, coalesce(mz.ordine, 99) AS ordine,
+              sum(l.de_livrat)::int AS cerut, count(DISTINCT mc.id)::int AS comenzi, greatest(max(v.stoc_fizic), 0)::int AS stoc
+         FROM magazin_comanda mc
+         JOIN magazin_comanda_linie l ON l.comanda_id = mc.id AND l.de_livrat > 0
+         JOIN magazin_varianta v ON v.magazin_id = mc.magazin_id AND v.varianta_gid = l.varianta_gid
+         LEFT JOIN produs p  ON p.id = v.produs_id
+         LEFT JOIN model mo  ON mo.id = p.model_id
+         LEFT JOIN marime mz ON mz.id = v.marime_id
+        WHERE mc.magazin_id = $1
+        GROUP BY 1, 2, v.produs_id, v.marime_id, 5, 6, 7`, [magazinId]),
+    peDrum(),
+  ]);
+  return randuri.map((r) => {
+    const d = dePeDrum(drum, r.produs_id, r.marime_id);
+    return { ...r, ...d, de_dat: Math.max(0, r.cerut - r.stoc - d.in_productie - d.de_aprobat) };
+  }).sort((a, b) => a.model.localeCompare(b.model, 'ro') || a.produs.localeCompare(b.produs, 'ro') || a.ordine - b.ordine);
+}
+
 export type LipsuriPsc = { brand_id: string; brand: string; linii: LinieNoua[]; bucati: number; necunoscute: number };
 
 /**
- * Ce lipsește ca să poată pleca toate comenzile deschise ale unui magazin: pe
- * fiecare variantă, cererea din comenzi minus stocul fizic. Ies liniile unei PSC
- * (produs și mărime din catalogul aplicației), cu termen peste 14 zile; omul le vede
- * în formularul de comandă și le schimbă înainte să salveze. Variantele fără produs
- * sau mărime în catalog nu pot intra și se numără separat.
+ * Liniile unei PSC din ce mai trebuie dat (`de_dat`) pentru comenzile deschise ale
+ * unui magazin — pe tot magazinul sau doar pe un model. Termen peste 14 zile; omul
+ * le vede în formularul de comandă și le schimbă înainte să salveze. Variantele fără
+ * produs sau mărime în catalog nu pot intra și se numără separat.
  */
-export async function lipsuriPentruPsc(magazinId: string): Promise<LipsuriPsc | null> {
-  const randuri = await interogare<{ brand_id: string; brand: string; produs_id: string | null; marime_id: string | null; lipsa: number }>(
-    `WITH cerere AS (
-       SELECT l.varianta_gid, sum(l.de_livrat)::int AS cerut
-         FROM magazin_comanda mc JOIN magazin_comanda_linie l ON l.comanda_id = mc.id AND l.de_livrat > 0
-        WHERE mc.magazin_id = $1 AND l.varianta_gid IS NOT NULL
-        GROUP BY l.varianta_gid)
-     SELECT m.brand_id, b.nume AS brand, v.produs_id, v.marime_id, (c.cerut - greatest(v.stoc_fizic, 0))::int AS lipsa
-       FROM cerere c
-       JOIN magazin_varianta v ON v.magazin_id = $1 AND v.varianta_gid = c.varianta_gid
-       JOIN magazin m ON m.id = v.magazin_id JOIN brand b ON b.id = m.brand_id
-      WHERE c.cerut > greatest(v.stoc_fizic, 0)`, [magazinId]);
-  if (randuri.length === 0) {
-    const [m] = await interogare<{ brand_id: string; brand: string }>(
-      `SELECT m.brand_id, b.nume AS brand FROM magazin m JOIN brand b ON b.id = m.brand_id WHERE m.id = $1`, [magazinId]);
-    return m ? { ...m, linii: [], bucati: 0, necunoscute: 0 } : null;
-  }
+export async function lipsuriPentruPsc(magazinId: string, modelCheie?: string): Promise<LipsuriPsc | null> {
+  const [m] = await interogare<{ brand_id: string; brand: string }>(
+    `SELECT m.brand_id, b.nume AS brand FROM magazin m JOIN brand b ON b.id = m.brand_id WHERE m.id = $1`, [magazinId]);
+  if (!m) return null;
+  const randuri = (await cerereMagazin(magazinId)).filter((r) => r.de_dat > 0 && (!modelCheie || r.model_cheie === modelCheie));
   const termen = new Date(Date.now() + 14 * 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Bucharest' });
   const pe = new Map<string, LinieNoua>();
   let necunoscute = 0;
   for (const r of randuri) {
-    if (!r.produs_id || !r.marime_id) { necunoscute += r.lipsa; continue; }
+    if (!r.produs_id || !r.marime_id) { necunoscute += r.de_dat; continue; }
     const l = pe.get(r.produs_id) ?? { produsId: r.produs_id, dataCeruta: termen, vanzareDeLa: '', vanzarePanaLa: '', cantitati: {} };
-    l.cantitati[r.marime_id] = (l.cantitati[r.marime_id] ?? 0) + r.lipsa;
+    l.cantitati[r.marime_id] = (l.cantitati[r.marime_id] ?? 0) + r.de_dat;
     pe.set(r.produs_id, l);
   }
   const linii = [...pe.values()];
-  return {
-    brand_id: randuri[0].brand_id, brand: randuri[0].brand, linii, necunoscute,
-    bucati: linii.reduce((s, l) => s + Object.values(l.cantitati).reduce((a, q) => a + q, 0), 0),
-  };
+  return { ...m, linii, necunoscute, bucati: linii.reduce((s, l) => s + Object.values(l.cantitati).reduce((a, q) => a + q, 0), 0) };
 }

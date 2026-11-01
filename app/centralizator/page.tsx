@@ -144,7 +144,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                     {nouaComanda && (
                       <>
                         <Link href={`/necesar/${encodeURIComponent(r.comanda)}`}>{r.comanda}</Link>{' '}
-                        <span className="slab">{r.tip} · {r.brand} · P{r.prioritate}{r.stare === 'ciorna' && ' · ciornă'}</span>
+                        <span className="slab">{r.tip} · {r.brand} · P{r.prioritate}{r.stare === 'ciorna' && ' · ciornă'}{r.stare === 'de_aprobat' && ' · de aprobat'}</span>
                       </>
                     )}
                   </td>

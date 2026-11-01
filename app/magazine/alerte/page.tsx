@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Tipareste from '../../Tipareste';
 import { magazine } from '../../lib/magazine';
 import { alerte, praguri, produseMagazine } from '../../lib/produse';
-import { cere } from '../../lib/sesiune';
+import { cere, poateModifica } from '../../lib/sesiune';
 import '../magazine.css';
 import '../foaie.css';
 
@@ -25,6 +25,10 @@ const peSapt = (v30: number) => Math.round((v30 / 30) * 7 * 10) / 10;
 export default async function Alerte({ searchParams }: { searchParams: Promise<{ magazin?: string }> }) {
   await cere('expediere');
   const f = await searchParams;
+  const daComenzi = await poateModifica('comenzi');
+  // „PSF →" pe rândurile unde poate ajuta o comandă de producție; pe foaia tipărită nu apare.
+  const psf = (id: string | null) => daComenzi && id ? <td className="nu-tipari"><Link href={`/comenzi/noua?din_produs=${id}`}>PSF →</Link></td> : daComenzi ? <td className="nu-tipari" /> : null;
+  const thPsf = daComenzi ? <th className="nu-tipari" /> : null;
   const [lista, p] = await Promise.all([magazine(), praguri()]);
   const ales = lista.find((m) => m.id === f.magazin) ?? null;
   const a = alerte(await produseMagazine(ales?.id));
@@ -59,7 +63,8 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
 
         <section className="foaie-grupa">
           <h2>1. Clienți care așteaptă</h2>
-          <p className="foaie-mic">Comenzile deschise cer mai mult decât e pe stoc. Cerere sigură: de produs sau de cumpărat.</p>
+          <p className="foaie-mic">Comenzile deschise cer mai mult decât e pe stoc. Cerere sigură: de produs sau de cumpărat.
+            {daComenzi && <span className="nu-tipari"> <Link href={`/magazine/psc${ales ? `?magazin=${ales.id}` : ''}`}>PSC pe modele, fără ce e deja în producție →</Link></span>}</p>
           {fara(a.asteapta.length) || (
             <table>
               <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Stoc</th><th className="c">Comenzi</th><th className="c">Cerut</th><th className="c">Lipsă</th><th className="c">Vândut 30 z</th></tr></thead>
@@ -89,7 +94,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
           </p>
           {fara(a.terminat.length) || (
             <table>
-              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Vândut 30 z</th><th className="c">Ultima vânzare</th><th>În magazin</th></tr></thead>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Vândut 30 z</th><th className="c">Ultima vânzare</th><th>În magazin</th>{thPsf}</tr></thead>
               <tbody>
                 {a.terminat.map(({ p: x, m }) => (
                   <tr key={`${x.magazin_id}${x.produs}${m.marime}`}>
@@ -101,6 +106,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
                     <td>{m.se_poate_comanda
                       ? <span className="mic">se poate comanda — comenzile noi vor apărea la „așteaptă"</span>
                       : <span className="rosu-tare">nu se mai poate comanda · ~{peSapt(m.v30)} buc/săpt pierdute</span>}</td>
+                    {psf(x.produs_id)}
                   </tr>
                 ))}
               </tbody>
@@ -113,7 +119,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
           <p className="foaie-mic">Încă pe stoc, dar la ritmul ultimelor 30 de zile ține sub {p.alerta_zile_stoc} zile.</p>
           {fara(a.curand.length) || (
             <table>
-              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Stoc</th><th className="c">Vândut 7 z</th><th className="c">30 z</th><th className="c">Ține</th></tr></thead>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Stoc</th><th className="c">Vândut 7 z</th><th className="c">30 z</th><th className="c">Ține</th>{thPsf}</tr></thead>
               <tbody>
                 {a.curand.map(({ p: x, m }) => (
                   <tr key={`${x.magazin_id}${x.produs}${m.marime}`}>
@@ -124,6 +130,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
                     <td className="c">{m.v7}</td>
                     <td className="c">{m.v30}</td>
                     <td className={`c ${m.zile! < 7 ? 'rosu-tare' : ''}`}>{m.zile} zile</td>
+                    {psf(x.produs_id)}
                   </tr>
                 ))}
               </tbody>
@@ -136,7 +143,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
           <p className="foaie-mic">Ultimele 7 zile de cel puțin {p.trend_factor}× media săptămânală de dinainte, minim {p.trend_min_buc} buc.</p>
           {fara(a.trend.length) || (
             <table>
-              <thead><tr>{thMag}<th>Produs</th><th className="c">Vândut 7 z</th><th className="c">30 z</th><th className="c">Creștere</th><th className="c">Stoc</th><th className="c">Ține</th></tr></thead>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Vândut 7 z</th><th className="c">30 z</th><th className="c">Creștere</th><th className="c">Stoc</th><th className="c">Ține</th>{thPsf}</tr></thead>
               <tbody>
                 {a.trend.map((x) => (
                   <tr key={`${x.magazin_id}${x.produs}`}>
@@ -147,6 +154,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
                     <td className="c">{x.semnale.trend ? `×${x.semnale.trend}` : 'nou'}</td>
                     <td className="c stoc">{x.stoc}</td>
                     <td className="c">{x.zile === null ? '—' : `${x.zile} zile`}</td>
+                    {psf(x.produs_id)}
                   </tr>
                 ))}
               </tbody>

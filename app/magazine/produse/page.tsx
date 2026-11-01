@@ -3,7 +3,7 @@ import Cauta from '../../Cauta';
 import { potriveste } from '../../lib/format';
 import { magazine } from '../../lib/magazine';
 import { produseMagazine, type ProdusMagazin } from '../../lib/produse';
-import { cere } from '../../lib/sesiune';
+import { cere, poateModifica } from '../../lib/sesiune';
 import '../magazine.css';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +30,7 @@ const zileStoc = (p: ProdusMagazin, prag = 14) => {
 export default async function Produse({ searchParams }: { searchParams: Promise<{ magazin?: string; ordine?: string; cauta?: string; toate?: string }> }) {
   await cere('expediere');
   const f = await searchParams;
+  const daComenzi = await poateModifica('comenzi');
   const lista = await magazine();
   const ales = lista.find((m) => m.id === f.magazin) ?? lista.find((m) => m.legat) ?? lista[0];
   const [, , sortare] = ORDINI.find(([k]) => k === f.ordine) ?? ORDINI[0];
@@ -66,7 +67,7 @@ export default async function Produse({ searchParams }: { searchParams: Promise<
           <table className="centralizator produse-magazin">
             <thead>
               <tr><th>Produs</th><th className="nr">Stoc</th><th className="nr">7 zile</th><th className="nr">30 zile</th>
-                  <th className="nr">60 zile</th><th className="nr">Pe zi</th><th>Ține</th><th>Mărimi · stoc</th><th>Semnale</th></tr>
+                  <th className="nr">60 zile</th><th className="nr">Pe zi</th><th>Ține</th><th>Mărimi · stoc</th><th>Semnale</th>{daComenzi && <th />}</tr>
             </thead>
             <tbody>
               {produse.map((p) => (
@@ -94,6 +95,7 @@ export default async function Produse({ searchParams }: { searchParams: Promise<
                     {p.semnale.trend !== null && <span className="insigna violet">trend{p.semnale.trend ? ` ×${p.semnale.trend}` : ' nou'}</span>}
                     {p.semnale.stoc_mort && <span className="insigna galben">nu se mișcă</span>}
                   </td>
+                  {daComenzi && <td>{p.produs_id && <Link href={`/comenzi/noua?din_produs=${p.produs_id}`} className="buton mic-buton">PSF →</Link>}</td>}
                 </tr>
               ))}
             </tbody>

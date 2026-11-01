@@ -36,6 +36,7 @@ export type Marime = {
 export type ProdusMagazin = {
   magazin_id: string;
   magazin: string;
+  produs_id: string | null; // în catalogul aplicației, pentru PSF
   produs: string;          // „Costum Artemis Negru"
   tip: string | null;
   activ: boolean;
@@ -67,7 +68,7 @@ const OPT_MARIME = /^(m[aă]rime|size|talie|marimea)$/i;
 type Rand = {
   magazin_id: string; magazin: string; titlu_produs: string; tip_produs: string | null; activ: boolean;
   optiuni: Record<string, string>; titlu_varianta: string | null; stoc: number; v7: number; v30: number; v60: number;
-  ultima: string | null; mort: number; asteapta: number; comenzi: number; vinde_fara_stoc: boolean;
+  ultima: string | null; mort: number; asteapta: number; comenzi: number; vinde_fara_stoc: boolean; produs_id: string | null;
 };
 
 /** Produsele magazinelor (sau ale unuia), cu vânzările și semnalele lor. */
@@ -89,7 +90,7 @@ export async function produseMagazine(magazinId?: string): Promise<ProdusMagazin
      SELECT mv.magazin_id, b.nume AS magazin, mv.titlu_produs, mv.tip_produs, mv.activ, mv.optiuni, mv.titlu_varianta,
             mv.stoc_fizic AS stoc, coalesce(s.v7, 0) AS v7, coalesce(s.v30, 0) AS v30, coalesce(s.v60, 0) AS v60,
             s.ultima, coalesce(s.mort, 0) AS mort, coalesce(a.asteapta, 0) AS asteapta, coalesce(a.comenzi, 0) AS comenzi,
-            mv.vinde_fara_stoc
+            mv.vinde_fara_stoc, mv.produs_id
        FROM magazin_varianta mv
        JOIN magazin m ON m.id = mv.magazin_id
        JOIN brand b   ON b.id = m.brand_id
@@ -126,7 +127,7 @@ export async function produseMagazine(magazinId?: string): Promise<ProdusMagazin
     const activ = variante.some((v) => v.activ);
     const ultima = variante.map((v) => v.ultima).filter(Boolean).sort().pop() ?? null;
     return {
-      magazin_id: r.magazin_id, magazin: r.magazin, produs: r.titlu_produs, tip: r.tip_produs, activ,
+      magazin_id: r.magazin_id, magazin: r.magazin, produs_id: variante.find((v) => v.produs_id)?.produs_id ?? null, produs: r.titlu_produs, tip: r.tip_produs, activ,
       stoc, v7, v30, v60, ritm: Math.round(ritm * 10) / 10, zile: ritm > 0 ? Math.floor(stoc / ritm) : null, ultima, marimi,
       semnale: {
         // Clienți care așteaptă: contează chiar dacă produsul a fost scos din magazin între timp.

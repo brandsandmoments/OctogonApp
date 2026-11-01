@@ -81,7 +81,7 @@ const LINII = `
     JOIN comanda c  ON c.id = cl.comanda_id
     JOIN produs p   ON p.id = cl.produs_id
     JOIN pozitie po ON po.linie_id = cl.id
-   WHERE c.stare NOT IN ('ciorna', 'anulata')
+   WHERE c.stare NOT IN ('ciorna', 'de_aprobat', 'anulata')
      AND cl.data_ceruta BETWEEN $1::date AND $2::date
    GROUP BY cl.id, c.numar, c.tip, p.denumire, cl.data_ceruta
    ORDER BY cl.data_ceruta, c.numar, p.denumire`;

@@ -45,10 +45,13 @@ export type ComandaNoua = {
   prioritate: number;
   observatii: string;
   lanseaza: boolean;
+  // PSF dat de cineva fără dreptul de aprobare: se „lansează" în așteptarea unui responsabil.
+  // Îl pune doar acțiunea de pe server, niciodată formularul.
+  deAprobat?: boolean;
   linii: LinieNoua[];
 };
 
-export type RezultatComanda = { ok: true; numar: string } | { ok: false; eroare: string };
+export type RezultatComanda = { ok: true; numar: string; deAprobat?: boolean } | { ok: false; eroare: string };
 
 /**
  * Numărul comenzii se scrie mereu la fel: „PSC-Sep-26-1 " și „psc-sep-26-1" sunt
@@ -109,7 +112,7 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
          VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, '')::uuid)
          RETURNING id`,
         [numar, cmd.tip, cmd.brandId, cmd.dataLansare, cmd.prioritate,
-         cmd.lanseaza ? 'lansata' : 'ciorna', cmd.observatii.trim(), cmd.kamId],
+         cmd.lanseaza ? (cmd.deAprobat ? 'de_aprobat' : 'lansata') : 'ciorna', cmd.observatii.trim(), cmd.kamId],
       );
       for (const l of linii) {
         const { rows: [linie] } = await c.query<{ id: string }>(
@@ -125,7 +128,7 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
           );
         }
       }
-      return { ok: true as const, numar };
+      return { ok: true as const, numar, deAprobat: Boolean(cmd.lanseaza && cmd.deAprobat) };
     });
   } catch (e) {
     if ((e as { code?: string }).code === '23505') {

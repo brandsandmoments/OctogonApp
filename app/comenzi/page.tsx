@@ -23,7 +23,7 @@ const TIPURI = {
  * mărimi sunt în centralizator. Se grupează pe săptămâni, luni, trimestre sau ani,
  * după ziua lansării.
  */
-export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string; grupare?: string; cauta?: string }> }) {
+export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string; grupare?: string; cauta?: string; trimis?: string }> }) {
   await cere('comenzi');
   const f = await searchParams;
   const tip: keyof typeof TIPURI = f.tip === 'PSC' ? 'PSC' : 'PSF';
@@ -68,6 +68,7 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
           {f.toate === '1' ? 'doar deschise' : 'și închise'}
         </Link>
       </p>
+      {f.trimis && <p className="mesaj-ok">{f.trimis} a fost trimis spre aprobare: un responsabil îl aprobă, apoi se lansează în producție.</p>}
       <Cauta valoare={f.cauta} pastreaza={{ tip, toate: f.toate, grupare: f.grupare }} placeholder="caută: comandă, produs, SKU, KAM" />
       <Grupare ales={g} pastreaza={{ tip, toate: f.toate, cauta: f.cauta }} />
       {poateDa && (
@@ -107,7 +108,7 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
                 <tr key={c.numar}>
                   <td>
                     <Link href={`/centralizator?cauta=${encodeURIComponent(c.numar)}&toate=1`}>{c.numar}</Link>{' '}
-                    <span className="slab">{c.brand} · P{c.prioritate}{c.stare === 'ciorna' && ' · ciornă'}</span>
+                    <span className="slab">{c.brand} · P{c.prioritate}{c.stare === 'ciorna' && ' · ciornă'}{c.stare === 'de_aprobat' && ' · de aprobat'}</span>
                   </td>
                   <td>{modele.get(c.numar)}</td>
                   <td>{c.kam ?? <span className="slab">—</span>}</td>

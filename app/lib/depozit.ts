@@ -60,7 +60,7 @@ export async function comenziDepozit(vedere: VedereDepozit): Promise<ComandaDepo
        JOIN brand b           ON b.id = c.brand_id
        LEFT JOIN utilizator k ON k.id = c.kam_id
        JOIN p                 ON p.comanda_id = c.id
-      WHERE c.stare NOT IN ('ciorna', 'anulata')
+      WHERE c.stare NOT IN ('ciorna', 'de_aprobat', 'anulata')
       GROUP BY c.id, c.numar, c.tip, b.nume, k.nume, c.data_lansare, c.stare
       ORDER BY termen NULLS LAST, c.numar`,
   );

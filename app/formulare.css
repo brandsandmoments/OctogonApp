@@ -145,3 +145,12 @@
 .fara-poza { width: 9rem; height: 12rem; border: 1px dashed var(--linie); border-radius: .35rem; display: flex; align-items: center; justify-content: center; color: var(--slab); font-size: .8rem; }
 .componente-fisa tr.editeaza td { border-bottom: 1px solid var(--linie); padding-top: 0; }
 .componente-fisa tr:not(.editeaza) td { border-bottom: 0; }
+
+/* PSF de aprobat */
+.caseta.aprobare { border: 1px solid var(--linie); border-radius: .5rem; padding: .75rem 1rem 1rem; margin: 1rem 0; background: #fff; }
+.caseta.aprobare h2 { margin: 0 0 .25rem; }
+.actiuni-aprobare { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: .75rem; }
+.actiuni-aprobare form { display: inline-flex; gap: .4rem; margin: 0; }
+.actiuni-aprobare input[name="motiv"] { font: inherit; padding: .4rem .6rem; border: 1px solid var(--linie); border-radius: .45rem; min-width: 16rem; }
+.buton.aproba { background: var(--verde); color: #fff; border-color: var(--verde); }
+.buton.aproba:hover { background: var(--verde-text); }

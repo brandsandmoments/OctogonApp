@@ -7,6 +7,7 @@ import { zilePanaLa } from './format';
 import { deplanificat, planificariActive } from './planificare';
 import { comenziMagazine } from './magazine';
 import { alerte, produseMagazine } from './produse';
+import { psfDeAprobat } from './aprobare';
 import { listaCumparaturi } from './stoc';
 
 /**
@@ -215,6 +216,20 @@ async function alerteMagazine(): Promise<Grupa> {
   };
 }
 
+/** Pentru responsabilii cu drept de aprobare: PSF-urile date de KAM-i care îi așteaptă. */
+async function aprobari(): Promise<Grupa> {
+  const lista = await psfDeAprobat();
+  const bucati = lista.reduce((s, c) => s + c.linii.reduce((a, l) => a + l.marimi.reduce((b, m) => b + m.cantitate, 0), 0), 0);
+  return {
+    nume: 'De aprobat',
+    carduri: [{
+      titlu: 'PSF-uri de la KAM-i', numar: lista.length, unitate: lista.length === 1 ? 'PSF' : 'PSF-uri',
+      detaliu: `${nr(bucati)} buc cerute`, href: '/comenzi/aprobare', actiune: 'Aprobă sau respinge',
+      ton: lista.length ? 'galben' : 'verde',
+    }],
+  };
+}
+
 /** Grupele omului, în ordinea drumului comenzii. Un KAM simplu își vede doar comenzile lui. */
 export async function deFacutAzi(c: Cine & { nume: string }): Promise<Grupa[]> {
   const doarAleLui = c.roluri.includes('kam') && !c.roluri.includes('admin') && !c.roluri.includes('head_of_sales');
@@ -227,6 +242,7 @@ export async function deFacutAzi(c: Cine & { nume: string }): Promise<Grupa[]> {
     poate(c, 'materiale') ? materiale().then((g) => [g]) : Promise.resolve([]),
     poate(c, 'expediere') ? Promise.all([magazineShopify(), alerteMagazine()]) : Promise.resolve([]),
   ]);
+  if (poate(c, 'aprobare', 'modifica')) parti.splice(1, 0, [await aprobari()]);
   const [dep, ...rest] = parti;
   // Comenzile (ale KAM-ului) întâi, depozitul la urmă: drumul comenzii.
   return [...dep.filter((g) => g.nume !== 'Depozit'), ...rest.flat(), ...dep.filter((g) => g.nume === 'Depozit')];

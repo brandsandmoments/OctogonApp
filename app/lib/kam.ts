@@ -94,7 +94,7 @@ const LINII = `
     LEFT JOIN utilizator u ON u.id = c.kam_id
     LEFT JOIN t ON t.linie_id = cl.id
     LEFT JOIN v ON v.linie_id = cl.id
-   WHERE c.tip = 'PSF' AND c.stare <> 'anulata'
+   WHERE c.tip = 'PSF' AND c.stare NOT IN ('anulata', 'de_aprobat')
      -- activă în perioadă: perioada ei de vânzare o intersectează
      AND cl.vanzare_de_la <= $2::date AND cl.vanzare_pana_la >= $1::date`;
 

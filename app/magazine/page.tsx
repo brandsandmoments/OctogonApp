@@ -123,7 +123,7 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
             <span className="slab">{LISTE[foaia].ce}</span>
             <span>
               {foaia === 'fara_stoc' && (await poateModifica('comenzi')) && (
-                <Link href={`/comenzi/noua?din_magazin=${ales.id}`} className="buton">PSC din ce lipsește →</Link>
+                <Link href={`/magazine/psc?magazin=${ales.id}`} className="buton">PSC din ce lipsește →</Link>
               )}{' '}
               <Tipareste />
             </span>
