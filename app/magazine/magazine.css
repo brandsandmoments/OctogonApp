@@ -39,3 +39,10 @@
 /* Comenzile pe model, culoare și mărime */
 .pe-modele td { white-space: normal; }
 .comenzi-varianta span { display: inline-block; margin: 0 .5rem .1rem 0; font-size: .8rem; color: var(--slab); }
+
+/* Livrări: numerele care deschid listele, căutarea coletelor */
+a.numar-situatie { color: inherit; }
+a.numar-situatie:hover { background: var(--bej); }
+.numar-situatie.activ-numar { background: var(--bej); box-shadow: inset 0 0 0 1.5px var(--accent-linie); }
+.cauta-colet input[name="cauta"] { min-width: min(34rem, 100%); }
+.cautare-colete td.drum div { white-space: nowrap; }

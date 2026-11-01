@@ -54,3 +54,26 @@ export async function livrariPeZi(zi: string, magazinId?: string): Promise<ZiLiv
   for (const { lista, ...c } of randuri) z[lista].push(c);
   return z;
 }
+
+export type ColetGasit = Colet & { in_livrare_la: string | null };
+
+/**
+ * Căutarea unui colet, oricând ar fi plecat: după numărul comenzii, numele clientului,
+ * telefon (doar cifrele contează: „0745 199 011" găsește și „+40745199011"), AWB sau
+ * produs. Cele mai noi întâi.
+ */
+export async function cautaColete(text: string, magazinId?: string): Promise<ColetGasit[]> {
+  const t = text.trim();
+  if (t.length < 2) return [];
+  const cifre = t.replace(/\D/g, '');
+  return interogare<ColetGasit>(
+    `SELECT ${CAMPURI}, to_char(l.in_livrare_la AT TIME ZONE 'Europe/Bucharest', 'DD.MM HH24:MI') AS in_livrare_la,
+            NULL::text AS ora, NULL::int AS zile
+       FROM magazin_livrare l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id
+      WHERE ($2::uuid IS NULL OR l.magazin_id = $2)
+        AND (l.comanda ILIKE '%' || $1 || '%' OR l.client ILIKE '%' || $1 || '%' OR l.awb ILIKE '%' || $1 || '%'
+             OR l.produse ILIKE '%' || $1 || '%'
+             OR (length($3) >= 4 AND right(regexp_replace(coalesce(l.telefon, ''), '\\D', '', 'g'), 9) LIKE '%' || right($3, 9) || '%'))
+      ORDER BY l.awb_la DESC
+      LIMIT 100`, [t, magazinId ?? null, cifre]);
+}
