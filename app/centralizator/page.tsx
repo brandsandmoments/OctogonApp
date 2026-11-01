@@ -3,6 +3,7 @@ import { Fragment } from 'react';
 import Grupare from '../Grupare';
 import Pliere from '../Pliere';
 import { grupareDinAdresa, grupeaza, perioada } from '../lib/perioade';
+import { modeleComenzi } from '../lib/modele';
 import { cere, poateModifica } from '../lib/sesiune';
 import { branduriActive, centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 
@@ -24,9 +25,10 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
   const comandaNoua = await poateModifica('comenzi');
   const f = await searchParams;
   const peModel = f.stadiu === 'necroita';
-  const [{ randuri, numarate, toate: toateLiniile }, branduri] = await Promise.all([
+  const [{ randuri, numarate, toate: toateLiniile }, branduri, modele] = await Promise.all([
     centralizatorPeStadii({ ...f, toate: f.toate === '1', peModel }),
     branduriActive(),
+    modeleComenzi(),
   ]);
   // Pe perioade, după lansarea comenzii; necroitele rămân grupate pe model.
   const g = peModel ? '' : grupareDinAdresa(f.grupare, 'saptamana');
@@ -87,6 +89,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
           <thead>
             <tr>
               <th>Comandă</th>
+              <th>Model</th>
               <th>Lansare</th>
               <th>Cerut la</th>
               <th>Produs</th>
@@ -112,7 +115,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                 <Fragment key={i}>
                 {nouaPerioada && (
                   <tr className="grupa-model">
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <strong>{perioadaRand(r)}</strong>{' '}
                       <span className="slab">{new Set(dinPerioada.map((x) => x.comanda)).size} comenzi lansate</span>
                     </td>
@@ -126,7 +129,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                 )}
                 {nouModel && (
                   <tr className="grupa-model">
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <strong>{model}</strong>{' '}
                       <span className="slab">{new Set(deModel.map((x) => x.comanda)).size} comenzi · {new Set(deModel.map((x) => x.produs)).size} produse</span>
                     </td>
@@ -144,6 +147,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                       </>
                     )}
                   </td>
+                  <td>{nouaComanda && modele.get(r.comanda)}</td>
                   <td className="slab">{nouaComanda && r.data_lansare}</td>
                   <td className="slab">{r.data_ceruta}</td>
                   <td>

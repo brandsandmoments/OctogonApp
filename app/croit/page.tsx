@@ -161,7 +161,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
       {lista.length === 0 ? <p className="slab">Nu a rămas nimic de croit.</p> : (
         <div className="tabel-derulant">
           <table className="centralizator">
-            <thead><tr><th>Comandă</th><th>Termen</th><th>Produs</th><th>Rămas pe mărimi → tai acum</th><th className="nr">Rest</th><th /></tr></thead>
+            <thead><tr><th>Comandă</th><th>Model</th><th>Termen</th><th>Produs</th><th>Rămas pe mărimi → tai acum</th><th className="nr">Rest</th><th /></tr></thead>
             <tbody>
               {[...peModel].map(([cheie, randuri]) => {
                 const formular = `t-${cheie}`;
@@ -169,7 +169,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
                 return (
                   <Fragment key={cheie}>
                     <tr className="grupa-model">
-                      <td colSpan={4}>
+                      <td colSpan={5}>
                         <strong>{randuri[0].model}</strong>{' '}
                         <span className="slab">{randuri.length} {randuri.length === 1 ? 'comandă' : 'comenzi'}</span>
                         {randuri[0].fara_model && (
@@ -201,6 +201,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
                           <Link href={`/planificare/${r.planificare_id}`}>{r.cod}</Link>{' '}
                           <span className="slab">{r.tip} · P{r.prioritate}</span>
                         </td>
+                        <td>{r.model}</td>
                         <td className="slab">{r.data_ceruta}</td>
                         <td>{r.produs}</td>
                         <td>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import NavPerioada from '../../kam/NavPerioada';
 import { eficientaAsiguraStoc, type LinieLivrare, type Rezumat } from '../../lib/asiguraStoc';
 import { adresaPerioadei, perioadaDinAdresa } from '../../lib/kam';
+import { modeleComenzi } from '../../lib/modele';
 import { cere } from '../../lib/sesiune';
 
 export const dynamic = 'force-dynamic';
@@ -89,18 +90,20 @@ function Rand({ r, eticheta }: { r: Rezumat; eticheta: React.ReactNode }) {
   );
 }
 
-function Linii({ lista }: { lista: LinieLivrare[] }) {
+async function Linii({ lista }: { lista: LinieLivrare[] }) {
+  const modele = await modeleComenzi();
   return (
     <div className="tabel-derulant">
       <table className="centralizator">
         <thead>
-          <tr><th>Comandă</th><th>Produs</th><th>Cerută la</th><th>Livrată la</th><th className="nr">Față de termen</th>
+          <tr><th>Comandă</th><th>Model</th><th>Produs</th><th>Cerută la</th><th>Livrată la</th><th className="nr">Față de termen</th>
               <th className="nr">Cerut</th><th className="nr">Intrat</th><th className="nr">La termen</th><th>Nu mai vin</th></tr>
         </thead>
         <tbody>
           {lista.map((l) => (
             <tr key={l.linie_id}>
               <td><Link href={`/depozit/${encodeURIComponent(l.comanda)}`}>{l.comanda}</Link> <span className="slab">{l.tip}</span></td>
+              <td>{modele.get(l.comanda)}</td>
               <td>{l.produs}</td>
               <td className="slab">{l.data_ceruta}</td>
               <td className="slab">{l.livrata_la ?? '—'}{l.din_banda && ' · din bandă'}</td>

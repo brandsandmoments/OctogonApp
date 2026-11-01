@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { comandaDepozit, intrareManuala, stingeComanda } from '../../lib/depozit';
 import { numarDinFormular } from '../../lib/format';
+import { modeleComenzi } from '../../lib/modele';
 import { motiveReceptie } from '../../lib/receptie';
 import { cere, poateModifica } from '../../lib/sesiune';
 import '../../formulare.css';
@@ -27,7 +28,7 @@ export default async function ComandaDepozitPagina({
   const m = await poateModifica('receptie');
   const [{ comanda: brut }, { eroare }] = await Promise.all([params, searchParams]);
   const numar = decodeURIComponent(brut);
-  const [d, motive] = await Promise.all([comandaDepozit(numar), motiveReceptie()]);
+  const [d, motive, modele] = await Promise.all([comandaDepozit(numar), motiveReceptie(), modeleComenzi()]);
   if (!d) notFound();
   const { comanda: c, pozitii, intrari } = d;
   const deschise = pozitii.filter((p) => !p.inchisa && p.intrat < p.cerut);
@@ -48,7 +49,7 @@ export default async function ComandaDepozitPagina({
   return (
     <main className="formular lat">
       <p className="slab"><Link href="/depozit">← Depozit</Link></p>
-      <h1>{c.numar}</h1>
+      <h1>{c.numar} <span className="slab">· {modele.get(c.numar)}</span></h1>
       <p className="sumar">
         {c.tip} · {c.brand} · {c.kam ?? 'fără KAM'} · termen {c.termen ?? '—'} · cerut {c.cerut} · intrat {c.intrat} ·{' '}
         <strong>{c.finalizata ? 'stinsă' : `lipsesc ${c.lipsesc}`}</strong>

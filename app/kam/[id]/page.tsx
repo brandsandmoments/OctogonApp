@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { modeleComenzi } from '../../lib/modele';
 import { cere } from '../../lib/sesiune';
 import { acuratete, adresaPerioadei, detaliiKam, perioadaDinAdresa } from '../../lib/kam';
 import NavPerioada from '../NavPerioada';
@@ -16,7 +17,7 @@ export default async function KamPagina({
   await cere('kam');
   const [{ id }, q] = await Promise.all([params, searchParams]);
   const per = perioadaDinAdresa(q);
-  const d = await detaliiKam(id === 'fara' ? null : id, per);
+  const [d, modele] = await Promise.all([detaliiKam(id === 'fara' ? null : id, per), modeleComenzi()]);
   const p = d.praguri;
 
   return (
@@ -48,7 +49,7 @@ export default async function KamPagina({
           <table className="centralizator">
             <thead>
               <tr>
-                <th>PSF</th><th>Produs</th><th>Perioada</th><th className="nr">Volum</th>
+                <th>PSF</th><th>Model</th><th>Produs</th><th>Perioada</th><th className="nr">Volum</th>
                 <th className="nr">De vândut în perioadă</th><th className="nr">Vândut în perioadă</th><th className="nr">Ritm</th>
                 <th className="nr">De vândut la zi</th><th className="nr">Vândut la zi</th><th className="nr">Acuratețe</th>
                 <th className="nr">Din volum</th><th>Semnal</th>
@@ -58,6 +59,7 @@ export default async function KamPagina({
               {d.linii.map((r) => (
                 <tr key={r.linie_id}>
                   <td><Link href={`/centralizator?cauta=${encodeURIComponent(r.comanda)}`}>{r.comanda}</Link></td>
+                  <td>{modele.get(r.comanda)}</td>
                   <td>{r.produs} <span className="slab">{r.cod_sku}</span></td>
                   <td className="slab">{r.de_la} – {r.pana_la}{r.se_incheie && <strong> · se încheie</strong>}</td>
                   <td className="nr">{r.volum}</td>

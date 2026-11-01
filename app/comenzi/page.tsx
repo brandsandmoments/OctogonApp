@@ -5,6 +5,7 @@ import Grupare from '../Grupare';
 import { potriveste } from '../lib/format';
 import { grupareDinAdresa, grupeaza } from '../lib/perioade';
 import { centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
+import { modeleComenzi } from '../lib/modele';
 import { cere, poateModifica } from '../lib/sesiune';
 
 export const dynamic = 'force-dynamic';
@@ -25,9 +26,10 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
   await cere('comenzi');
   const f = await searchParams;
   const tip: keyof typeof TIPURI = f.tip === 'PSC' ? 'PSC' : 'PSF';
-  const [{ randuri }, poateDa] = await Promise.all([
+  const [{ randuri }, poateDa, modele] = await Promise.all([
     centralizatorPeStadii({ tip, toate: f.toate === '1' }),
     poateModifica('comenzi'),
+    modeleComenzi(),
   ]);
 
   type Comanda = {
@@ -75,6 +77,7 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
           <thead>
             <tr>
               <th>Comandă</th>
+              <th>Model</th>
               <th>KAM</th>
               <th>Lansată</th>
               <th>Cerută la</th>
@@ -89,7 +92,7 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
               <Fragment key={gr.perioada?.de_la ?? 'toate'}>
               {gr.perioada && (
                 <tr className="grupa-model">
-                  <td colSpan={4}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} comenzi lansate</span></td>
+                  <td colSpan={5}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} comenzi lansate</span></td>
                   <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.cerut, 0)}</strong></td>
                   <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.croit, 0)}</strong></td>
                   <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.intrat, 0)}</strong></td>
@@ -104,6 +107,7 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
                     <Link href={`/centralizator?cauta=${encodeURIComponent(c.numar)}&toate=1`}>{c.numar}</Link>{' '}
                     <span className="slab">{c.brand} · P{c.prioritate}{c.stare === 'ciorna' && ' · ciornă'}</span>
                   </td>
+                  <td>{modele.get(c.numar)}</td>
                   <td>{c.kam ?? <span className="slab">—</span>}</td>
                   <td className="slab">{c.lansare}</td>
                   <td className="slab">{c.cerutLa}</td>

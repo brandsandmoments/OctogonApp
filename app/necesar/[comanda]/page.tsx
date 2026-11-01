@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cantitate } from '../../lib/format';
+import { modeleComenzi } from '../../lib/modele';
 import { necesarComanda, type Gol, type RandNecesar, type Variatie } from '../../lib/necesar';
 import { cere, poateModifica } from '../../lib/sesiune';
 import Tipareste from '../../Tipareste';
@@ -78,14 +79,14 @@ export default async function NecesarPagina({ params }: { params: Promise<{ coma
   await cere(['necesar', 'comenzi', 'planificare']);
   const etichete = (await poateModifica('receptie')) || (await poateModifica('planificare'));
   const { comanda } = await params;
-  const n = await necesarComanda(decodeURIComponent(comanda));
+  const [n, modele] = await Promise.all([necesarComanda(decodeURIComponent(comanda)), modeleComenzi()]);
   if (!n) notFound();
   const { antet, randuri, variatii, goluri } = n;
 
   return (
     <main className="necesar">
       <p className="nu-tipari"><Tipareste /></p>
-      <h1>Necesar {antet.numar}</h1>
+      <h1>Necesar {antet.numar} <span className="slab">· {modele.get(antet.numar)}</span></h1>
       <p className="sumar">
         {antet.tip} · {antet.brand} · lansare {antet.data_lansare} · {antet.stare} · {antet.bucati} buc
         {etichete && <span className="nu-tipari">{' · '}<Link href={`/etichete/${encodeURIComponent(antet.numar)}`}>etichete</Link></span>}

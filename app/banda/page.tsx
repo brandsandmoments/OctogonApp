@@ -5,6 +5,7 @@ import Grupare from '../Grupare';
 import { potriveste } from '../lib/format';
 import { cere, poateModifica } from '../lib/sesiune';
 import { deAlimentat, transe } from '../lib/banda';
+import { modeleComenzi } from '../lib/modele';
 import { grupareDinAdresa, grupeaza, type TipPerioada } from '../lib/perioade';
 
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,8 @@ export default async function Banda({ searchParams }: { searchParams: Promise<{ 
 }
 
 async function DeAlimentat({ m, g, cauta }: { m: boolean; g: TipPerioada | ''; cauta?: string }) {
-  const lista = (await deAlimentat()).filter((l) => potriveste(cauta, l.cod, l.comanda, l.produs));
+  const [toate, modele] = await Promise.all([deAlimentat(), modeleComenzi()]);
+  const lista = toate.filter((l) => potriveste(cauta, l.cod, l.comanda, l.produs));
   const grupe = g ? grupeaza(lista, (l) => l.croit_la, g) : [{ perioada: null, randuri: lista }];
   return (
     <>
@@ -50,14 +52,14 @@ async function DeAlimentat({ m, g, cauta }: { m: boolean; g: TipPerioada | ''; c
       {lista.length === 0 ? <p className="slab">Nimic croit care să aștepte banda.</p> : (
         <div className="tabel-derulant">
           <table className="centralizator">
-            <thead><tr><th>Lot croit</th><th>Termen</th><th>Produs</th><th>Pe mărimi</th>
+            <thead><tr><th>Lot croit</th><th>Model</th><th>Termen</th><th>Produs</th><th>Pe mărimi</th>
                        <th className="nr">Croit</th><th className="nr">Pe bandă</th><th className="nr">Rest</th><th /></tr></thead>
             <tbody>
               {grupe.map((gr) => (
                 <Fragment key={gr.perioada?.de_la ?? 'toate'}>
                 {gr.perioada && (
                   <tr className="grupa-model">
-                    <td colSpan={4}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} loturi · croite</span></td>
+                    <td colSpan={5}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} loturi · croite</span></td>
                     <td className="nr"><strong>{gr.randuri.reduce((s, l) => s + l.croit, 0)}</strong></td>
                     <td className="nr">{gr.randuri.reduce((s, l) => s + l.alimentat, 0) || '—'}</td>
                     <td className="nr"><strong>{gr.randuri.reduce((s, l) => s + l.rest, 0)}</strong></td>
@@ -67,6 +69,7 @@ async function DeAlimentat({ m, g, cauta }: { m: boolean; g: TipPerioada | ''; c
                 {gr.randuri.map((l) => (
                 <tr key={l.lot_id}>
                   <td><Link href={`/croit/${l.lot_id}`}>{l.cod}</Link> <span className="slab">P{l.prioritate}</span></td>
+                  <td>{modele.get(l.comanda)}</td>
                   <td className="slab">{l.data_ceruta}</td>
                   <td>{l.produs}</td>
                   <td>{l.marimi.map((m) => `${m.marime} ${m.rest}`).join(' · ')}</td>
@@ -87,7 +90,8 @@ async function DeAlimentat({ m, g, cauta }: { m: boolean; g: TipPerioada | ''; c
 }
 
 async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada | ''; cauta?: string }) {
-  const lista = (await transe(predate)).filter((t) => potriveste(cauta, t.cod, t.comanda, t.produs, t.responsabil));
+  const [toate, modele] = await Promise.all([transe(predate), modeleComenzi()]);
+  const lista = toate.filter((t) => potriveste(cauta, t.cod, t.comanda, t.produs, t.responsabil));
   const grupe = g ? grupeaza(lista, (t) => (predate ? t.predat_la : t.alimentat_la), g) : [{ perioada: null, randuri: lista }];
   return (
     <>
@@ -95,14 +99,14 @@ async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada 
       {lista.length === 0 ? <p className="slab">{predate ? 'Nimic predat încă.' : 'Nimic pe bandă.'}</p> : (
         <div className="tabel-derulant">
           <table className="centralizator">
-            <thead><tr><th>Tranșă</th><th>Termen</th><th>Produs</th><th className="nr">Buc</th><th>Etapă</th>
+            <thead><tr><th>Tranșă</th><th>Model</th><th>Termen</th><th>Produs</th><th className="nr">Buc</th><th>Etapă</th>
                        <th>{predate ? 'Predat' : 'Estimat în depozit'}</th>{!predate && <th className="nr">Marjă</th>}</tr></thead>
             <tbody>
               {grupe.map((gr) => (
                 <Fragment key={gr.perioada?.de_la ?? 'toate'}>
                 {gr.perioada && (
                   <tr className="grupa-model">
-                    <td colSpan={3}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} tranșe · {predate ? 'predate' : 'date pe bandă'}</span></td>
+                    <td colSpan={4}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} tranșe · {predate ? 'predate' : 'date pe bandă'}</span></td>
                     <td className="nr"><strong>{gr.randuri.reduce((s, t) => s + t.bucati, 0)}</strong></td>
                     <td colSpan={predate ? 2 : 3} />
                   </tr>
@@ -110,6 +114,7 @@ async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada 
                 {gr.randuri.map((t) => (
                 <tr key={t.id}>
                   <td><Link href={`/banda/${t.id}`}>{t.cod}</Link> <span className="slab">P{t.prioritate}</span></td>
+                  <td>{modele.get(t.comanda)}</td>
                   <td className="slab">{t.data_ceruta}</td>
                   <td>{t.produs}{t.responsabil && <span className="slab"> · {t.responsabil}</span>}</td>
                   <td className="nr">{t.bucati}</td>

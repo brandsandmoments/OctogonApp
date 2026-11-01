@@ -94,14 +94,14 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
       <div className="tabel-derulant">
         <table className="centralizator">
           <thead>
-            <tr><th /><th>Comandă</th><th>Termen</th><th>Produs</th>
+            <tr><th /><th>Comandă</th><th>Model</th><th>Termen</th><th>Produs</th>
                 <th className="nr">Cerut</th><th className="nr">Planif.</th><th className="nr">Rest</th><th /></tr>
           </thead>
           <tbody>
             {[...peModel].map(([cheie, linii]) => (
               <Fragment key={cheie}>
                 <tr className="grupa-model">
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <strong>{linii[0].model}</strong>{' '}
                     <span className="slab">{linii.length} {linii.length === 1 ? 'comandă' : 'comenzi'}</span>
                   </td>
@@ -117,6 +117,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
                       )}
                     </td>
                     <td>{l.comanda} <span className="slab">{l.tip} · P{l.prioritate}</span></td>
+                    <td>{l.model}</td>
                     <td className="slab">{l.data_ceruta}</td>
                     <td>{l.produs} <span className="slab">{l.cod_sku}</span></td>
                     <td className="nr">{l.cerut}</td>
@@ -154,7 +155,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
               <details className="caseta de-trimis">
                 <summary>
                   <input type="checkbox" name="id" value={p.id} form="trimite" disabled={!m || !gata} aria-label={`Trimite ${p.cod}`} />{' '}
-                  <strong>{p.cod}</strong> · {p.produs} · {p.planificat} buc · termen {p.data_ceruta} ·{' '}
+                  <strong>{p.cod}</strong> · {p.model} · {p.produs} · {p.planificat} buc · termen {p.data_ceruta} ·{' '}
                   <span className={gata ? 'slab' : 'lipsa'}>avem {bifate}/{lista.length} materiale</span>
                 </summary>
                 <form action={bifeaza}><fieldset disabled={!m} className="fara-chenar">
@@ -218,17 +219,18 @@ function Tabel({ lista, coloana, peModel = false }: {
     <div className="tabel-derulant">
       <table className="centralizator">
         <thead>
-          <tr><th>Planificare</th><th>Termen</th><th>Produs</th><th>Stadiu</th>
+          <tr><th>Planificare</th><th>Model</th><th>Termen</th><th>Produs</th><th>Stadiu</th>
               <th className="nr">Planif.</th><th className="nr">Croit</th><th>Necesar</th><th /></tr>
         </thead>
         <tbody>
           {lista.map((p, i) => (
             <Fragment key={p.id}>
             {peModel && (i === 0 || lista[i - 1].model !== p.model) && (
-              <tr className="grupa-model"><td colSpan={8}><strong>{p.model}</strong></td></tr>
+              <tr className="grupa-model"><td colSpan={9}><strong>{p.model}</strong></td></tr>
             )}
             <tr>
               <td><Link href={`/planificare/${p.id}`}>{p.cod}</Link> <span className="slab">P{p.prioritate}</span></td>
+              <td>{p.model}</td>
               <td className="slab">{p.data_ceruta}</td>
               <td>{p.produs}</td>
               <td>{STADII[p.stadiu] ?? p.stadiu}{p.loturi_deschise > 0 && <span className="slab"> · într-o taiere</span>}</td>

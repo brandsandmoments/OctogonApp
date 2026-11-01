@@ -275,11 +275,12 @@ function ComenziInTaiere({ f, editabil = false }: { f: FisaTaiere; editabil?: bo
   return (
     <div className="tabel-derulant">
       <table className="grila">
-        <thead><tr><th>Comandă</th><th>Produs</th><th>Pe mărimi: cerut → croit</th><th className="nr">Total</th></tr></thead>
+        <thead><tr><th>Comandă</th><th>Model</th><th>Produs</th><th>Pe mărimi: cerut → croit</th><th className="nr">Total</th></tr></thead>
         <tbody>
           {f.loturi.map((l) => (
             <tr key={l.id}>
               <td><Link href={`/croit/${l.id}`}>{l.cod}</Link> <span className="slab">{l.tip} · P{l.prioritate}</span></td>
+              <td>{f.taiere.model}</td>
               <td>{l.produs}</td>
               <td>
                 <span className="marimi-croit">

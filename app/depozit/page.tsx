@@ -5,6 +5,7 @@ import Grupare from '../Grupare';
 import { potriveste } from '../lib/format';
 import { comenziDepozit, type ComandaDepozit, type VedereDepozit } from '../lib/depozit';
 import { grupareDinAdresa, grupeaza } from '../lib/perioade';
+import { modeleComenzi } from '../lib/modele';
 import { cere } from '../lib/sesiune';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,8 @@ export default async function Depozit({ searchParams }: { searchParams: Promise<
   const f = await searchParams;
   const vedere = (VEDERI.find(([v]) => v === f.vedere)?.[0] ?? 'de_stins') as VedereDepozit;
   const g = grupareDinAdresa(f.grupare);
-  const lista = (await comenziDepozit(vedere))
+  const [toate, modele] = await Promise.all([comenziDepozit(vedere), modeleComenzi()]);
+  const lista = toate
     .filter((c) => (!f.tip || c.tip === f.tip) && potriveste(f.cauta, c.numar, c.brand, c.kam, c.produse));
   const zi = (c: ComandaDepozit) => (c.finalizata ? c.ultima_intrare ?? c.termen : c.termen);
   const grupe = g ? grupeaza(lista, zi, g) : [{ perioada: null, randuri: lista }];
@@ -58,7 +60,7 @@ export default async function Depozit({ searchParams }: { searchParams: Promise<
       <div className="tabel-derulant">
         <table className="centralizator">
           <thead>
-            <tr><th>Comandă</th><th>KAM</th><th>Termen</th><th className="nr">Cerut</th><th className="nr">Intrat</th>
+            <tr><th>Comandă</th><th>Model</th><th>KAM</th><th>Termen</th><th className="nr">Cerut</th><th className="nr">Intrat</th>
                 <th className="nr">Lipsesc</th><th>Poziții stinse</th><th>Ultima intrare</th></tr>
           </thead>
           <tbody>
@@ -66,7 +68,7 @@ export default async function Depozit({ searchParams }: { searchParams: Promise<
               <Fragment key={gr.perioada?.de_la ?? 'toate'}>
                 {gr.perioada && (
                   <tr className="grupa-model">
-                    <td colSpan={3}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} comenzi</span></td>
+                    <td colSpan={4}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} comenzi</span></td>
                     <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.cerut, 0)}</strong></td>
                     <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.intrat, 0)}</strong></td>
                     <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.lipsesc, 0)}</strong></td>
@@ -76,6 +78,7 @@ export default async function Depozit({ searchParams }: { searchParams: Promise<
                 {gr.randuri.map((c) => (
                   <tr key={c.numar}>
                     <td><Link href={`/depozit/${encodeURIComponent(c.numar)}`}>{c.numar}</Link> <span className="slab">{c.tip} · {c.brand}</span></td>
+                    <td>{modele.get(c.numar)}</td>
                     <td>{c.kam ?? <span className="slab">—</span>}</td>
                     <td className="slab">{c.termen ?? '—'}</td>
                     <td className="nr">{c.cerut}</td>
