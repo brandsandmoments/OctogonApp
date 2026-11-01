@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { caFirma, firmaDinMediu } from './db';
+import { extractText, getDocumentProxy } from 'unpdf';
 import { citestePlatiCard } from './shopify';
 
 /**
@@ -13,7 +14,9 @@ import { citestePlatiCard } from './shopify';
  * - **GLS** (MyGLS): toate coletele contului, pe zile, și stadiul lor. GLS nu dă prin
  *   API rambursurile virate;
  * - **Shopify Payments**, pe fiecare magazin: plățile cu cardul, cu comisionul, și
- *   viramentele către bancă.
+ *   viramentele către bancă;
+ * - **SmartBill**: facturile făcute direct acolo (schimburi, retrimiteri), pe care
+ *   xConnector nu le știe — citite din PDF, număr cu număr.
  *
  * La prima citire se iau ultimele 60 de zile; apoi doar ultimele câteva, peste ce e.
  * Datele de acces stau în .env pe server (XCONNECTOR_KEY_<COD>, FAN_USER, FAN_PAROLA,
@@ -299,6 +302,75 @@ async function citesteGls(c: PoolClient, b: Branduri): Promise<number> {
   return n;
 }
 
+// ---------------------------------------------------------------- SmartBill
+
+const SB = 'https://ws.smartbill.ro/SBORO/api';
+
+async function sb(cale: string, accept = 'application/json'): Promise<Response> {
+  const email = process.env.SMARTBILL_EMAIL, token = process.env.SMARTBILL_TOKEN;
+  if (!email || !token) throw new Error('neconectat (lipsesc emailul și tokenul SmartBill)');
+  await pauza(400);  // SmartBill: cel mult 30 de cereri la 10 secunde, altfel blochează 10 minute
+  const r = await fetch(`${SB}${cale}`, {
+    headers: { authorization: `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}`, accept }, signal: AbortSignal.timeout(60_000) });
+  if (r.status === 429) throw new Error('SmartBill: prea multe cereri; se reia la citirea următoare');
+  if (r.status === 401 || r.status === 403) throw new Error('SmartBill: autentificarea a eșuat');
+  return r;
+}
+
+/** Ce scrie pe o factură SmartBill: data, clientul, telefonul, comanda („Order: #17191"), totalul. */
+function dinFactura(text: string) {
+  const ia = (re: RegExp) => re.exec(text)?.[1]?.trim() || null;
+  const data = ia(/Data \(zi\/luna\/an\):\s*(\d{2}\/\d{2}\/\d{4})/);
+  const total = ia(/(-?[\d,]*\d(?:\.\d+)?)\s*Total plata/);
+  return {
+    data: data ? data.split('/').reverse().join('-') : null,
+    client: ia(/Client:\s*(.+?)\s+CIF:/),
+    telefon: ia(/Persoana de contact:\s*(\+?\d[\d\s]{7,}\d)/)?.replace(/\s/g, '') ?? null,
+    email: ia(/Email:\s*(\S+@\S+)/),
+    comanda: ia(/Order:\s*(#\d+)/),
+    total: total == null ? null : Number(total.replace(/,/g, '')),
+  };
+}
+
+/**
+ * Facturile din SmartBill pe care xConnector nu le știe: SmartBill nu dă lista lor, dar
+ * dă seria cu următorul număr. Numerele din ultimele ~6000 ale seriei care nu sunt nici
+ * în xConnector, nici citite deja, se citesc din PDF. Cel mult 1200 pe o citire.
+ */
+async function citesteSmartBill(c: PoolClient): Promise<number> {
+  const cif = process.env.SMARTBILL_CIF;
+  if (!cif) throw new Error('neconectat (lipsește CIF-ul SmartBill)');
+  const serii = (await (await sb(`/series?cif=${encodeURIComponent(cif)}&type=f`)).json() as { list?: { name: string; nextNumber: number }[] }).list ?? [];
+  let n = 0;
+  for (const { name: serie, nextNumber } of serii) {
+    const { rows } = await c.query<{ n: number }>(
+      `SELECT DISTINCT substring(x FROM '-(\\d+)$')::int AS n FROM xc_comanda, unnest(facturi || stornari) x WHERE x LIKE $1 || '-%'
+       UNION SELECT numar FROM factura_smartbill WHERE serie = $1`, [serie]);
+    const stiute = new Set(rows.map((r) => r.n));
+    const lipsa: number[] = [];
+    for (let nr = nextNumber - 1; nr >= Math.max(1, nextNumber - 6000) && lipsa.length < 1200; nr--) if (!stiute.has(nr)) lipsa.push(nr);
+    for (const nr of lipsa) {
+      const r = await sb(`/invoice/pdf?cif=${encodeURIComponent(cif)}&seriesname=${encodeURIComponent(serie)}&number=${nr}`, 'application/octet-stream');
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      // Un număr nefolosit (sau șters) întoarce un mesaj, nu un PDF.
+      if (!r.ok || String.fromCharCode(...bytes.slice(0, 4)) !== '%PDF') {
+        await c.query(`INSERT INTO factura_smartbill (firma_id, serie, numar, exista) VALUES (firma_curenta(), $1, $2, false) ON CONFLICT DO NOTHING`, [serie, nr]);
+        continue;
+      }
+      const { text } = await extractText(await getDocumentProxy(bytes), { mergePages: true });
+      const f = dinFactura(text);
+      await c.query(
+        `INSERT INTO factura_smartbill (firma_id, serie, numar, data, client, telefon, email, comanda, total)
+         VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (firma_id, serie, numar) DO UPDATE SET
+           data = EXCLUDED.data, client = EXCLUDED.client, telefon = EXCLUDED.telefon, email = EXCLUDED.email,
+           comanda = EXCLUDED.comanda, total = EXCLUDED.total, exista = true, citit_la = now()`,
+        [serie, nr, f.data, f.client, f.telefon, f.email, f.comanda, f.total]);
+      n++;
+    }
+  }
+  return n;
+}
+
 // ---------------------------------------------------------------- potrivirea
 
 /**
@@ -357,6 +429,8 @@ export async function sincronizeazaFinanciar(): Promise<RezultatFinanciar[]> {
   for (const m of magazine) await pas(`xc:${m.cod}`, (c) => citesteXconnector(c, m));
   for (const m of magazine) if (m.fan_client_id) await pas(`fan:${m.fan_client_id}`, (c) => citesteFan(c, { ...m, fan_client_id: m.fan_client_id! }, branduri));
   await pas('gls', (c) => citesteGls(c, branduri));
+  // Facturile făcute direct în SmartBill (după xConnector, ca să se știe ce numere are el).
+  await pas('smartbill', citesteSmartBill);
   // Cardul, din Shopify Payments: prima dată 60 de zile, apoi ultimele câteva.
   for (const m of magazine) await pas(`card:${m.cod}`, async (c) => citestePlatiCard(c, m.id, await deUnde(c, `card:${m.cod}`)));
   await caFirma(firma, potriveste);
