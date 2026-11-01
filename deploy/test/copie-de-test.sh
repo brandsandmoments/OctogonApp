@@ -26,10 +26,12 @@ sudo -H -u octogon git -C "$TEST" reset -q --hard FETCH_HEAD
 
 echo "==> .env de test"
 # Aceeași cheie Shopify (tokenurile magazinelor, copiate cu baza, trebuie descifrate),
-# altă bază, altă adresă, alt secret de sincronizare, fără Slack.
+# altă bază, altă adresă, alt secret de sincronizare, fără Slack și fără accesul la
+# curieri, xConnector și SmartBill: copia de test nu atinge conturile adevărate.
 sed -e 's#^\(DATABASE_URL=.*\)/octogon$#\1/octogon_test#' \
     -e "s#^APP_URL=.*#APP_URL=https://test.$DOMENIU#" \
-    -e '/^SLACK_WEBHOOK_URL=/d' -e '/^SYNC_SECRET=/d' -e '/^OCTOGON_TEST=/d' "$COD/.env" > "$TEST/.env"
+    -e '/^SLACK_WEBHOOK_URL=/d' -e '/^SYNC_SECRET=/d' -e '/^OCTOGON_TEST=/d' \
+    -e '/^XCONNECTOR_KEY_/d' -e '/^FAN_/d' -e '/^GLS_/d' -e '/^SMARTBILL_/d' "$COD/.env" > "$TEST/.env"
 printf 'OCTOGON_TEST=1\nSYNC_SECRET=%s\n' "$(openssl rand -hex 24)" >> "$TEST/.env"
 chown octogon:octogon "$TEST/.env"; chmod 600 "$TEST/.env"
 
@@ -46,6 +48,9 @@ UPDATE magazin_livrare SET client = 'Client ' || comanda, telefon = NULL;
 -- Financiar: coletele de la curieri și comenzile din xConnector, fără nume și telefoane.
 UPDATE colet_curier SET destinatar = 'Client ' || coalesce(comanda, awb), telefon = NULL, referinta = NULL;
 UPDATE xc_comanda SET client = 'Client ' || nume, telefon = NULL;
+UPDATE factura_smartbill SET client = 'Client ' || serie || '-' || numar, telefon = NULL, email = NULL;
+-- Extrasele de cont: sumele rămân, descrierile (contrapartide, IBAN-uri) nu.
+UPDATE banca_tranzactie SET descriere = NULL;
 -- Comenzile și coletele se recitesc de la zero, ca toate să primească telefoane false stabile.
 UPDATE magazin SET livrari_pana_la = NULL;
 -- Doar contul demo intră: sesiunile, tabletele și ceilalți oameni nu.
