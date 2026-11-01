@@ -269,6 +269,19 @@ const deschisa = (o: ComandaShopify) =>
   !o.cancelledAt && !o.closedAt && o.displayFinancialStatus !== 'REFUNDED' && o.displayFinancialStatus !== 'VOIDED'
   && o.lineItems.nodes.some((l) => l.unfulfilledQuantity > 0);
 
+/**
+ * Pe copia de test (OCTOGON_TEST=1), clienții nu apar: numele devine „Client #25448",
+ * telefonul un număr fals, dar același pentru același telefon — dublele se văd în
+ * continuare. Parola contului demo o știu toți cei care testează.
+ */
+const peTest = process.env.OCTOGON_TEST === '1';
+const telefonFals = (t: string | null) => {
+  const cifre = (t ?? '').replace(/\D/g, '');
+  if (cifre.length < 6) return null;
+  const h = createHmac('sha256', 'octogon-test').update(cifre.slice(-9)).digest();
+  return `07${String(h.readUInt32BE(0) % 100_000_000).padStart(8, '0')}`;
+};
+
 async function scrieComanda(c: PoolClient, magazinId: string, o: ComandaShopify) {
   if (!deschisa(o)) {
     await c.query(`DELETE FROM magazin_comanda WHERE magazin_id = $1 AND comanda_gid = $2`, [magazinId, o.id]);
@@ -284,8 +297,10 @@ async function scrieComanda(c: PoolClient, magazinId: string, o: ComandaShopify)
        anulata_la = EXCLUDED.anulata_la, inchisa_la = EXCLUDED.inchisa_la, total = EXCLUDED.total, nota = EXCLUDED.nota,
        etichete = EXCLUDED.etichete
      RETURNING id`,
-    [magazinId, o.id, o.name, o.createdAt, o.updatedAt, o.shippingAddress?.name ?? o.billingAddress?.name ?? null,
-     o.shippingAddress?.phone ?? o.billingAddress?.phone ?? null, o.shippingAddress?.city ?? null, o.displayFinancialStatus,
+    [magazinId, o.id, o.name, o.createdAt, o.updatedAt,
+     peTest ? `Client ${o.name}` : o.shippingAddress?.name ?? o.billingAddress?.name ?? null,
+     peTest ? telefonFals(o.shippingAddress?.phone ?? o.billingAddress?.phone ?? null) : o.shippingAddress?.phone ?? o.billingAddress?.phone ?? null,
+     o.shippingAddress?.city ?? null, o.displayFinancialStatus,
      o.displayFulfillmentStatus, o.cancelledAt, o.closedAt, o.totalPriceSet?.shopMoney.amount ?? null, o.note, o.tags]);
   await c.query(`DELETE FROM magazin_comanda_linie WHERE comanda_id = $1`, [id]);
   for (const l of o.lineItems.nodes) {

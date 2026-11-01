@@ -1,0 +1,9 @@
+[Unit]
+Description=Copia de test: citirea magazinelor Shopify (doar citire)
+After=octogon-test.service
+
+[Service]
+Type=oneshot
+User=octogon
+EnvironmentFile=/opt/octogon-test/.env
+ExecStart=/bin/sh -c 'curl -fsS -m 600 -X POST -H "X-Octogon-Sync: $SYNC_SECRET" http://127.0.0.1:3001/shopify/sync'

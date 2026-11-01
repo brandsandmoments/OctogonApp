@@ -1,0 +1,9 @@
+[Unit]
+Description=Copia de test: magazinele Shopify la fiecare 15 minute (copia de test nu primește webhook-uri)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target

@@ -16,6 +16,10 @@ export default async function Layout({ children }: { children: React.ReactNode }
   return (
     <html lang="ro">
       <body>
+        {/* Pe copia de test (OCTOGON_TEST=1): să nu o confunde nimeni cu aplicația adevărată. */}
+        {process.env.OCTOGON_TEST === '1' && (
+          <div className="banda-test">Copie de test — datele se pot schimba oricum; clienții sunt anonimizați. Aplicația adevărată e separată.</div>
+        )}
         {u && (
           <header className="bara-sus">
             <Link href="/" className="acasa">OctogonApp</Link>

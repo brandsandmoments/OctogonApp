@@ -178,3 +178,5 @@ h1 { font-size: 1.55rem; font-weight: 800; letter-spacing: -.01em; }
 .goluri, .card, .numar-situatie { box-shadow: 0 1px 2px rgb(0 0 0 / .03); }
 .mesaj-ok { color: var(--verde-text); font-weight: 600; }
 .buton.activ-buton { background: var(--bej); border-color: var(--accent-linie); }
+.banda-test { background: #fff4d6; color: #7a5a00; border-bottom: 1px solid #ecd28a; text-align: center; font-size: .82rem; font-weight: 600; padding: .35rem 1rem; }
+@media print { .banda-test { display: none; } }

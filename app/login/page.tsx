@@ -4,7 +4,7 @@ import '../formulare.css';
 
 export const dynamic = 'force-dynamic';
 
-/** Logarea de birou: email și parolă. Atelierul intră de pe tableta lui, cu PIN. */
+/** Logarea de birou: email (sau utilizator, ca la contul demo de pe copia de test) și parolă. Atelierul intră de pe tableta lui, cu PIN. */
 export default async function Login({ searchParams }: { searchParams: Promise<{ eroare?: string; inapoi?: string }> }) {
   const { eroare, inapoi = '/' } = await searchParams;
   return (
@@ -12,7 +12,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       <h1>OctogonApp</h1>
       <form action={logareParola}>
         <input type="hidden" name="inapoi" value={inapoi} />
-        <label><span>Email</span><input name="email" type="email" autoComplete="username" required autoFocus /></label>
+        <label><span>Email sau utilizator</span><input name="email" type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username" required autoFocus /></label>
         <label><span>Parolă</span><input name="parola" type="password" autoComplete="current-password" required /></label>
         {/* Un singur mesaj pentru toate cazurile: cine ghicește nu află dacă emailul există. */}
         {eroare && <p className="eroare">Email sau parolă greșite. După 5 încercări contul se blochează 15 minute.</p>}
