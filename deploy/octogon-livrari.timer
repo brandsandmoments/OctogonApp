@@ -1,0 +1,9 @@
+[Unit]
+Description=Coletele la curier, citite din Shopify la fiecare oră
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Coletele din magazinele Shopify: stadiul la curier (ridicat, livrat, refuzat, retur)
+After=octogon.service
+
+[Service]
+Type=oneshot
+User=octogon
+EnvironmentFile=/opt/octogon/.env
+ExecStart=/bin/sh -c 'curl -fsS -m 600 -X POST -H "X-Octogon-Sync: $SYNC_SECRET" "http://127.0.0.1:3000/shopify/sync?doar=livrari"'

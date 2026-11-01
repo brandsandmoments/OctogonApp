@@ -381,14 +381,103 @@ async function sincronizeazaVanzari(c: PoolClient, a: Acces): Promise<number> {
   return n;
 }
 
-export type RezultatSincronizare = { magazin: string; variante?: number; comenzi?: number; vanzari?: number; eroare?: string };
+// ---------------------------------------------------------------- livrările la curier
+
+const LIVRARE = `
+  id name createdAt
+  shippingAddress { name phone city }
+  billingAddress { name phone }
+  fulfillments(first: 10) {
+    id status displayStatus createdAt deliveredAt
+    trackingInfo(first: 1) { company number url }
+    fulfillmentLineItems(first: 30) { nodes { quantity lineItem { title variantTitle } } }
+    events(first: 30, sortKey: HAPPENED_AT) { nodes { status happenedAt message } }
+  }`;
+
+type ComandaLivrari = {
+  id: string; name: string; createdAt: string;
+  shippingAddress: { name: string | null; phone: string | null; city: string | null } | null;
+  billingAddress: { name: string | null; phone: string | null } | null;
+  fulfillments: {
+    id: string; status: string; displayStatus: string | null; createdAt: string; deliveredAt: string | null;
+    trackingInfo: { company: string | null; number: string | null; url: string | null }[];
+    fulfillmentLineItems: { nodes: { quantity: number; lineItem: { title: string; variantTitle: string | null } }[] };
+    events: { nodes: { status: string; happenedAt: string; message: string | null }[] };
+  }[];
+};
 
 /**
- * Sincronizarea completă a unui magazin sau a tuturor: variantele cu stocul, comenzile
- * deschise și vânzările de la ultima citire, fiecare în tranzacția ei — comenzile căzute nu anulează
+ * Coletele unei comenzi, din evenimentele curierului: primul eveniment după AWB
+ * (în tranzit, preluat) înseamnă că l-a ridicat curierul; „în livrare", livrat sau
+ * eșec. La eșec, mesajul curierului spune de ce: „Refuz primire" e refuz, restul
+ * (de obicei „Retur") e colet nelivrat, întors.
+ */
+async function scrieLivrari(c: PoolClient, magazinId: string, o: ComandaLivrari) {
+  for (const f of o.fulfillments) {
+    const ev = f.events.nodes;
+    const primul = (...st: string[]) => ev.find((e) => st.includes(e.status))?.happenedAt ?? null;
+    const esec = [...ev].reverse().find((e) => e.status === 'FAILURE');
+    const ridicat = primul('CARRIER_PICKED_UP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILURE', 'ATTEMPTED_DELIVERY');
+    const livrat = f.deliveredAt ?? primul('DELIVERED');
+    const refuz = esec && /refuz/i.test(esec.message ?? '');
+    // Ce contează e ultimul deznodământ: un colet refuzat și apoi relivrat e livrat.
+    const ultim = [...ev].reverse().find((e) => e.status === 'DELIVERED' || e.status === 'FAILURE');
+    const stare = f.status === 'CANCELLED' ? 'anulat'
+      : livrat && ultim?.status !== 'FAILURE' ? 'livrat'
+      : esec ? (refuz ? 'refuzat' : 'nelivrat')
+      : primul('OUT_FOR_DELIVERY') ? 'in_livrare'
+      : ridicat ? 'in_tranzit' : 'awb';
+    const linii = f.fulfillmentLineItems.nodes;
+    const t = f.trackingInfo[0];
+    const telefon = o.shippingAddress?.phone ?? o.billingAddress?.phone ?? null;
+    await c.query(
+      `INSERT INTO magazin_livrare (firma_id, magazin_id, livrare_gid, comanda_gid, comanda, comandata_la, client, telefon, oras,
+                                    produse, bucati, curier, awb, urmarire, awb_la, ridicat_la, in_livrare_la, livrat_la, esuat_la,
+                                    motiv, stare, actualizat_la)
+       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, now())
+       ON CONFLICT (magazin_id, livrare_gid) DO UPDATE SET
+         client = EXCLUDED.client, telefon = EXCLUDED.telefon, oras = EXCLUDED.oras, produse = EXCLUDED.produse,
+         bucati = EXCLUDED.bucati, curier = EXCLUDED.curier, awb = EXCLUDED.awb, urmarire = EXCLUDED.urmarire,
+         ridicat_la = EXCLUDED.ridicat_la, in_livrare_la = EXCLUDED.in_livrare_la, livrat_la = EXCLUDED.livrat_la,
+         esuat_la = EXCLUDED.esuat_la, motiv = EXCLUDED.motiv, stare = EXCLUDED.stare, actualizat_la = now()`,
+      [magazinId, f.id, o.id, o.name, o.createdAt,
+       peTest ? `Client ${o.name}` : o.shippingAddress?.name ?? o.billingAddress?.name ?? null,
+       peTest ? telefonFals(telefon) : telefon, o.shippingAddress?.city ?? null,
+       linii.map((l) => `${l.lineItem.title}${l.lineItem.variantTitle ? ` ${l.lineItem.variantTitle}` : ''} ×${l.quantity}`).join(', '),
+       linii.reduce((s, l) => s + l.quantity, 0), t?.company ?? null, t?.number ?? null, t?.url ?? null, f.createdAt,
+       ridicat, primul('OUT_FOR_DELIVERY'), livrat, esec?.happenedAt ?? null, esec?.message ?? null, stare]);
+  }
+}
+
+/** Comenzile cu colete, schimbate de la ultima citire (prima dată: ultimele 45 de zile). */
+async function sincronizeazaLivrari(c: PoolClient, a: Acces): Promise<number> {
+  const { rows: [m] } = await c.query<{ de_la: string }>(
+    `SELECT to_char(coalesce(livrari_pana_la - interval '1 hour', now() - interval '45 days') AT TIME ZONE 'UTC',
+                    'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS de_la FROM magazin WHERE id = $1`, [a.magazinId]);
+  const inceput = new Date().toISOString();
+  let n = 0;
+  let dupa: string | null = null;
+  do {
+    const d: { orders: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: ComandaLivrari[] } } =
+      await gql(a, `query L($dupa: String, $q: String) { orders(first: 50, after: $dupa, sortKey: UPDATED_AT, query: $q) {
+        pageInfo { hasNextPage endCursor } nodes { ${LIVRARE} } } }`,
+        { dupa, q: `updated_at:>='${m.de_la}' AND (fulfillment_status:shipped OR fulfillment_status:partial)` });
+    for (const o of d.orders.nodes) { await scrieLivrari(c, a.magazinId, o); n += o.fulfillments.length; }
+    dupa = d.orders.pageInfo.hasNextPage ? d.orders.pageInfo.endCursor : null;
+  } while (dupa);
+  await c.query(`UPDATE magazin SET livrari_pana_la = $2 WHERE id = $1`, [a.magazinId, inceput]);
+  return n;
+}
+
+export type Parte = 'produse' | 'comenzi' | 'vanzari' | 'livrari';
+export type RezultatSincronizare = { magazin: string; variante?: number; comenzi?: number; vanzari?: number; livrari?: number; eroare?: string };
+
+/**
+ * Sincronizarea unui magazin sau a tuturor: variantele cu stocul, comenzile deschise,
+ * vânzările și coletele de la ultima citire (sau doar unele dintre ele), fiecare în tranzacția ei — comenzile căzute nu anulează
  * stocul citit, iar un magazin căzut nu le oprește pe celelalte.
  */
-export async function sincronizeaza(magazinId?: string): Promise<RezultatSincronizare[]> {
+export async function sincronizeaza(magazinId?: string, parti: Parte[] = ['produse', 'comenzi', 'vanzari', 'livrari']): Promise<RezultatSincronizare[]> {
   const firma = firmaDinMediu();
   const magazine = await caFirma(firma, async (c) => (await c.query<{ id: string; cod: string }>(
     `SELECT id, cod FROM magazin WHERE activ ${magazinId ? 'AND id = $1' : ''} ORDER BY cod`, magazinId ? [magazinId] : [])).rows);
@@ -398,9 +487,10 @@ export async function sincronizeaza(magazinId?: string): Promise<RezultatSincron
     try {
       const a = await caFirma(firma, (c) => acces(c, m.id));
       if (!a) { rez.push({ ...r, eroare: 'nelegat' }); continue; }
-      r.variante = await caFirma(firma, (c) => sincronizeazaProduse(c, a));
-      r.comenzi = await caFirma(firma, (c) => sincronizeazaComenzi(c, a));
-      r.vanzari = await caFirma(firma, (c) => sincronizeazaVanzari(c, a));
+      if (parti.includes('produse')) r.variante = await caFirma(firma, (c) => sincronizeazaProduse(c, a));
+      if (parti.includes('comenzi')) r.comenzi = await caFirma(firma, (c) => sincronizeazaComenzi(c, a));
+      if (parti.includes('vanzari')) r.vanzari = await caFirma(firma, (c) => sincronizeazaVanzari(c, a));
+      if (parti.includes('livrari')) r.livrari = await caFirma(firma, (c) => sincronizeazaLivrari(c, a));
     } catch (e) {
       r.eroare = (e as Error).message;
     }
