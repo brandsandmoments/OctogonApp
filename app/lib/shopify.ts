@@ -24,7 +24,7 @@ import { caFirma, firmaDinMediu } from './db';
  * întâietate față de cele comune.
  */
 
-export const VERSIUNE_API = '2025-07';
+export const VERSIUNE_API = '2026-10';
 export const PERMISIUNI = 'read_products,read_inventory,read_orders,read_locations';
 
 export class EroareShopify extends Error {}
@@ -150,7 +150,7 @@ async function gql<T>(a: Acces, query: string, variables: Record<string, unknown
       await new Promise((ok) => setTimeout(ok, 1000 * 2 ** incercare));
       continue;
     }
-    if (j.errors?.length) throw new EroareShopify(j.errors.map((e) => e.message).join('; '));
+    if (j.errors?.length) throw new EroareShopify([...new Set(j.errors.map((e) => e.message))].join('; '));
     return j.data as T;
   }
 }
@@ -241,7 +241,7 @@ const COMANDA = `
   id name createdAt updatedAt cancelledAt closedAt displayFinancialStatus displayFulfillmentStatus note tags
   totalPriceSet { shopMoney { amount } }
   shippingAddress { name phone city }
-  customer { displayName phone }
+  billingAddress { name phone }
   lineItems(first: 100) { nodes { id sku title variantTitle quantity unfulfilledQuantity variant { id } } }`;
 
 type ComandaShopify = {
@@ -249,7 +249,7 @@ type ComandaShopify = {
   displayFinancialStatus: string | null; displayFulfillmentStatus: string | null; note: string | null; tags: string[];
   totalPriceSet: { shopMoney: { amount: string } } | null;
   shippingAddress: { name: string | null; phone: string | null; city: string | null } | null;
-  customer: { displayName: string | null; phone: string | null } | null;
+  billingAddress: { name: string | null; phone: string | null } | null;
   lineItems: { nodes: { id: string; sku: string | null; title: string; variantTitle: string | null; quantity: number;
                         unfulfilledQuantity: number; variant: { id: string } | null }[] };
 };
@@ -274,8 +274,8 @@ async function scrieComanda(c: PoolClient, magazinId: string, o: ComandaShopify)
        anulata_la = EXCLUDED.anulata_la, inchisa_la = EXCLUDED.inchisa_la, total = EXCLUDED.total, nota = EXCLUDED.nota,
        etichete = EXCLUDED.etichete
      RETURNING id`,
-    [magazinId, o.id, o.name, o.createdAt, o.updatedAt, o.shippingAddress?.name ?? o.customer?.displayName ?? null,
-     o.shippingAddress?.phone ?? o.customer?.phone ?? null, o.shippingAddress?.city ?? null, o.displayFinancialStatus,
+    [magazinId, o.id, o.name, o.createdAt, o.updatedAt, o.shippingAddress?.name ?? o.billingAddress?.name ?? null,
+     o.shippingAddress?.phone ?? o.billingAddress?.phone ?? null, o.shippingAddress?.city ?? null, o.displayFinancialStatus,
      o.displayFulfillmentStatus, o.cancelledAt, o.closedAt, o.totalPriceSet?.shopMoney.amount ?? null, o.note, o.tags]);
   await c.query(`DELETE FROM magazin_comanda_linie WHERE comanda_id = $1`, [id]);
   for (const l of o.lineItems.nodes) {
@@ -307,8 +307,8 @@ export type RezultatSincronizare = { magazin: string; variante?: number; comenzi
 
 /**
  * Sincronizarea completă a unui magazin sau a tuturor: variantele cu stocul, apoi
- * comenzile deschise. Fiecare magazin în tranzacția lui: unul căzut nu le oprește
- * pe celelalte.
+ * comenzile deschise, fiecare în tranzacția ei — comenzile căzute nu anulează
+ * stocul citit, iar un magazin căzut nu le oprește pe celelalte.
  */
 export async function sincronizeaza(magazinId?: string): Promise<RezultatSincronizare[]> {
   const firma = firmaDinMediu();
@@ -316,15 +316,16 @@ export async function sincronizeaza(magazinId?: string): Promise<RezultatSincron
     `SELECT id, cod FROM magazin WHERE activ ${magazinId ? 'AND id = $1' : ''} ORDER BY cod`, magazinId ? [magazinId] : [])).rows);
   const rez: RezultatSincronizare[] = [];
   for (const m of magazine) {
+    const r: RezultatSincronizare = { magazin: m.cod };
     try {
-      rez.push(await caFirma(firma, async (c) => {
-        const a = await acces(c, m.id);
-        if (!a) return { magazin: m.cod, eroare: 'nelegat' };
-        return { magazin: m.cod, variante: await sincronizeazaProduse(c, a), comenzi: await sincronizeazaComenzi(c, a) };
-      }));
+      const a = await caFirma(firma, (c) => acces(c, m.id));
+      if (!a) { rez.push({ ...r, eroare: 'nelegat' }); continue; }
+      r.variante = await caFirma(firma, (c) => sincronizeazaProduse(c, a));
+      r.comenzi = await caFirma(firma, (c) => sincronizeazaComenzi(c, a));
     } catch (e) {
-      rez.push({ magazin: m.cod, eroare: (e as Error).message });
+      r.eroare = (e as Error).message;
     }
+    rez.push(r);
   }
   return rez;
 }

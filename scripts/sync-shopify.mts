@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 import type { PoolClient } from 'pg';
 import { caFirma, firmaDinMediu } from '../app/lib/db.ts';
 
-const VERSIUNE_API = '2025-07';
+const VERSIUNE_API = '2026-10';
 
 const INTEROGARE = `
   query Comenzi($first: Int!, $after: String, $q: String) {
