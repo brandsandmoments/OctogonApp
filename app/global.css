@@ -239,3 +239,8 @@ th.nr-auto, td.nr-auto { text-align: right; font-variant-numeric: tabular-nums; 
   main table.tabel-auto tr > td:first-child:empty + td::before { content: none; }
 }
 .tabel-auto .fara-rupere { white-space: nowrap; }
+@media (max-width: 760px) {
+  /* Pe fișă, insignele lungi și numerele se înșiră pe mai multe rânduri, nu ies din ecran. */
+  main table.tabel-auto td .insigna, main table.tabel-auto td.nr-auto { white-space: normal; }
+  main table.tabel-auto td { overflow-wrap: anywhere; }
+}
