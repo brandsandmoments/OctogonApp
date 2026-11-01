@@ -46,6 +46,7 @@
 .pe-modele tr.pm-varianta td.pm-model { font-size: .78rem; padding-left: 1.6rem; }
 .pe-modele tr.pm-varianta td.pm-culoare { font-weight: 600; }
 .pe-modele td.pm-stoc.lipsa { color: var(--rosu); }
+.pe-modele tr.pm-culoare-noua td { border-top: 2px solid var(--accent-linie); }
 .eticheta-magazin { display: inline-block; padding: .1rem .5rem; border-radius: .3rem; background: #fff; border: 1px solid var(--accent-linie);
   font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 .eticheta-marime { display: inline-block; min-width: 2.2rem; padding: .1rem .4rem; border-radius: .3rem; background: var(--bej);
@@ -87,6 +88,7 @@
   .pe-modele tr.pm-varianta { padding: .55rem .7rem; border: 1px solid var(--linie); border-top: 0; background: #fff;
     grid-template-columns: auto 1fr auto auto auto; }
   .pe-modele tr.pm-varianta td { border: 0; }
+  .pe-modele tr.pm-varianta.pm-culoare-noua { border-top: 2px solid var(--accent-linie); }
   .pe-modele tr.pm-varianta td.pm-magazin, .pe-modele tr.pm-varianta td.pm-model, .pe-modele tr.pm-varianta td.pm-veche { display: none; }
   .pe-modele tr.pm-varianta td.pm-marime { grid-column: 1; grid-row: 1; }
   .pe-modele tr.pm-varianta td.pm-culoare { grid-column: 2; grid-row: 1; }

@@ -29,3 +29,18 @@ export function zilePanaLa(data: string | null | undefined): number | null {
   if (!data) return null;
   return Math.round((Date.parse(data.slice(0, 10)) - Date.parse(azi())) / 86_400_000);
 }
+
+const ORDINE_MARIMI = ['XXXS', 'XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '4XL', '5XL'];
+const SINONIME: Record<string, string> = { '3XS': 'XXXS', '2XS': 'XXS', '2XL': 'XXL', '3XL': 'XXXL', XXXXL: '4XL' };
+
+/**
+ * Locul unei mărimi, de la cea mai mică la cea mai mare: XXS (sau 2XS), XS, S, M, L, XL,
+ * XXL (sau 2XL)…; mărimile cu cifre (36, 38) vin după, crescător; restul, la urmă.
+ */
+export function rangMarime(m: string): number {
+  const t = m.trim().toUpperCase();
+  const i = ORDINE_MARIMI.indexOf(SINONIME[t] ?? t);
+  if (i >= 0) return i;
+  const n = Number(t.replace(',', '.'));
+  return Number.isFinite(n) && t !== '' ? 100 + n : 10_000;
+}

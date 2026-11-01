@@ -1,12 +1,14 @@
 import { Fragment } from 'react';
+import { rangMarime } from '../lib/format';
 import type { ComandaClasificata } from '../lib/magazine';
 import Pliere from '../Pliere';
 
 /**
  * Comenzile strânse pe model, apoi pe culoare și mărime — pe coloane: magazin, model,
  * culoare, mărime, apoi la dreapta comenzi, bucăți și stoc. Unde se adună cele mai multe
- * comenzi, acolo e prioritatea (de restoc, de produs, de sunat). Modelele și
- * variantele se ordonează după numărul de comenzi, cele mai multe sus.
+ * comenzi, acolo e prioritatea (de restoc, de produs, de sunat). Modelele se ordonează
+ * după numărul de comenzi, cele mai multe sus; într-un model, pe culori, apoi mărimile
+ * de la cea mai mică la cea mai mare.
  *
  * `doarLipsa`: pe „fără stoc" și „de sunat" contează doar produsele care lipsesc din
  * comandă; altfel, toate produsele ei.
@@ -48,7 +50,11 @@ export default function PeModele({ comenzi, doarLipsa, cuMagazin, semn }: {
           </thead>
           <tbody>
             {ordonate.map((m) => {
-              const variante = [...m.variante.values()].sort((a, b) => b.comenzi.length - a.comenzi.length || b.bucati - a.bucati);
+              // Pe culori (cea cu cele mai multe comenzi întâi), iar în fiecare culoare mărimile de la mică la mare.
+              const peCuloare = new Map<string, number>();
+              for (const v of m.variante.values()) peCuloare.set(v.culoare, (peCuloare.get(v.culoare) ?? 0) + v.comenzi.length);
+              const variante = [...m.variante.values()].sort((a, b) => (peCuloare.get(b.culoare)! - peCuloare.get(a.culoare)!)
+                || a.culoare.localeCompare(b.culoare, 'ro') || rangMarime(a.marime) - rangMarime(b.marime));
               const toateComenzile = [...new Set(variante.flatMap((v) => v.comenzi))];
               const veche = Math.max(...toateComenzile.map((c) => c.zile));
               const stoc = variante.reduce((s, v) => s + Math.max(v.stoc, 0), 0);
@@ -66,8 +72,8 @@ export default function PeModele({ comenzi, doarLipsa, cuMagazin, semn }: {
                     <td className="pm-veche">{varsta(veche)}</td>
                     <td className="pm-lista" />
                   </tr>
-                  {variante.map((v) => (
-                    <tr key={`${v.produs}${v.marime}`} className="pm-varianta">
+                  {variante.map((v, i) => (
+                    <tr key={`${v.produs}${v.marime}`} className={`pm-varianta ${i > 0 && variante[i - 1].culoare !== v.culoare ? 'pm-culoare-noua' : ''}`}>
                       {cuMagazin && <td className="pm-magazin" />}
                       <td className="pm-model" />
                       <td className="pm-culoare">{v.culoare}</td>

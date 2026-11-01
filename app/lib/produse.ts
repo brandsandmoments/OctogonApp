@@ -1,3 +1,4 @@
+import { rangMarime } from './format';
 import { interogare } from './sesiune';
 
 /**
@@ -61,8 +62,7 @@ export async function praguri(): Promise<Praguri> {
   return { ...IMPLICITE, ...Object.fromEntries(r.map((x) => [x.cheie, Number(x.valoare)])) };
 }
 
-const ORDINE = ['XXXS', 'XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', 'XXXL', '3XL', '4XL', '5XL'];
-const rang = (m: string) => { const i = ORDINE.indexOf(m.toUpperCase()); return i >= 0 ? i : 100 + (Number(m) || 0); };
+const rang = rangMarime;
 const OPT_MARIME = /^(m[aă]rime|size|talie|marimea)$/i;
 
 type Rand = {

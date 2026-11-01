@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { rangMarime } from '../lib/format';
 import type { ComandaClasificata, LinieClasificata } from '../lib/magazine';
 
 /**
@@ -30,11 +31,6 @@ export function dinLista(lista: Lista, c: ComandaClasificata): boolean {
   return c.situatie === 'fara_stoc';
 }
 
-const ORDINE_MARIMI = ['XXXS', 'XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', 'XXXL', '3XL', '4XL', '5XL'];
-const rangMarime = (m: string) => {
-  const i = ORDINE_MARIMI.indexOf(m.toUpperCase());
-  return i >= 0 ? i : 100 + (Number(m) || 0);
-};
 const dupaModel = (a: LinieClasificata, b: LinieClasificata) =>
   a.model.localeCompare(b.model, 'ro') || a.tip.localeCompare(b.tip, 'ro');
 const dupaVarianta = (a: LinieClasificata, b: LinieClasificata) =>
