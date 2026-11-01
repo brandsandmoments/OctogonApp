@@ -1,21 +1,23 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import Cauta from '../Cauta';
 import Tipareste from '../Tipareste';
 import { esteAdmin } from '../lib/acces';
 import { azi, potriveste } from '../lib/format';
 import { card, colete, rezumat, surse, viramente, viramenteCard, type Colet, type Filtru, type Vedere } from '../lib/financiar';
+import { banca, importaExtras } from '../lib/extras';
 import { magazine } from '../lib/magazine';
-import { cere } from '../lib/sesiune';
+import { cere, poateModifica } from '../lib/sesiune';
 import '../magazine/magazine.css';
 import '../magazine/foaie.css';
 import './financiar.css';
 
 export const dynamic = 'force-dynamic';
 
-type Fila = 'rezumat' | Vedere | 'incasat';
+type Fila = 'rezumat' | Vedere | 'incasat' | 'banca';
 const FILE: [Fila, string][] = [
   ['rezumat', 'Pe scurt'], ['nefacturate', 'Livrate fără factură'], ['de_stornat', 'De stornat'],
-  ['neincasat', 'Ramburs neîncasat'], ['incasat', 'Încasat'], ['retururi', 'Retururi și schimburi primite'], ['expediate', 'Toate coletele trimise'],
+  ['neincasat', 'Ramburs neîncasat'], ['incasat', 'Încasat'], ['retururi', 'Retururi și schimburi primite'], ['expediate', 'Toate coletele trimise'], ['banca', 'Bancă'],
 ];
 const DESPRE: Record<Fila, string> = {
   rezumat: 'pe fiecare brand: câte colete au plecat, câte au factură, ce e de stornat și ce bani nu au venit încă',
@@ -25,7 +27,9 @@ const DESPRE: Record<Fila, string> = {
   incasat: 'banii intrați: rambursurile virate de Fan Courier și plățile cu cardul din Shopify Payments, cu viramentele lor',
   expediate: 'toate coletele trimise clienților în perioadă, de la curier, cu comanda și factura lor',
   retururi: 'coletele venite de la clienți (retururi, schimburi), ridicate de curier: comanda lor și dacă factura e încă nestornată',
+  banca: 'extrasele de cont: banii veniți de la Fan Courier și Shopify Payments, potriviți cu loturile de ramburs și viramentele card',
 };
+const NUME_SURSA: Record<string, string> = { fan: 'Fan Courier (ramburs)', shopify: 'Shopify Payments (card, prin Stripe)', gls: 'GLS' };
 const STARI: Record<string, [string, string]> = {
   creat: ['AWB, neridicat', 'galben'], in_tranzit: ['pe drum', 'albastru'], livrat: ['livrat', 'verde'],
   refuzat: ['refuzat', 'rosu'], returnat: ['returnat', 'rosu'],
@@ -73,7 +77,7 @@ function TabelCard({ carduri, tot }: { carduri: Awaited<ReturnType<typeof card>>
  * vin în etapa următoare.
  */
 export default async function Financiar({ searchParams }: {
-  searchParams: Promise<{ fila?: string; magazin?: string; curier?: string; de?: string; pana?: string; cauta?: string }>;
+  searchParams: Promise<{ fila?: string; magazin?: string; curier?: string; de?: string; pana?: string; cauta?: string; ok?: string; eroare?: string }>;
 }) {
   const u = await cere('financiar');
   const f = await searchParams;
@@ -87,13 +91,33 @@ export default async function Financiar({ searchParams }: {
   const filtru: Filtru = { de, pana, magazinId: ales?.id, curier };
   const presetare = pana === azia ? PERIOADE.find(([n]) => ziua(azia, 1 - n) === de) : undefined;
 
-  const [rez, sursele, randuri, vir, carduri, virCard] = await Promise.all([
+  const [rez, sursele, randuri, vir, carduri, virCard, bnc, daModifica] = await Promise.all([
     rezumat(filtru), surse(),
-    fila !== 'rezumat' && fila !== 'incasat' ? colete(filtru, fila) : Promise.resolve([] as Colet[]),
+    fila !== 'rezumat' && fila !== 'incasat' && fila !== 'banca' ? colete(filtru, fila) : Promise.resolve([] as Colet[]),
     fila === 'incasat' || fila === 'rezumat' ? viramente(filtru) : Promise.resolve([]),
     fila === 'incasat' || fila === 'rezumat' ? card(filtru) : Promise.resolve([]),
     fila === 'incasat' ? viramenteCard(filtru) : Promise.resolve([]),
+    fila === 'banca' ? banca(de, pana) : Promise.resolve(null),
+    poateModifica('financiar'),
   ]);
+
+  async function incarcaExtras(fd: FormData) {
+    'use server';
+    await cere('financiar', 'modifica');
+    const fisier = fd.get('extras');
+    if (!(fisier instanceof File) || fisier.size === 0) redirect('/financiar?fila=banca&eroare=' + encodeURIComponent('Alege fișierul PDF al extrasului.'));
+    let mesaj: string;
+    try {
+      const r = await importaExtras(new Uint8Array(await fisier.arrayBuffer()));
+      if (r.tranzactii.length === 0) throw new Error('Nu am găsit tranzacții. E un extras Banca Transilvania, în PDF?');
+      mesaj = `Extras ${r.cont}, ${r.de?.split('-').reverse().join('.')} – ${r.pana?.split('-').reverse().join('.')}: ${r.tranzactii.length} tranzacții, ${r.noi} noi; `
+        + `${r.zileVerificate} din ${r.zile} zile se potrivesc la ban cu rulajul băncii; ${r.potrivite} încasări potrivite acum.`
+        + (r.diferente.length ? ` Zile de verificat: ${r.diferente.join('; ')}.` : '');
+    } catch (e) {
+      redirect('/financiar?fila=banca&eroare=' + encodeURIComponent((e as Error).message));
+    }
+    redirect('/financiar?fila=banca&ok=' + encodeURIComponent(mesaj));
+  }
   const totCard = carduri.reduce((s, x) => ({ brut: s.brut + x.brut, rambursari: s.rambursari + x.rambursari, comision: s.comision + x.comision,
     net: s.net + x.net, plati: s.plati + x.plati }), { brut: 0, rambursari: 0, comision: 0, net: 0, plati: 0 });
   const gasite = randuri.filter((c) => potriveste(f.cauta, c.awb, c.comanda, c.destinatar, c.telefon?.replace(/\D/g, ''), c.oras, c.referinta, ...c.facturi));
@@ -270,7 +294,7 @@ export default async function Financiar({ searchParams }: {
           )
         )}
 
-        {fila !== 'rezumat' && fila !== 'incasat' && (
+        {fila !== 'rezumat' && fila !== 'incasat' && fila !== 'banca' && (
           <>
             <div className="nu-tipari">
               <Cauta valoare={f.cauta} pastreaza={{ fila, magazin: ales?.id, curier, de: f.de, pana: f.pana }}
@@ -308,6 +332,73 @@ export default async function Financiar({ searchParams }: {
                 </tbody>
               </table>
             )}
+          </>
+        )}
+        {fila === 'banca' && bnc && (
+          <>
+            {f.ok && <p className="mesaj-ok nu-tipari">{f.ok}</p>}
+            {f.eroare && <p className="lipsa nu-tipari">{f.eroare}</p>}
+            {daModifica && (
+              <form action={incarcaExtras} className="filtre nu-tipari">
+                <span className="slab">Extras de cont Banca Transilvania (PDF):</span>
+                <input type="file" name="extras" accept="application/pdf,.pdf" required />
+                <button className="buton">Încarcă și potrivește</button>
+              </form>
+            )}
+            <p className="foaie-mic">
+              {bnc.extrase.length === 0 ? 'Niciun extras încărcat încă.' : `Extrase încărcate: ${bnc.extrase.map((e) => `${e.cont} ${e.de} – ${e.pana} (${e.tranzactii} tranzacții)`).join(' · ')}`}
+            </p>
+
+            <section className="foaie-grupa">
+              <h2>Banii ajunși în bancă, pe sursă</h2>
+              {bnc.surse.length === 0 ? <p className="foaie-gol">Nicio încasare de la curieri sau Shopify în perioadă, în extrasele încărcate.</p> : (
+                <table>
+                  <thead><tr><th>De la</th><th className="c">Încasări</th><th className="c">Suma în bancă</th><th className="c">Potrivite</th><th className="c">Nepotrivite</th></tr></thead>
+                  <tbody>
+                    {bnc.surse.map((x) => (
+                      <tr key={x.sursa}>
+                        <td><strong>{NUME_SURSA[x.sursa] ?? x.sursa}</strong></td>
+                        <td className="c">{x.incasari}</td>
+                        <td className="c"><strong>{lei(x.suma)}</strong></td>
+                        <td className="c">{x.potrivite}<div className="mic">{lei(x.suma_potrivita)}</div></td>
+                        <td className={`c ${x.incasari - x.potrivite ? 'galben-tare' : ''}`}>{x.incasari - x.potrivite}<div className="mic">{lei(x.suma - x.suma_potrivita)}</div></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+
+            <section className="foaie-grupa">
+              <h2>Încasări fără pereche · {bnc.nepotrivite.length}</h2>
+              <p className="foaie-mic">Bani veniți de la curieri sau Stripe care nu corespund unui lot de ramburs sau unui virament card (de exemplu restituiri de rețineri Fan).</p>
+              {bnc.nepotrivite.length === 0 ? <p className="foaie-gol">Toate încasările au pereche.</p> : (
+                <table>
+                  <thead><tr><th>Ziua</th><th>De la</th><th className="c">Suma</th><th>Descriere</th></tr></thead>
+                  <tbody>
+                    {bnc.nepotrivite.map((x, i) => (
+                      <tr key={i}><td>{scurt(x.zi)}</td><td>{NUME_SURSA[x.sursa] ?? x.sursa}</td><td className="c"><strong>{lei(x.suma)}</strong></td><td className="mic">{x.descriere}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+
+            <section className="foaie-grupa">
+              <h2>Virate, dar neajunse în extrase · {bnc.neajunse.length}</h2>
+              <p className="foaie-mic">Loturi de ramburs Fan și viramente Shopify Payments din perioadă care nu apar în extrasele încărcate (până la ultima zi a extraselor). Fie au ajuns în alt cont, fie lipsesc.</p>
+              {bnc.neajunse.length === 0 ? <p className="foaie-gol">Toate au ajuns.</p> : (
+                <table>
+                  <thead><tr><th>Virat</th><th>De la</th><th>Lot / virament</th><th className="c">Suma</th></tr></thead>
+                  <tbody>
+                    {bnc.neajunse.map((x) => (
+                      <tr key={x.cheie}><td>{scurt(x.zi)}</td><td>{NUME_SURSA[x.sursa] ?? x.sursa}{x.magazin && <div className="mic">{x.magazin}</div>}</td>
+                        <td className="mic">{x.sursa === 'fan' ? `lot ${x.cheie}` : x.cheie.replace(/^gid:\/\/shopify\/ShopifyPaymentsPayout\//, 'payout ')}</td><td className="c"><strong>{lei(x.suma)}</strong></td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
           </>
         )}
       </article>

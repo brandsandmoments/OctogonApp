@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { caFirma, firmaDinMediu } from './db';
 import { extractText, getDocumentProxy } from 'unpdf';
+import { potrivesteBanca } from './extras';
 import { citestePlatiCard } from './shopify';
 
 /**
@@ -157,7 +158,31 @@ type AwbFan = {
 type PersoanaFan = { name?: string; phone?: string; address?: { locality?: string; city?: string } | null; locality?: string };
 
 type VirFan = { info?: { awbNumber?: number | string; amountCollected?: number | string; transactionDate?: string; transferDate?: string;
-                         reimbursementAwbNumber?: number | string | null } };
+                         reimbursementAwbNumber?: number | string | null; batchId?: string | number | null; transactionType?: string | null } };
+
+/**
+ * Rambursurile virate de Fan, zi de zi, cu lotul lor (un lot = un ordin de plată în
+ * bancă). Fan dă viramentele întregului cont oricare ar fi clientul cerut, așa că se
+ * citesc o singură dată; brandul vine apoi din AWB.
+ */
+async function citesteFanViramente(c: PoolClient, clientId: string): Promise<number> {
+  let n = 0;
+  for (const d of zileIntre(await deUnde(c, 'fan:viramente'), azi())) {
+    for (const { info: v } of await fanZi<VirFan>('/reports/bank-transfers', clientId, d)) {
+      const awb = String(v?.awbNumber ?? '').trim();
+      if (!awb) continue;
+      await c.query(
+        `INSERT INTO ramburs_virat (firma_id, curier, awb, suma, incasat_zi, virat_zi, awb_ramburs, lot, plata)
+         VALUES (firma_curenta(), 'fan', $1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (firma_id, curier, awb, virat_zi) DO UPDATE SET suma = EXCLUDED.suma, incasat_zi = EXCLUDED.incasat_zi,
+           awb_ramburs = EXCLUDED.awb_ramburs, lot = EXCLUDED.lot, plata = EXCLUDED.plata`,
+        [awb, numar(v!.amountCollected), dataFan(v!.transactionDate)?.slice(0, 10) ?? null, (dataFan(v!.transferDate) ?? d).slice(0, 10),
+         v!.reimbursementAwbNumber == null ? null : String(v!.reimbursementAwbNumber), v!.batchId == null ? null : String(v!.batchId), v!.transactionType ?? null]);
+      n++;
+    }
+  }
+  return n;
+}
 
 const stareFan = (ev: { id?: string; name?: string }[]): { stare: string; text: string | null } => {
   const ultim = ev[ev.length - 1];
@@ -188,17 +213,6 @@ async function citesteFan(c: PoolClient, m: { id: string; cod: string; fan_clien
          [a.info?.content, a.info?.observations].filter(Boolean).join(' · ') || null, numar(a.info?.cod), a.info?.cost == null ? null : numar(a.info.cost),
          intra ? 'intra' : 'iese']);
       n++;
-    }
-    // Rambursurile virate în ziua asta.
-    for (const { info: v } of await fanZi<VirFan>('/reports/bank-transfers', m.fan_client_id, d)) {
-      const awb = String(v?.awbNumber ?? '').trim();
-      if (!awb) continue;
-      await c.query(
-        `INSERT INTO ramburs_virat (firma_id, curier, awb, magazin_id, suma, incasat_zi, virat_zi, awb_ramburs)
-         VALUES (firma_curenta(), 'fan', $1, $2, $3, $4, $5, $6)
-         ON CONFLICT (firma_id, curier, awb, virat_zi) DO UPDATE SET suma = EXCLUDED.suma, incasat_zi = EXCLUDED.incasat_zi, awb_ramburs = EXCLUDED.awb_ramburs`,
-        [awb, m.id, numar(v!.amountCollected), dataFan(v!.transactionDate)?.slice(0, 10) ?? null,
-         (dataFan(v!.transferDate) ?? d).slice(0, 10), v!.reimbursementAwbNumber == null ? null : String(v!.reimbursementAwbNumber)]);
     }
   }
   // Stadiul coletelor încă pe drum, din ultimele două luni, câte 50 odată.
@@ -428,11 +442,15 @@ export async function sincronizeazaFinanciar(): Promise<RezultatFinanciar[]> {
   };
   for (const m of magazine) await pas(`xc:${m.cod}`, (c) => citesteXconnector(c, m));
   for (const m of magazine) if (m.fan_client_id) await pas(`fan:${m.fan_client_id}`, (c) => citesteFan(c, { ...m, fan_client_id: m.fan_client_id! }, branduri));
+  const unClientFan = magazine.find((m) => m.fan_client_id)?.fan_client_id;
+  if (unClientFan) await pas('fan:viramente', (c) => citesteFanViramente(c, unClientFan));
   await pas('gls', (c) => citesteGls(c, branduri));
   // Facturile făcute direct în SmartBill (după xConnector, ca să se știe ce numere are el).
   await pas('smartbill', citesteSmartBill);
   // Cardul, din Shopify Payments: prima dată 60 de zile, apoi ultimele câteva.
   for (const m of magazine) await pas(`card:${m.cod}`, async (c) => citestePlatiCard(c, m.id, await deUnde(c, `card:${m.cod}`)));
   await caFirma(firma, potriveste);
+  // Banii din extrasele de cont importate, cu loturile Fan și viramentele card de acum.
+  await caFirma(firma, potrivesteBanca);
   return rez;
 }
