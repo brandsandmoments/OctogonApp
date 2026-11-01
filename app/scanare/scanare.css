@@ -112,8 +112,3 @@
 .atentie { color: #8a6100; font-weight: 600; }
 .ok.mare { font-size: 1.2rem; margin-bottom: .75rem; }
 
-@media (prefers-color-scheme: dark) {
-  .cifre .lipsa dd, .eroare { color: #f08a5d; }
-  .ok { color: #7fcf8a; }
-  .cifre .plus dd, .atentie { color: #e0b34a; }
-}

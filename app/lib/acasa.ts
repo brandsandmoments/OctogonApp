@@ -179,16 +179,16 @@ async function magazineShopify(): Promise<Grupa> {
       {
         titlu: 'De trimis', numar: pe('livrabila').length, unitate: comenzi(pe('livrabila').length),
         detaliu: `${nr(pe('livrabila').reduce((s, c) => s + c.bucati, 0))} buc de cules${vechi ? ` · ${vechi} așteaptă de 4+ zile` : ''}`,
-        href: '/magazine?vedere=livrabila', actiune: 'Picking', ton: vechi ? 'rosu' : pe('livrabila').length ? 'neutru' : 'verde',
+        href: '/magazine', actiune: 'Picking', ton: vechi ? 'rosu' : pe('livrabila').length ? 'neutru' : 'verde',
       },
       {
         titlu: 'De sunat', numar: pe('de_sunat').length, unitate: comenzi(pe('de_sunat').length),
-        detaliu: 'avem doar o parte din comandă', href: '/magazine?vedere=de_sunat', actiune: 'Sună clienții',
+        detaliu: 'avem doar o parte din comandă', href: '/magazine', actiune: 'Sună clienții',
         ton: pe('de_sunat').length ? 'galben' : 'verde',
       },
       {
         titlu: 'Fără stoc', numar: pe('fara_stoc').length, unitate: comenzi(pe('fara_stoc').length),
-        detaliu: `${nr(pe('fara_stoc').reduce((s, c) => s + c.bucati, 0))} buc lipsă`, href: '/magazine?vedere=fara_stoc',
+        detaliu: `${nr(pe('fara_stoc').reduce((s, c) => s + c.bucati, 0))} buc lipsă`, href: '/magazine',
         actiune: 'Vezi ce lipsește', ton: pe('fara_stoc').length ? 'rosu' : 'verde',
       },
     ],

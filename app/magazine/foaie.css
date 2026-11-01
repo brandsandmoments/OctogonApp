@@ -1,0 +1,49 @@
+/* Foile de picking: pe alb, ca listele tipărite din depozit; aceeași foaie pe ecran și pe A4. */
+.foaie {
+  --f-text: #1b1a17; --f-slab: #6f6a60; --f-linie: #e6e2d9; --f-bej: #f2efe8; --f-bej-antet: #f1e8da;
+  --f-maro: #8a7448; --f-verde: #2f7a3b; --f-rosu: #b3261e; --f-roz: #fbefee;
+  background: #fff; color: var(--f-text); max-width: 52rem; margin: 1rem auto 3rem; padding: 2.25rem 2.5rem 2.5rem;
+  border: 1px solid var(--f-linie); border-radius: .5rem; box-shadow: 0 2px 14px rgb(0 0 0 / .06);
+  font-size: .8rem; line-height: 1.35;
+}
+.foaie h1 { font-size: 1.45rem; font-weight: 800; text-transform: uppercase; letter-spacing: .01em; margin: 0; }
+.foaie-sub { margin: .15rem 0 0; color: var(--f-slab); font-size: .9rem; }
+.foaie-mic { margin: 0; color: var(--f-slab); font-size: .7rem; }
+.foaie-rezumat { margin: .9rem 0 1rem; padding: .55rem .75rem; background: var(--f-bej); border-bottom: 2px solid var(--f-maro); font-weight: 700; font-size: .95rem; }
+.foaie table { width: 100%; border-collapse: collapse; font-size: inherit; white-space: normal; }
+.foaie th { text-align: left; background: var(--f-bej); color: var(--f-slab); font-size: .7rem; font-weight: 700; text-transform: none;
+  letter-spacing: 0; padding: .4rem .5rem; border-bottom: 1.5px solid var(--f-maro); }
+.foaie td { padding: .45rem .5rem; border-bottom: 1px solid var(--f-linie); vertical-align: middle; }
+.foaie .c { text-align: center; }
+.foaie .stoc { color: var(--f-verde); font-weight: 700; }
+.foaie .stoc.zero { color: var(--f-rosu); }
+.foaie .produs { color: var(--f-slab); }
+.foaie .mic { color: var(--f-slab); font-size: .72rem; }
+.foaie .comenzi-cel { color: var(--f-slab); font-size: .74rem; }
+.foaie .verde-tare { color: var(--f-verde); font-weight: 700; white-space: nowrap; }
+.foaie .rosu-tare { color: var(--f-rosu); font-weight: 700; }
+.foaie-grupa { break-inside: avoid; margin-top: .9rem; }
+.foaie-grupa h2, .foaie-capitol { font-size: 1rem; font-weight: 800; margin: 0 0 .25rem; }
+.foaie-capitol { margin-top: 1.5rem; }
+.foaie-comanda { break-inside: avoid; margin-top: .9rem; }
+.foaie-comanda-antet { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem .6rem; background: var(--f-bej-antet);
+  border-bottom: 1.5px solid var(--f-maro); font-size: .92rem; }
+.foaie-comanda-antet .dreapta { color: var(--f-maro); font-weight: 700; white-space: nowrap; }
+.foaie-comanda th { background: #efebe3; }
+.foaie-duble { margin: 0 0 .5rem; }
+.foaie-duble h2 { color: var(--f-rosu); font-size: .95rem; margin: 0 0 .3rem; }
+.foaie-duble table { border: 1px solid #d9a19c; }
+.foaie-duble th { background: var(--f-roz); color: var(--f-rosu); border-bottom: 1px solid #d9a19c; }
+.foaie-nota { margin-top: 1rem; color: var(--f-slab); font-style: italic; font-size: .72rem; }
+.foaie-gol { color: var(--f-slab); padding: 1rem 0; }
+
+.liste-actiuni { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; max-width: 52rem; margin: 0 auto; }
+
+@media print {
+  @page { size: A4; margin: 12mm 11mm; }
+  body { background: #fff !important; }
+  .bara-sus, .navigare, .nu-tipari, .file, .liste-actiuni { display: none !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  .foaie { border: 0; box-shadow: none; margin: 0; padding: 0; max-width: none; font-size: 8.5pt; }
+  .foaie th, .foaie-rezumat, .foaie-comanda-antet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -4,7 +4,10 @@ import { potriveste } from '../lib/format';
 import { comenziMagazine, magazine, type ComandaClasificata, type Situatie } from '../lib/magazine';
 import { cere } from '../lib/sesiune';
 import { esteAdmin } from '../lib/acces';
+import Tipareste from '../Tipareste';
+import { dinLista, Foaie, LISTE, type Lista } from './Liste';
 import './magazine.css';
+import './foaie.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +19,7 @@ const SITUATII: Record<Situatie, { nume: string; ton: string; ce: string }> = {
 
 type Vedere = Situatie | 'duble' | 'toate';
 const VEDERI: [Vedere, string][] = [['toate', 'Toate'], ['livrabila', 'De trimis'], ['de_sunat', 'De sunat'], ['fara_stoc', 'Fără stoc'], ['duble', 'Posibile duble']];
+const NUME_LISTE: [Lista, string][] = [['single', 'Picking single'], ['multi', 'Picking multi'], ['de_sunat', 'De sunat'], ['fara_stoc', 'Fără stoc']];
 
 const vechime = (zile: number) => {
   const ton = zile >= 4 ? 'rosu' : zile >= 2 ? 'galben' : 'verde';
@@ -46,22 +50,25 @@ function Numere({ lista, href }: { lista: ComandaClasificata[]; href: (v: Vedere
  * dublă. „Toate" le arată pe toate magazinele; fiecare magazin are fila lui. Cele
  * mai vechi sus — sunt cele mai urgente.
  */
-export default async function Magazine({ searchParams }: { searchParams: Promise<{ magazin?: string; vedere?: string; cauta?: string }> }) {
+export default async function Magazine({ searchParams }: { searchParams: Promise<{ magazin?: string; vedere?: string; lista?: string; cauta?: string }> }) {
   const u = await cere('expediere');
   const f = await searchParams;
   const [toateMagazinele, toate] = await Promise.all([magazine(), comenziMagazine()]);
   const ales = toateMagazinele.find((m) => m.id === f.magazin) ?? null;
   const vedere = (VEDERI.find(([v]) => v === f.vedere)?.[0] ?? 'toate') as Vedere;
+  // Pe un magazin, implicit foaia de picking single; „Toate comenzile" e tabelul cu căutare.
+  const foaia = ales && !f.vedere ? ((NUME_LISTE.find(([l]) => l === f.lista)?.[0] ?? 'single') as Lista) : null;
   const dinMagazin = toate.filter((c) => !ales || c.magazin_id === ales.id);
   const lista = dinMagazin
     .filter((c) => vedere === 'toate' || (vedere === 'duble' ? c.dubla : c.situatie === vedere))
     .filter((c) => potriveste(f.cauta, c.nume, c.client, c.telefon, c.oras, ...c.linii.map((l) => `${l.produs} ${l.sku ?? ''}`)));
-  const adresa = (o: { magazin?: string | null; vedere?: Vedere }) => {
+  const adresa = (o: { magazin?: string | null; vedere?: Vedere; lista?: Lista }) => {
     const q = new URLSearchParams();
     const m = o.magazin === undefined ? ales?.id : o.magazin;
     if (m) q.set('magazin', m);
+    if (o.lista) { q.set('lista', o.lista); return `/magazine?${q}`; }
     const v = o.vedere ?? vedere;
-    if (v !== 'toate') q.set('vedere', v);
+    if (v !== 'toate' || (m && !o.lista)) q.set('vedere', v);
     if (f.cauta) q.set('cauta', f.cauta);
     return `/magazine${q.size ? `?${q}` : ''}`;
   };
@@ -73,7 +80,7 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
       <nav className="file">
         <Link href={adresa({ magazin: null, vedere: 'toate' })} className={!ales ? 'activ' : ''}>Toate · {toate.length}</Link>
         {toateMagazinele.map((m) => (
-          <Link key={m.id} href={adresa({ magazin: m.id, vedere: 'toate' })} className={ales?.id === m.id ? 'activ' : ''}>
+          <Link key={m.id} href={adresa({ magazin: m.id, lista: 'single' })} className={ales?.id === m.id ? 'activ' : ''}>
             {m.brand} · {toate.filter((c) => c.magazin_id === m.id).length}
           </Link>
         ))}
@@ -89,13 +96,20 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
       {ales ? (
         <>
           <p className="sumar">{ales.domeniu ?? 'nelegat'}{ales.sincronizat_la && ` · sincronizat ${ales.sincronizat_la}`}</p>
-          <Numere lista={dinMagazin} href={(v) => adresa({ vedere: v })} />
+          <nav className="file">
+            {NUME_LISTE.map(([l, nume]) => (
+              <Link key={l} href={adresa({ lista: l })} className={l === foaia ? 'activ' : ''}>
+                {nume} · {dinMagazin.filter((c) => dinLista(l, c)).length}
+              </Link>
+            ))}
+            <Link href={adresa({ vedere: 'toate' })} className={!foaia ? 'activ' : ''}>Toate comenzile · {dinMagazin.length}</Link>
+          </nav>
         </>
       ) : (
         <div className="pe-magazine">
           {toateMagazinele.map((m) => (
             <section key={m.id}>
-              <h2><Link href={adresa({ magazin: m.id, vedere: 'toate' })}>{m.brand}</Link>
+              <h2><Link href={adresa({ magazin: m.id, lista: 'single' })}>{m.brand}</Link>
                 <span className="slab"> {m.sincronizat_la ? `· sincronizat ${m.sincronizat_la}` : '· nelegat'}</span></h2>
               <Numere lista={toate.filter((c) => c.magazin_id === m.id)} href={(v) => adresa({ magazin: m.id, vedere: v })} />
             </section>
@@ -103,6 +117,15 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
         </div>
       )}
 
+      {foaia && ales ? (
+        <>
+          <div className="liste-actiuni nu-tipari">
+            <span className="slab">{LISTE[foaia].ce}</span>
+            <Tipareste />
+          </div>
+          <Foaie lista={foaia} magazin={ales.brand} comenzi={dinMagazin.filter((c) => dinLista(foaia, c))} />
+        </>
+      ) : (<>
       <nav className="file">
         {VEDERI.map(([v, nume]) => (
           <Link key={v} href={adresa({ vedere: v })} className={v === vedere ? 'activ' : ''}>
@@ -160,6 +183,7 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
           </table>
         </div>
       )}
+      </>)}
     </main>
   );
 }
