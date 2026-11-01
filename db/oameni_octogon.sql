@@ -43,7 +43,9 @@ INSERT INTO drept (firma_id, utilizator_id, zona, nivel)
 SELECT firma_curenta(), u.id, d.zona, d.nivel::nivel_drept
   FROM (VALUES
     -- KAM; la depozit; la expediere: vede comenzile intrate și nelivrate; dă PSC și PSF
-    ('Adelina Neagu', 'comenzi', 'modifica'), ('Adelina Neagu', 'kam', 'vede'),
+    ('Adelina Neagu', 'comenzi', 'modifica'), ('Adelina Neagu', 'kam', 'vede'), ('Adelina Neagu', 'aprobare', 'modifica'),
+    -- Aprobarea PSF-urilor date de KAM-i (0027): Adelina, Alex și Mădălina.
+    ('Alexandru Stanciu', 'aprobare', 'modifica'), ('Madalina Bari', 'aprobare', 'modifica'),
     ('Adelina Neagu', 'centralizator', 'vede'), ('Adelina Neagu', 'receptie', 'modifica'),
     ('Adelina Neagu', 'expediere', 'modifica'),
     -- dezvoltă produs; croit; centralizator; planificare comandă
