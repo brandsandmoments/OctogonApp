@@ -1,3 +1,4 @@
+import { Termen } from '../Insigne';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import Grupare from '../Grupare';
@@ -149,7 +150,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                   </td>
                   <td>{nouaComanda && modele.get(r.comanda)}</td>
                   <td className="slab">{nouaComanda && r.data_lansare}</td>
-                  <td className="slab">{r.data_ceruta}</td>
+                  <td><Termen data={r.data_ceruta} gata={r.inchisa || r.intrat >= r.cerut} /></td>
                   <td>
                     {r.produs} <span className="slab">{r.cod_sku}</span>
                   </td>

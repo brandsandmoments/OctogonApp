@@ -20,3 +20,12 @@ export function potriveste(cauta: string | undefined, ...campuri: (string | null
   const unde = simplu(campuri.filter(Boolean).join(' '));
   return cuvinte.every((w) => unde.includes(w));
 }
+
+/** Ziua de azi la București, „YYYY-MM-DD": termenele se socotesc în zile calendaristice de aici. */
+export const azi = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Bucharest' });
+
+/** Câte zile mai sunt până la o dată „YYYY-MM-DD": 0 = azi, negativ = trecută. Fără dată → null. */
+export function zilePanaLa(data: string | null | undefined): number | null {
+  if (!data) return null;
+  return Math.round((Date.parse(data.slice(0, 10)) - Date.parse(azi())) / 86_400_000);
+}

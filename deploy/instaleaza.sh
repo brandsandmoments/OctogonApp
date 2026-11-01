@@ -110,7 +110,8 @@ pas "Dependențe, migrări, nomenclatoare"
 sudo -H -u octogon bash -c "cd $COD && npm ci --no-audit --no-fund"
 sudo -H -u octogon bash -c "cd $COD && scripts/migreaza.sh '$MIGRARI_URL'"
 sudo -H -u octogon psql "$MIGRARI_URL" -q -v ON_ERROR_STOP=1 -f "$COD/db/seed_octogon.sql"
-sudo -H -u octogon psql "$MIGRARI_URL" -q -v ON_ERROR_STOP=1 -f "$COD/db/oameni_octogon.sql"
+# Oamenii (db/oameni_octogon.sql) vin după importul din dashboard, care îi aduce sub numele
+# vechi; rulați înainte, ar dubla pe Alex Stanciu și Nela Manea. Vezi deploy/README.md, pasul 4.
 
 pas "Construirea aplicației"
 sudo -H -u octogon bash -c "cd $COD && npm run build"

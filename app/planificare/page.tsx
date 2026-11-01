@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Stadiu, Termen } from '../Insigne';
 import { redirect } from 'next/navigation';
 import { Fragment } from 'react';
 import Pliere from '../Pliere';
@@ -118,7 +119,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
                     </td>
                     <td>{l.comanda} <span className="slab">{l.tip} · P{l.prioritate}</span></td>
                     <td>{l.model}</td>
-                    <td className="slab">{l.data_ceruta}</td>
+                    <td><Termen data={l.data_ceruta} /></td>
                     <td>{l.produs} <span className="slab">{l.cod_sku}</span></td>
                     <td className="nr">{l.cerut}</td>
                     <td className="nr">{l.planificat || '—'}</td>
@@ -136,7 +137,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
         <p><button form="planifica" className="buton" disabled={!m}>Planifică tot ce a rămas pe cele bifate</button></p>
       )}
 
-      <h2>De trimis la croit</h2>
+      <h2 id="de-trimis">De trimis la croit</h2>
       {deTrimis.length === 0 ? <p className="slab">Nimic de trimis.</p> : (
         <>
           <p className="slab">
@@ -155,7 +156,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
               <details className="caseta de-trimis">
                 <summary>
                   <input type="checkbox" name="id" value={p.id} form="trimite" disabled={!m || !gata} aria-label={`Trimite ${p.cod}`} />{' '}
-                  <strong>{p.cod}</strong> · {p.model} · {p.produs} · {p.planificat} buc · termen {p.data_ceruta} ·{' '}
+                  <strong>{p.cod}</strong> · {p.model} · {p.produs} · {p.planificat} buc · <Termen data={p.data_ceruta} /> ·{' '}
                   <span className={gata ? 'slab' : 'lipsa'}>avem {bifate}/{lista.length} materiale</span>
                 </summary>
                 <form action={bifeaza}><fieldset disabled={!m} className="fara-chenar">
@@ -231,9 +232,9 @@ function Tabel({ lista, coloana, peModel = false }: {
             <tr>
               <td><Link href={`/planificare/${p.id}`}>{p.cod}</Link> <span className="slab">P{p.prioritate}</span></td>
               <td>{p.model}</td>
-              <td className="slab">{p.data_ceruta}</td>
+              <td><Termen data={p.data_ceruta} /></td>
               <td>{p.produs}</td>
-              <td>{STADII[p.stadiu] ?? p.stadiu}{p.loturi_deschise > 0 && <span className="slab"> · într-o taiere</span>}</td>
+              <td><Stadiu cheie={p.stadiu} nume={STADII[p.stadiu] ?? p.stadiu} />{p.loturi_deschise > 0 && <span className="slab"> · într-o taiere</span>}</td>
               <td className="nr">{p.planificat}</td>
               <td className="nr">{p.croit || '—'}</td>
               <td>{p.stofa_lipsa ? <span className="lipsa">stofă lipsă</span>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
 import Cauta from '../Cauta';
+import { Progres, Stadiu, Termen } from '../Insigne';
 import Grupare from '../Grupare';
 import { potriveste } from '../lib/format';
 import { grupareDinAdresa, grupeaza } from '../lib/perioade';
@@ -80,10 +81,9 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
               <th>Model</th>
               <th>KAM</th>
               <th>Lansată</th>
-              <th>Cerută la</th>
+              <th>Termen</th>
               <th className="nr">Cerut</th>
-              <th className="nr">Croit</th>
-              <th className="nr">Intrat</th>
+              <th>Progres</th>
               <th>Liniile</th>
             </tr>
           </thead>
@@ -94,8 +94,10 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
                 <tr className="grupa-model">
                   <td colSpan={5}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} comenzi lansate</span></td>
                   <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.cerut, 0)}</strong></td>
-                  <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.croit, 0)}</strong></td>
-                  <td className="nr"><strong>{gr.randuri.reduce((s, c) => s + c.intrat, 0)}</strong></td>
+                  <td>
+                    <Progres cerut={gr.randuri.reduce((s, c) => s + c.cerut, 0)} croit={gr.randuri.reduce((s, c) => s + c.croit, 0)}
+                             intrat={gr.randuri.reduce((s, c) => s + c.intrat, 0)} />
+                  </td>
                   <td />
                 </tr>
               )}
@@ -110,13 +112,12 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
                   <td>{modele.get(c.numar)}</td>
                   <td>{c.kam ?? <span className="slab">—</span>}</td>
                   <td className="slab">{c.lansare}</td>
-                  <td className="slab">{c.cerutLa}</td>
+                  <td><Termen data={c.cerutLa} gata={c.intrat >= c.cerut} /></td>
                   <td className="nr">{c.cerut}</td>
-                  <td className="nr">{c.croit || '—'}</td>
-                  <td className="nr">{c.intrat || '—'}</td>
-                  <td className="slab">
+                  <td><Progres cerut={c.cerut} croit={c.croit} intrat={c.intrat} /></td>
+                  <td>
                     {(Object.keys(STADII_LINIE) as StadiuLinie[]).filter((s) => pe(s) > 0)
-                      .map((s) => `${pe(s)} ${STADII_LINIE[s].toLowerCase()}`).join(' · ')}
+                      .map((s) => <Stadiu key={s} cheie={s} nume={`${pe(s)} ${STADII_LINIE[s].toLowerCase()}`} />)}
                   </td>
                 </tr>
               );

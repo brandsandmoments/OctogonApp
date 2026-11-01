@@ -1,0 +1,29 @@
+/* Pagina de pornire: cardurile „ce am de făcut azi". */
+main.acasa { max-width: 64rem; }
+.grupa-carduri h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--slab); margin: 1.5rem 0 .5rem; }
+.carduri { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .75rem; }
+
+.card {
+  display: flex; flex-direction: column; gap: .2rem; padding: .9rem 1rem 1rem;
+  border: 1px solid var(--linie); border-left: 4px solid var(--linie); border-radius: .5rem;
+  text-decoration: none; background: var(--card); transition: transform .08s, box-shadow .08s;
+}
+.card:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgb(0 0 0 / .08); }
+.card-titlu { font-weight: 600; font-size: .95rem; }
+.card-numar { font-size: 2rem; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.card-unitate { font-size: .9rem; font-weight: 500; color: var(--slab); }
+.card-detaliu { color: var(--slab); font-size: .82rem; }
+.card-actiune { margin-top: .5rem; font-weight: 600; font-size: .85rem; }
+
+.card.ton-rosu   { border-left-color: var(--rosu); }
+.card.ton-rosu .card-numar, .card.ton-rosu .card-actiune { color: var(--rosu); }
+.card.ton-galben { border-left-color: var(--galben); }
+.card.ton-galben .card-actiune { color: var(--galben-text); }
+.card.ton-verde  { border-left-color: var(--verde); }
+.card.ton-verde .card-numar { color: var(--slab); }
+.card.ton-verde .card-actiune { color: var(--verde-text); font-weight: 500; }
+.card.ton-neutru { border-left-color: var(--text); }
+
+.toate-ecranele { margin-top: 2.5rem; border-top: 1px solid var(--linie); padding-top: 1rem; }
+.toate-ecranele summary { cursor: pointer; font-weight: 600; }
+.toate-ecranele h3 { font-size: .95rem; margin: 1.25rem 0 0; }

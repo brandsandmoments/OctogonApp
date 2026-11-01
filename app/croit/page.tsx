@@ -1,3 +1,4 @@
+import { Stadiu, Termen } from '../Insigne';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
@@ -100,7 +101,7 @@ async function Taieri({ vedere, grupare, cauta }: { vedere: VedereCroit; grupare
                       <td className="slab">
                         {t.componente ? `${t.intinse}/${t.componente} · ${t.taiate}/${t.componente}` : '—'} · {t.imperecheat ? 'da' : 'nu'}
                       </td>
-                      <td>{t.croit_la ? <span className="slab">croit {t.croit_la}</span> : <strong>în lucru</strong>}</td>
+                      <td>{t.croit_la ? <Stadiu cheie="gata" nume={`croit ${t.croit_la}`} /> : <Stadiu cheie="in_croit" nume="în lucru" />}</td>
                     </tr>
                   </Fragment>
                 );
@@ -202,7 +203,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
                           <span className="slab">{r.tip} · P{r.prioritate}</span>
                         </td>
                         <td>{r.model}</td>
-                        <td className="slab">{r.data_ceruta}</td>
+                        <td><Termen data={r.data_ceruta} /></td>
                         <td>{r.produs}</td>
                         <td>
                           <span className="marimi-croit">

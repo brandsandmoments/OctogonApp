@@ -1,0 +1,184 @@
+import { poate, type Cine } from './acces';
+import { deAlimentat, transe } from './banda';
+import { ramasDeCroit, taieriLaCroit } from './croitTaiere';
+import { comenziDepozit } from './depozit';
+import { numarePeSectiuni } from './dezvoltare';
+import { zilePanaLa } from './format';
+import { deplanificat, planificariActive } from './planificare';
+import { listaCumparaturi } from './stoc';
+
+/**
+ * Pagina de pornire pe om: ce are de făcut azi, ca niște carduri cu un număr și
+ * un drum. Fiecare card apare doar cui are dreptul la zona lui, deci Adriana vede
+ * croitul, Nela planificarea și banda, KAM-ul comenzile lui. Numerele vin din
+ * aceleași funcții ca ecranele, ca să nu se contrazică niciodată cu ele.
+ *
+ * Tonul cardului: „rosu" = întârziat, „galben" = de făcut curând, „verde" =
+ * nimic de făcut, „neutru" = de lucru obișnuit.
+ */
+
+export type Ton = 'rosu' | 'galben' | 'verde' | 'neutru';
+
+export type Card = {
+  titlu: string;
+  numar: number;
+  unitate: string;
+  detaliu?: string;
+  href: string;
+  actiune: string;
+  ton: Ton;
+};
+
+export type Grupa = { nume: string; carduri: Card[] };
+
+const urgent = (zile: number | null) => zile !== null && zile <= 3;
+const intarziat = (zile: number | null) => zile !== null && zile < 0;
+const buc = (n: number) => (n === 1 ? 'bucată' : 'bucăți');
+const comenzi = (n: number) => (n === 1 ? 'comandă' : 'comenzi');
+const nr = (n: number) => n.toLocaleString('ro-RO');
+
+async function croit(): Promise<Grupa> {
+  const [ramas, taieri] = await Promise.all([ramasDeCroit(), taieriLaCroit('taieri')]);
+  const inLucru = taieri.filter((t) => t.loturi_deschise > 0);
+  const presante = ramas.filter((r) => urgent(zilePanaLa(r.data_ceruta)));
+  const bucati = ramas.reduce((s, r) => s + r.disponibil, 0);
+  return {
+    nume: 'Croit',
+    carduri: [
+      {
+        titlu: 'Rămas de croit', numar: bucati, unitate: buc(bucati),
+        detaliu: `${ramas.length} ${comenzi(ramas.length)}${presante.length ? ` · ${presante.length} cu termen în 3 zile sau trecut` : ''}`,
+        href: '/croit?vedere=ramas', actiune: 'Fă taieri',
+        ton: ramas.length === 0 ? 'verde' : presante.some((r) => intarziat(zilePanaLa(r.data_ceruta))) ? 'rosu' : presante.length ? 'galben' : 'neutru',
+      },
+      {
+        titlu: 'Taieri în lucru', numar: inLucru.length, unitate: inLucru.length === 1 ? 'taiere' : 'taieri',
+        detaliu: `${nr(inLucru.reduce((s, t) => s + t.cerut - t.croit, 0))} buc de croit`,
+        href: '/croit?vedere=taieri', actiune: 'Vezi taierile', ton: inLucru.length ? 'neutru' : 'verde',
+      },
+    ],
+  };
+}
+
+async function planificare(): Promise<Grupa> {
+  const [deplan, active] = await Promise.all([deplanificat(), planificariActive()]);
+  const linii = deplan.filter((l) => l.rest > 0);
+  const deTrimis = active.filter((p) => ['gata_de_lansat', 'blocat_materiale', 'fara_cantitate'].includes(p.stadiu));
+  const bucati = linii.reduce((s, l) => s + l.rest, 0);
+  return {
+    nume: 'Planificare',
+    carduri: [
+      {
+        titlu: 'De planificat', numar: bucati, unitate: buc(bucati),
+        detaliu: `${linii.length} ${linii.length === 1 ? 'linie' : 'linii'} de comandă`,
+        href: '/planificare', actiune: 'Planifică',
+        ton: linii.length === 0 ? 'verde' : linii.some((l) => intarziat(zilePanaLa(l.data_ceruta))) ? 'rosu' : 'neutru',
+      },
+      {
+        titlu: 'Materiale de bifat', numar: deTrimis.length, unitate: deTrimis.length === 1 ? 'planificare' : 'planificări',
+        detaliu: 'pleacă la croit doar cu toate materialele bifate',
+        href: '/planificare#de-trimis', actiune: 'Bifează', ton: deTrimis.length ? 'galben' : 'verde',
+      },
+    ],
+  };
+}
+
+async function banda(): Promise<Grupa> {
+  const [loturi, pe] = await Promise.all([deAlimentat(), transe(false)]);
+  const intarziate = pe.filter((t) => t.marja_zile !== null && t.marja_zile < 0);
+  const bucati = loturi.reduce((s, l) => s + l.rest, 0);
+  return {
+    nume: 'Bandă',
+    carduri: [
+      {
+        titlu: 'De dat pe bandă', numar: bucati, unitate: buc(bucati),
+        detaliu: `${loturi.length} ${loturi.length === 1 ? 'lot croit' : 'loturi croite'}`,
+        href: '/banda', actiune: 'Alimentează', ton: loturi.length ? 'neutru' : 'verde',
+      },
+      {
+        titlu: 'Pe bandă, peste termen', numar: intarziate.length, unitate: intarziate.length === 1 ? 'tranșă' : 'tranșe',
+        detaliu: `din ${pe.length} pe bandă acum`,
+        href: '/banda?vedere=pe_banda', actiune: 'Vezi banda', ton: intarziate.length ? 'rosu' : 'verde',
+      },
+    ],
+  };
+}
+
+/** Comenzile de stins; pentru un KAM fără drept peste depozit, doar ale lui. */
+async function depozit(c: Cine & { nume: string }, doarAleLui: boolean): Promise<Grupa[]> {
+  const toate = await comenziDepozit('de_stins');
+  const grupe: Grupa[] = [];
+  if (poate(c, 'receptie')) {
+    const peste = toate.filter((x) => intarziat(zilePanaLa(x.termen)));
+    grupe.push({
+      nume: 'Depozit',
+      carduri: [{
+        titlu: 'Comenzi de stins', numar: toate.length, unitate: comenzi(toate.length),
+        detaliu: `${nr(toate.reduce((s, x) => s + x.lipsesc, 0))} buc așteptate${peste.length ? ` · ${peste.length} peste termen` : ''}`,
+        href: '/depozit', actiune: 'Scanează sau stinge', ton: peste.length ? 'rosu' : toate.length ? 'neutru' : 'verde',
+      }],
+    });
+  }
+  if (poate(c, 'comenzi')) {
+    const ale = doarAleLui ? toate.filter((x) => x.kam === c.nume) : toate;
+    const peste = ale.filter((x) => intarziat(zilePanaLa(x.termen)));
+    const curand = ale.filter((x) => !intarziat(zilePanaLa(x.termen)) && urgent(zilePanaLa(x.termen)));
+    grupe.push({
+      nume: doarAleLui ? 'Comenzile tale' : 'Comenzi',
+      carduri: [
+        {
+          titlu: 'Peste termen', numar: peste.length, unitate: comenzi(peste.length),
+          detaliu: `${nr(peste.reduce((s, x) => s + x.lipsesc, 0))} buc încă neintrate în depozit`,
+          href: '/depozit', actiune: 'Vezi comenzile', ton: peste.length ? 'rosu' : 'verde',
+        },
+        {
+          titlu: 'Termen în următoarele 3 zile', numar: curand.length, unitate: comenzi(curand.length),
+          detaliu: `din ${ale.length} deschise`,
+          href: '/centralizator', actiune: 'Vezi stadiul', ton: curand.length ? 'galben' : 'verde',
+        },
+      ],
+    });
+  }
+  return grupe;
+}
+
+async function dezvoltare(): Promise<Grupa> {
+  const n = await numarePeSectiuni();
+  return {
+    nume: 'Dezvoltare produs',
+    carduri: [
+      { titlu: 'Tipare de făcut', numar: n.de_facut ?? 0, unitate: 'cereri', href: '/dezvoltare', actiune: 'Vezi cererile', ton: n.de_facut ? 'neutru' : 'verde' },
+      { titlu: 'Mostre de aprobat', numar: n.mostre ?? 0, unitate: 'mostre', href: '/dezvoltare?sectiune=mostre', actiune: 'Aprobă', ton: n.mostre ? 'galben' : 'verde' },
+    ],
+  };
+}
+
+async function materiale(): Promise<Grupa> {
+  const lipsa = await listaCumparaturi();
+  const furnizori = new Set(lipsa.map((x) => x.furnizor).filter(Boolean)).size;
+  const fara = lipsa.filter((x) => !x.furnizor).length;
+  return {
+    nume: 'Materii prime',
+    carduri: [{
+      titlu: 'De cumpărat', numar: lipsa.length, unitate: lipsa.length === 1 ? 'material' : 'materiale',
+      detaliu: [furnizori && `${furnizori} ${furnizori === 1 ? 'furnizor' : 'furnizori'}`, fara && `${fara} fără furnizor`].filter(Boolean).join(' · '),
+      href: '/stoc/cumparaturi', actiune: 'Lista de cumpărături', ton: lipsa.length ? 'galben' : 'verde',
+    }],
+  };
+}
+
+/** Grupele omului, în ordinea drumului comenzii. Un KAM simplu își vede doar comenzile lui. */
+export async function deFacutAzi(c: Cine & { nume: string }): Promise<Grupa[]> {
+  const doarAleLui = c.roluri.includes('kam') && !c.roluri.includes('admin') && !c.roluri.includes('head_of_sales');
+  const parti = await Promise.all([
+    poate(c, 'comenzi') || poate(c, 'receptie') ? depozit(c, doarAleLui) : Promise.resolve([]),
+    poate(c, 'planificare') ? planificare().then((g) => [g]) : Promise.resolve([]),
+    poate(c, 'croit') ? croit().then((g) => [g]) : Promise.resolve([]),
+    poate(c, 'banda') ? banda().then((g) => [g]) : Promise.resolve([]),
+    poate(c, 'dezvoltare') ? dezvoltare().then((g) => [g]) : Promise.resolve([]),
+    poate(c, 'materiale') ? materiale().then((g) => [g]) : Promise.resolve([]),
+  ]);
+  const [dep, ...rest] = parti;
+  // Comenzile (ale KAM-ului) întâi, depozitul la urmă: drumul comenzii.
+  return [...dep.filter((g) => g.nume !== 'Depozit'), ...rest.flat(), ...dep.filter((g) => g.nume === 'Depozit')];
+}

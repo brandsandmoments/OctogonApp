@@ -1,3 +1,4 @@
+import { Termen } from '../Insigne';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import Cauta from '../Cauta';
@@ -80,7 +81,7 @@ export default async function Depozit({ searchParams }: { searchParams: Promise<
                     <td><Link href={`/depozit/${encodeURIComponent(c.numar)}`}>{c.numar}</Link> <span className="slab">{c.tip} · {c.brand}</span></td>
                     <td>{modele.get(c.numar)}</td>
                     <td>{c.kam ?? <span className="slab">—</span>}</td>
-                    <td className="slab">{c.termen ?? '—'}</td>
+                    <td><Termen data={c.termen} gata={c.finalizata} /></td>
                     <td className="nr">{c.cerut}</td>
                     <td className="nr">{c.intrat || '—'}</td>
                     <td className="nr">{c.finalizata ? <span className="slab">stinsă</span> : c.lipsesc ? <strong>{c.lipsesc}</strong> : '—'}</td>

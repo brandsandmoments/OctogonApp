@@ -1,3 +1,4 @@
+import { Termen } from '../Insigne';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import Cauta from '../Cauta';
@@ -70,7 +71,7 @@ async function DeAlimentat({ m, g, cauta }: { m: boolean; g: TipPerioada | ''; c
                 <tr key={l.lot_id}>
                   <td><Link href={`/croit/${l.lot_id}`}>{l.cod}</Link> <span className="slab">P{l.prioritate}</span></td>
                   <td>{modele.get(l.comanda)}</td>
-                  <td className="slab">{l.data_ceruta}</td>
+                  <td><Termen data={l.data_ceruta} /></td>
                   <td>{l.produs}</td>
                   <td>{l.marimi.map((m) => `${m.marime} ${m.rest}`).join(' · ')}</td>
                   <td className="nr">{l.croit}</td>
@@ -115,7 +116,7 @@ async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada 
                 <tr key={t.id}>
                   <td><Link href={`/banda/${t.id}`}>{t.cod}</Link> <span className="slab">P{t.prioritate}</span></td>
                   <td>{modele.get(t.comanda)}</td>
-                  <td className="slab">{t.data_ceruta}</td>
+                  <td><Termen data={t.data_ceruta} /></td>
                   <td>{t.produs}{t.responsabil && <span className="slab"> · {t.responsabil}</span>}</td>
                   <td className="nr">{t.bucati}</td>
                   <td>{t.etapa}</td>
