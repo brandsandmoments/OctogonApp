@@ -6,6 +6,7 @@ import { numarePeSectiuni } from './dezvoltare';
 import { zilePanaLa } from './format';
 import { deplanificat, planificariActive } from './planificare';
 import { comenziMagazine } from './magazine';
+import { alerte, produseMagazine } from './produse';
 import { listaCumparaturi } from './stoc';
 
 /**
@@ -195,6 +196,24 @@ async function magazineShopify(): Promise<Grupa> {
   };
 }
 
+/** Alertele magazinelor: mărimi care se termină, produse în trend, stoc care nu se mișcă. */
+async function alerteMagazine(): Promise<Grupa> {
+  const a = alerte(await produseMagazine());
+  return {
+    nume: 'Alerte magazine',
+    carduri: [
+      { titlu: 'Se termină', numar: a.se_termina.length, unitate: a.se_termina.length === 1 ? 'mărime' : 'mărimi',
+        detaliu: `${a.se_termina.filter((x) => x.m.stoc === 0).length} deja terminate, încă cerute`, href: '/magazine/alerte',
+        actiune: 'Vezi ce se termină', ton: a.se_termina.length ? 'rosu' : 'verde' },
+      { titlu: 'În trend', numar: a.trend.length, unitate: 'produse', detaliu: 'se vând mult peste media de dinainte',
+        href: '/magazine/alerte', actiune: 'Vezi trendurile', ton: a.trend.length ? 'galben' : 'verde' },
+      { titlu: 'Nu se mișcă', numar: a.stoc_mort.length, unitate: 'produse',
+        detaliu: `${nr(a.stoc_mort.reduce((s, p) => s + p.stoc, 0))} buc fără vânzări`, href: '/magazine/alerte',
+        actiune: 'Vezi stocul oprit', ton: a.stoc_mort.length ? 'galben' : 'verde' },
+    ],
+  };
+}
+
 /** Grupele omului, în ordinea drumului comenzii. Un KAM simplu își vede doar comenzile lui. */
 export async function deFacutAzi(c: Cine & { nume: string }): Promise<Grupa[]> {
   const doarAleLui = c.roluri.includes('kam') && !c.roluri.includes('admin') && !c.roluri.includes('head_of_sales');
@@ -205,7 +224,7 @@ export async function deFacutAzi(c: Cine & { nume: string }): Promise<Grupa[]> {
     poate(c, 'banda') ? banda().then((g) => [g]) : Promise.resolve([]),
     poate(c, 'dezvoltare') ? dezvoltare().then((g) => [g]) : Promise.resolve([]),
     poate(c, 'materiale') ? materiale().then((g) => [g]) : Promise.resolve([]),
-    poate(c, 'expediere') ? magazineShopify().then((g) => [g]) : Promise.resolve([]),
+    poate(c, 'expediere') ? Promise.all([magazineShopify(), alerteMagazine()]) : Promise.resolve([]),
   ]);
   const [dep, ...rest] = parti;
   // Comenzile (ale KAM-ului) întâi, depozitul la urmă: drumul comenzii.

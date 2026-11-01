@@ -1,0 +1,9 @@
+[Unit]
+Description=Rezumatul pe Slack, în fiecare dimineață la 08:00, ora României
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 Europe/Bucharest
+Persistent=true
+
+[Install]
+WantedBy=timers.target

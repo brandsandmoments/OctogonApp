@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * pagină și acțiune (app/lib/sesiune.ts), nu aici.
  */
 // Webhook-urile Shopify și sincronizarea de noapte vin fără sesiune: se verifică prin semnătură, respectiv secret.
-const PUBLICE = ['/login', '/atelier', '/shopify/webhook', '/shopify/sync'];
+const PUBLICE = ['/login', '/atelier', '/shopify/webhook', '/shopify/sync', '/shopify/slack'];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

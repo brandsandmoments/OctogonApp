@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Cauta from '../Cauta';
 import { potriveste } from '../lib/format';
 import { comenziMagazine, magazine, type ComandaClasificata, type Situatie } from '../lib/magazine';
-import { cere } from '../lib/sesiune';
+import { cere, poateModifica } from '../lib/sesiune';
 import { esteAdmin } from '../lib/acces';
 import Tipareste from '../Tipareste';
 import { dinLista, Foaie, LISTE, type Lista } from './Liste';
@@ -121,7 +121,12 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
         <>
           <div className="liste-actiuni nu-tipari">
             <span className="slab">{LISTE[foaia].ce}</span>
-            <Tipareste />
+            <span>
+              {foaia === 'fara_stoc' && (await poateModifica('comenzi')) && (
+                <Link href={`/comenzi/noua?din_magazin=${ales.id}`} className="buton">PSC din ce lipsește →</Link>
+              )}{' '}
+              <Tipareste />
+            </span>
           </div>
           <Foaie lista={foaia} magazin={ales.brand} comenzi={dinMagazin.filter((c) => dinLista(foaia, c))} />
         </>

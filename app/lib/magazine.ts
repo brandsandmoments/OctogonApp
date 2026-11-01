@@ -1,3 +1,4 @@
+import type { LinieNoua } from './comenzi';
 import { interogare } from './sesiune';
 
 /**
@@ -188,4 +189,46 @@ export async function comenziMagazine(): Promise<ComandaClasificata[]> {
     })),
     dubla: duble.get(r.comanda_id) ?? null,
   }));
+}
+
+export type LipsuriPsc = { brand_id: string; brand: string; linii: LinieNoua[]; bucati: number; necunoscute: number };
+
+/**
+ * Ce lipsește ca să poată pleca toate comenzile deschise ale unui magazin: pe
+ * fiecare variantă, cererea din comenzi minus stocul fizic. Ies liniile unei PSC
+ * (produs și mărime din catalogul aplicației), cu termen peste 14 zile; omul le vede
+ * în formularul de comandă și le schimbă înainte să salveze. Variantele fără produs
+ * sau mărime în catalog nu pot intra și se numără separat.
+ */
+export async function lipsuriPentruPsc(magazinId: string): Promise<LipsuriPsc | null> {
+  const randuri = await interogare<{ brand_id: string; brand: string; produs_id: string | null; marime_id: string | null; lipsa: number }>(
+    `WITH cerere AS (
+       SELECT l.varianta_gid, sum(l.de_livrat)::int AS cerut
+         FROM magazin_comanda mc JOIN magazin_comanda_linie l ON l.comanda_id = mc.id AND l.de_livrat > 0
+        WHERE mc.magazin_id = $1 AND l.varianta_gid IS NOT NULL
+        GROUP BY l.varianta_gid)
+     SELECT m.brand_id, b.nume AS brand, v.produs_id, v.marime_id, (c.cerut - greatest(v.stoc_fizic, 0))::int AS lipsa
+       FROM cerere c
+       JOIN magazin_varianta v ON v.magazin_id = $1 AND v.varianta_gid = c.varianta_gid
+       JOIN magazin m ON m.id = v.magazin_id JOIN brand b ON b.id = m.brand_id
+      WHERE c.cerut > greatest(v.stoc_fizic, 0)`, [magazinId]);
+  if (randuri.length === 0) {
+    const [m] = await interogare<{ brand_id: string; brand: string }>(
+      `SELECT m.brand_id, b.nume AS brand FROM magazin m JOIN brand b ON b.id = m.brand_id WHERE m.id = $1`, [magazinId]);
+    return m ? { ...m, linii: [], bucati: 0, necunoscute: 0 } : null;
+  }
+  const termen = new Date(Date.now() + 14 * 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Bucharest' });
+  const pe = new Map<string, LinieNoua>();
+  let necunoscute = 0;
+  for (const r of randuri) {
+    if (!r.produs_id || !r.marime_id) { necunoscute += r.lipsa; continue; }
+    const l = pe.get(r.produs_id) ?? { produsId: r.produs_id, dataCeruta: termen, vanzareDeLa: '', vanzarePanaLa: '', cantitati: {} };
+    l.cantitati[r.marime_id] = (l.cantitati[r.marime_id] ?? 0) + r.lipsa;
+    pe.set(r.produs_id, l);
+  }
+  const linii = [...pe.values()];
+  return {
+    brand_id: randuri[0].brand_id, brand: randuri[0].brand, linii, necunoscute,
+    bucati: linii.reduce((s, l) => s + Object.values(l.cantitati).reduce((a, q) => a + q, 0), 0),
+  };
 }

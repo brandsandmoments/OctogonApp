@@ -249,7 +249,8 @@ const COMANDA = `
   totalPriceSet { shopMoney { amount } }
   shippingAddress { name phone city }
   billingAddress { name phone }
-  lineItems(first: 100) { nodes { id sku title variantTitle quantity unfulfilledQuantity variant { id } } }`;
+  lineItems(first: 100) { nodes { id sku title variantTitle quantity unfulfilledQuantity variant { id }
+                                  originalTotalSet { shopMoney { amount } } } }`;
 
 type ComandaShopify = {
   id: string; name: string; createdAt: string; updatedAt: string; cancelledAt: string | null; closedAt: string | null;
@@ -258,7 +259,8 @@ type ComandaShopify = {
   shippingAddress: { name: string | null; phone: string | null; city: string | null } | null;
   billingAddress: { name: string | null; phone: string | null } | null;
   lineItems: { nodes: { id: string; sku: string | null; title: string; variantTitle: string | null; quantity: number;
-                        unfulfilledQuantity: number; variant: { id: string } | null }[] };
+                        unfulfilledQuantity: number; variant: { id: string } | null;
+                        originalTotalSet: { shopMoney: { amount: string } } | null }[] };
 };
 
 /** Deschisă = mai e ceva de trimis și nu e anulată, arhivată sau rambursată. Doar astea stau în aplicație. */
@@ -310,11 +312,64 @@ async function sincronizeazaComenzi(c: PoolClient, a: Acces): Promise<number> {
   return vazute.length;
 }
 
-export type RezultatSincronizare = { magazin: string; variante?: number; comenzi?: number; eroare?: string };
+// ---------------------------------------------------------------- vânzările
 
 /**
- * Sincronizarea completă a unui magazin sau a tuturor: variantele cu stocul, apoi
- * comenzile deschise, fiecare în tranzacția ei — comenzile căzute nu anulează
+ * Vânzările unei comenzi, câte o linie pe SKU în `vanzare` (0011), pe brandul
+ * magazinului. Ca la sincronizarea veche, contează cererea brută: o comandă anulată
+ * rămâne. Aceeași comandă citită de două ori se rescrie, nu se adună.
+ */
+async function scrieVanzari(c: PoolClient, magazinId: string, cat: Catalog, o: ComandaShopify) {
+  const pe = new Map<string, { cantitate: number; valoare: number }>();
+  for (const l of o.lineItems.nodes) {
+    const sku = l.sku?.trim().toUpperCase();
+    if (!sku || l.quantity <= 0) continue;
+    const x = pe.get(sku) ?? { cantitate: 0, valoare: 0 };
+    x.cantitate += l.quantity;
+    x.valoare += Number(l.originalTotalSet?.shopMoney.amount) || 0;
+    pe.set(sku, x);
+  }
+  for (const [sku, x] of pe) {
+    const produs = cat.produse.find((p) => sku.startsWith(`${p.cod_sku}-`));
+    await c.query(
+      `INSERT INTO vanzare (firma_id, brand_id, nr_comanda, sku, data, produs_id, marime_id, cantitate, valoare, sursa)
+       SELECT firma_curenta(), m.brand_id, $2, $3, $4, $5, $6, $7, $8, 'shopify' FROM magazin m WHERE m.id = $1
+       ON CONFLICT (firma_id, brand_id, nr_comanda, sku) DO UPDATE
+          SET data = EXCLUDED.data, produs_id = EXCLUDED.produs_id, marime_id = EXCLUDED.marime_id,
+              cantitate = EXCLUDED.cantitate, valoare = EXCLUDED.valoare, sursa = 'shopify'`,
+      [magazinId, o.name, sku, o.createdAt, produs?.id ?? null,
+       produs ? cat.marimi.get(sku.slice(produs.cod_sku.length + 1)) ?? null : null, x.cantitate, x.valoare]);
+  }
+}
+
+/**
+ * Comenzile schimbate de la ultima citire (prima dată: ultimele 60 de zile, cât dă
+ * Shopify fără read_all_orders), oricare le-ar fi starea, ca vânzări.
+ */
+async function sincronizeazaVanzari(c: PoolClient, a: Acces): Promise<number> {
+  const { rows: [m] } = await c.query<{ de_la: string }>(
+    `SELECT to_char(coalesce(vanzari_pana_la - interval '1 hour', now() - interval '60 days') AT TIME ZONE 'UTC',
+                    'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS de_la FROM magazin WHERE id = $1`, [a.magazinId]);
+  const inceput = new Date().toISOString();
+  const cat = await catalog(c);
+  let n = 0;
+  let dupa: string | null = null;
+  do {
+    const d: { orders: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: ComandaShopify[] } } =
+      await gql(a, `query V($dupa: String, $q: String) { orders(first: 100, after: $dupa, sortKey: UPDATED_AT, query: $q) {
+        pageInfo { hasNextPage endCursor } nodes { ${COMANDA} } } }`, { dupa, q: `updated_at:>='${m.de_la}'` });
+    for (const o of d.orders.nodes) { await scrieVanzari(c, a.magazinId, cat, o); n++; }
+    dupa = d.orders.pageInfo.hasNextPage ? d.orders.pageInfo.endCursor : null;
+  } while (dupa);
+  await c.query(`UPDATE magazin SET vanzari_pana_la = $2 WHERE id = $1`, [a.magazinId, inceput]);
+  return n;
+}
+
+export type RezultatSincronizare = { magazin: string; variante?: number; comenzi?: number; vanzari?: number; eroare?: string };
+
+/**
+ * Sincronizarea completă a unui magazin sau a tuturor: variantele cu stocul, comenzile
+ * deschise și vânzările de la ultima citire, fiecare în tranzacția ei — comenzile căzute nu anulează
  * stocul citit, iar un magazin căzut nu le oprește pe celelalte.
  */
 export async function sincronizeaza(magazinId?: string): Promise<RezultatSincronizare[]> {
@@ -329,6 +384,7 @@ export async function sincronizeaza(magazinId?: string): Promise<RezultatSincron
       if (!a) { rez.push({ ...r, eroare: 'nelegat' }); continue; }
       r.variante = await caFirma(firma, (c) => sincronizeazaProduse(c, a));
       r.comenzi = await caFirma(firma, (c) => sincronizeazaComenzi(c, a));
+      r.vanzari = await caFirma(firma, (c) => sincronizeazaVanzari(c, a));
     } catch (e) {
       r.eroare = (e as Error).message;
     }
@@ -401,7 +457,7 @@ export async function primesteWebhook(domeniu: string, subiect: string, corp: Re
     if (subiect.startsWith('orders/')) {
       const d = await gql<{ order: ComandaShopify | null }>(a, `query O($id: ID!) { order(id: $id) { ${COMANDA} } }`,
         { id: String(corp.admin_graphql_api_id ?? `gid://shopify/Order/${corp.id}`) });
-      if (d.order) await scrieComanda(c, m.id, d.order);
+      if (d.order) { await scrieComanda(c, m.id, d.order); await scrieVanzari(c, m.id, await catalog(c), d.order); }
     } else if (subiect === 'inventory_levels/update') {
       const d = await gql<{ inventoryItem: { variant: VariantaShopify | null } | null }>(a,
         `query I($id: ID!) { inventoryItem(id: $id) { variant { ${VARIANTA} } } }`,

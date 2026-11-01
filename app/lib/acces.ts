@@ -92,6 +92,8 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     nume: 'Magazine',
     ecrane: [
       { href: '/magazine', nume: 'Comenzi din magazine', ce: 'comenzile intrate în magazinele Shopify: de trimis, de sunat, fără stoc, posibile duble', zona: 'expediere' },
+      { href: '/magazine/produse', nume: 'Produse și vânzări', ce: 'stoc, vânzări pe 7 / 30 / 60 de zile, câte zile mai ține stocul', zona: 'expediere' },
+      { href: '/magazine/alerte', nume: 'Alerte', ce: 'ce se termină, ce nu se mișcă, ce e în trend', zona: 'expediere' },
       { href: '/magazine/legaturi', nume: 'Legături Shopify', ce: 'legarea magazinelor și sincronizarea', zona: 'oameni' },
     ],
   },

@@ -11,19 +11,23 @@ const azi = () => new Date().toLocaleDateString('sv-SE');
 const linieGoala = (): LinieNoua => ({ produsId: '', dataCeruta: '', vanzareDeLa: '', vanzarePanaLa: '', cantitati: {} });
 
 export default function FormularComanda({
-  branduri, produse, marimi, kami, kamImplicit, tipImplicit,
-}: Nomenclatoare & { kamImplicit: string; tipImplicit: 'PSF' | 'PSC' }) {
+  branduri, produse, marimi, kami, kamImplicit, tipImplicit, brandImplicit, liniiInitiale, observatiiImplicite,
+}: Nomenclatoare & {
+  kamImplicit: string; tipImplicit: 'PSF' | 'PSC';
+  // Precompletat, de ex. din lipsurile unui magazin Shopify: omul vede și schimbă înainte să salveze.
+  brandImplicit?: string; liniiInitiale?: LinieNoua[]; observatiiImplicite?: string;
+}) {
   const router = useRouter();
   const [seLucreaza, porneste] = useTransition();
   const [eroare, setEroare] = useState<string>();
 
   const [tip, setTip] = useState<'PSF' | 'PSC'>(tipImplicit);
-  const [brandId, setBrandId] = useState(branduri.length === 1 ? branduri[0].id : '');
+  const [brandId, setBrandId] = useState(brandImplicit ?? (branduri.length === 1 ? branduri[0].id : ''));
   const [kamId, setKamId] = useState(kamImplicit);
   const [dataLansare, setDataLansare] = useState(azi());
   const [prioritate, setPrioritate] = useState(3);
-  const [observatii, setObservatii] = useState('');
-  const [linii, setLinii] = useState<LinieNoua[]>([linieGoala()]);
+  const [observatii, setObservatii] = useState(observatiiImplicite ?? '');
+  const [linii, setLinii] = useState<LinieNoua[]>(liniiInitiale?.length ? liniiInitiale : [linieGoala()]);
 
   // Doar produsele brandului ales: o comandă e a unui singur brand.
   const produseBrand = produse.filter((p) => p.brand_id === brandId);
