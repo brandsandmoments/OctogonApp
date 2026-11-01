@@ -5,7 +5,8 @@ import { NextResponse, type NextRequest } from 'next/server';
  * — dacă sesiunea e validă și ce roluri are omul se verifică pe server, la fiecare
  * pagină și acțiune (app/lib/sesiune.ts), nu aici.
  */
-const PUBLICE = ['/login', '/atelier'];
+// Webhook-urile Shopify și sincronizarea de noapte vin fără sesiune: se verifică prin semnătură, respectiv secret.
+const PUBLICE = ['/login', '/atelier', '/shopify/webhook', '/shopify/sync'];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

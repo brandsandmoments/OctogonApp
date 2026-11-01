@@ -1,0 +1,9 @@
+[Unit]
+Description=Sincronizarea magazinelor Shopify, noaptea la 03:15 (webhook-urile țin datele la zi între timp)
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

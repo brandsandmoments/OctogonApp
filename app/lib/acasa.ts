@@ -5,6 +5,7 @@ import { comenziDepozit } from './depozit';
 import { numarePeSectiuni } from './dezvoltare';
 import { zilePanaLa } from './format';
 import { deplanificat, planificariActive } from './planificare';
+import { comenziMagazine } from './magazine';
 import { listaCumparaturi } from './stoc';
 
 /**
@@ -167,6 +168,33 @@ async function materiale(): Promise<Grupa> {
   };
 }
 
+/** Comenzile din magazinele Shopify: ce pleacă azi, ce e de sunat, ce a rămas fără stoc. */
+async function magazineShopify(): Promise<Grupa> {
+  const toate = await comenziMagazine();
+  const pe = (s: string) => toate.filter((c) => c.situatie === s);
+  const vechi = toate.filter((c) => c.zile >= 4).length;
+  return {
+    nume: 'Comenzi din magazine',
+    carduri: [
+      {
+        titlu: 'De trimis', numar: pe('livrabila').length, unitate: comenzi(pe('livrabila').length),
+        detaliu: `${nr(pe('livrabila').reduce((s, c) => s + c.bucati, 0))} buc de cules${vechi ? ` · ${vechi} așteaptă de 4+ zile` : ''}`,
+        href: '/magazine?vedere=livrabila', actiune: 'Picking', ton: vechi ? 'rosu' : pe('livrabila').length ? 'neutru' : 'verde',
+      },
+      {
+        titlu: 'De sunat', numar: pe('de_sunat').length, unitate: comenzi(pe('de_sunat').length),
+        detaliu: 'avem doar o parte din comandă', href: '/magazine?vedere=de_sunat', actiune: 'Sună clienții',
+        ton: pe('de_sunat').length ? 'galben' : 'verde',
+      },
+      {
+        titlu: 'Fără stoc', numar: pe('fara_stoc').length, unitate: comenzi(pe('fara_stoc').length),
+        detaliu: `${nr(pe('fara_stoc').reduce((s, c) => s + c.bucati, 0))} buc lipsă`, href: '/magazine?vedere=fara_stoc',
+        actiune: 'Vezi ce lipsește', ton: pe('fara_stoc').length ? 'rosu' : 'verde',
+      },
+    ],
+  };
+}
+
 /** Grupele omului, în ordinea drumului comenzii. Un KAM simplu își vede doar comenzile lui. */
 export async function deFacutAzi(c: Cine & { nume: string }): Promise<Grupa[]> {
   const doarAleLui = c.roluri.includes('kam') && !c.roluri.includes('admin') && !c.roluri.includes('head_of_sales');
@@ -177,6 +205,7 @@ export async function deFacutAzi(c: Cine & { nume: string }): Promise<Grupa[]> {
     poate(c, 'banda') ? banda().then((g) => [g]) : Promise.resolve([]),
     poate(c, 'dezvoltare') ? dezvoltare().then((g) => [g]) : Promise.resolve([]),
     poate(c, 'materiale') ? materiale().then((g) => [g]) : Promise.resolve([]),
+    poate(c, 'expediere') ? magazineShopify().then((g) => [g]) : Promise.resolve([]),
   ]);
   const [dep, ...rest] = parti;
   // Comenzile (ale KAM-ului) întâi, depozitul la urmă: drumul comenzii.

@@ -11,7 +11,8 @@
     "import:dashboard": "node --env-file=.env scripts/import-dashboard.mts",
     "sync:shopify": "node --env-file=.env scripts/sync-shopify.mts",
     "cont:admin": "node --env-file=.env scripts/cont-admin.mts",
-    "import:tipare": "node --env-file=.env scripts/import-tipare.mts"
+    "import:tipare": "node --env-file=.env scripts/import-tipare.mts",
+    "import:intrari": "node --env-file=.env scripts/import-intrari.mts"
   },
   "dependencies": {
     "bwip-js": "^4.11.4",

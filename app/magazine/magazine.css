@@ -1,0 +1,28 @@
+/* Comenzile din magazinele Shopify */
+.pe-magazine section h2 { margin: 1.25rem 0 .4rem; }
+.pe-magazine section h2 a { text-decoration: none; }
+.numere-magazin { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
+.numar-situatie {
+  display: inline-flex; align-items: baseline; gap: .3rem; padding: .45rem .8rem; border: 1px solid var(--linie);
+  border-left: 4px solid var(--linie); border-radius: .4rem; text-decoration: none; background: var(--card); font-size: .9rem;
+}
+.numar-situatie strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.numar-situatie.ton-verde  { border-left-color: var(--verde); }
+.numar-situatie.ton-galben { border-left-color: var(--galben); }
+.numar-situatie.ton-rosu   { border-left-color: var(--rosu); }
+.numar-situatie.ton-rosu strong { color: var(--rosu); }
+
+.comenzi-magazin td { white-space: normal; }
+.comenzi-magazin td.client { min-width: 11rem; }
+.linii-magazin { list-style: none; margin: 0; padding: 0; min-width: 18rem; }
+.linii-magazin li { padding: .05rem 0; }
+.linii-magazin .semn { display: inline-block; width: 1.1rem; color: var(--verde); font-weight: 700; }
+.linii-magazin li.lipsa-linie .semn { color: var(--rosu); }
+.linii-magazin li.lipsa-linie { color: var(--rosu); }
+
+.legaturi td form { display: inline-flex; gap: .35rem; margin: 0; }
+.legaturi input[name="domeniu"] { font: inherit; font-size: .85rem; padding: .3rem .5rem; border: 1px solid var(--linie);
+  border-radius: .35rem; background: transparent; color: inherit; min-width: 15rem; }
+.legaturi button, .legaturi .buton { font: inherit; font-size: .85rem; padding: .3rem .7rem; border: 1px solid var(--linie);
+  border-radius: .35rem; background: transparent; color: inherit; cursor: pointer; font-weight: 600; }
+.mesaj-ok { color: var(--verde-text); font-weight: 600; }
