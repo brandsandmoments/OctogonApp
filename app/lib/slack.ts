@@ -26,7 +26,9 @@ export async function trimiteRezumatSlack(): Promise<string> {
         `*${m.brand}* — ${n('livrabila')} de trimis · ${n('de_sunat')} de sunat · ${n('fara_stoc')} fără stoc` +
         `${c.some((x) => x.zile >= 4) ? ` · :warning: ${c.filter((x) => x.zile >= 4).length} așteaptă de 4+ zile` : ''}` } },
       { type: 'section', fields: [
-        { type: 'mrkdwn', text: `*:red_circle: Se termină (${a.se_termina.length})*\n${primele(a.se_termina.map(({ p, m: x }) => `${p.produs} ${x.marime}: ${x.stoc === 0 ? 'terminat' : `${x.zile} zile`}`))}` },
+        { type: 'mrkdwn', text: `*:red_circle: Clienți care așteaptă (${a.asteapta.length})*\n${primele(a.asteapta.map(({ p, m: x }) => `${p.produs} ${x.marime}: lipsă ${x.lipsa} (${x.comenzi} com.)`))}` },
+        { type: 'mrkdwn', text: `*:no_entry: Terminate, se vindeau (${a.terminat.length})*\n${primele(a.terminat.map(({ p, m: x }) => `${p.produs} ${x.marime}: ${x.v30} în 30 z${x.se_poate_comanda ? '' : ', nu se mai poate comanda'}`))}` },
+        { type: 'mrkdwn', text: `*:hourglass_flowing_sand: Se termină curând (${a.curand.length})*\n${primele(a.curand.map(({ p, m: x }) => `${p.produs} ${x.marime}: ${x.zile} zile`))}` },
         { type: 'mrkdwn', text: `*:chart_with_upwards_trend: În trend (${a.trend.length})*\n${primele(a.trend.map((p) => `${p.produs}: ${p.v7} buc în 7 zile`))}` },
       ] },
       { type: 'section', text: { type: 'mrkdwn', text: `*:zzz: Nu se mișcă (${a.stoc_mort.length})*\n${primele(a.stoc_mort.map((p) => `${p.produs}: ${p.stoc} buc`), 3)}` } },

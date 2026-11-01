@@ -175,13 +175,13 @@ async function acces(c: PoolClient, magazinId: string): Promise<Acces | null> {
 // ---------------------------------------------------------------- variantele
 
 const VARIANTA = `
-  id sku title price
+  id sku title price inventoryPolicy
   selectedOptions { name value }
   product { id title productType status }
   inventoryItem { id inventoryLevels(first: 20) { nodes { quantities(names: ["on_hand", "available"]) { name quantity } } } }`;
 
 type VariantaShopify = {
-  id: string; sku: string | null; title: string; price: string | null;
+  id: string; sku: string | null; title: string; price: string | null; inventoryPolicy: string | null;
   selectedOptions: { name: string; value: string }[];
   product: { id: string; title: string; productType: string | null; status: string };
   inventoryItem: { id: string; inventoryLevels: { nodes: { quantities: { name: string; quantity: number }[] }[] } } | null;
@@ -212,17 +212,18 @@ async function scrieVarianta(c: PoolClient, magazinId: string, cat: Catalog, v: 
     .reduce((s, n) => s + (n.quantities.find((q) => q.name === nume)?.quantity ?? 0), 0);
   await c.query(
     `INSERT INTO magazin_varianta (firma_id, magazin_id, varianta_gid, articol_gid, produs_gid, sku, titlu_produs, titlu_varianta,
-                                   tip_produs, optiuni, stoc_fizic, stoc_disponibil, pret, activ, produs_id, marime_id, actualizat_la)
-     VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
+                                   tip_produs, optiuni, stoc_fizic, stoc_disponibil, pret, activ, produs_id, marime_id, vinde_fara_stoc, actualizat_la)
+     VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now())
      ON CONFLICT (magazin_id, varianta_gid) DO UPDATE SET
        articol_gid = EXCLUDED.articol_gid, produs_gid = EXCLUDED.produs_gid, sku = EXCLUDED.sku,
        titlu_produs = EXCLUDED.titlu_produs, titlu_varianta = EXCLUDED.titlu_varianta, tip_produs = EXCLUDED.tip_produs,
        optiuni = EXCLUDED.optiuni, stoc_fizic = EXCLUDED.stoc_fizic, stoc_disponibil = EXCLUDED.stoc_disponibil,
        pret = EXCLUDED.pret, activ = EXCLUDED.activ, produs_id = EXCLUDED.produs_id, marime_id = EXCLUDED.marime_id,
-       actualizat_la = now()`,
+       vinde_fara_stoc = EXCLUDED.vinde_fara_stoc, actualizat_la = now()`,
     [magazinId, v.id, v.inventoryItem?.id ?? null, v.product.id, sku, v.product.title, v.title === 'Default Title' ? null : v.title,
      v.product.productType || null, JSON.stringify(optiuni), cantitate('on_hand'), cantitate('available'), v.price,
-     v.product.status === 'ACTIVE', produs?.id ?? null, marimeText ? cat.marimi.get(marimeText.trim().toUpperCase()) ?? null : null]);
+     v.product.status === 'ACTIVE', produs?.id ?? null, marimeText ? cat.marimi.get(marimeText.trim().toUpperCase()) ?? null : null,
+     v.inventoryPolicy === 'CONTINUE']);
 }
 
 /** Toate variantele magazinului, cu stocul; cele care nu mai există în Shopify se șterg. */

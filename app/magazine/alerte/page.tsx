@@ -1,16 +1,26 @@
 import Link from 'next/link';
+import Tipareste from '../../Tipareste';
 import { magazine } from '../../lib/magazine';
 import { alerte, praguri, produseMagazine } from '../../lib/produse';
 import { cere } from '../../lib/sesiune';
 import '../magazine.css';
+import '../foaie.css';
 
 export const dynamic = 'force-dynamic';
 
+const zi = (d: string | null) => (d ? `${d.slice(8)}.${d.slice(5, 7)}` : '—');
+const peSapt = (v30: number) => Math.round((v30 / 30) * 7 * 10) / 10;
+
 /**
- * Alertele magazinelor, pe toate sau pe unul: ce se termină (o mărime care mai
- * ține sub pragul de zile), ce nu se mișcă (stoc fără vânzări) și ce prinde avânt
- * (ultima săptămână mult peste media de dinainte). Aceleași alerte pleacă dimineața
- * și pe Slack.
+ * Alertele magazinelor, pe toate sau pe unul, ca o foaie care se tipărește pe A4:
+ *
+ * 1. clienți care așteaptă — comenzile deschise cer mai mult decât e pe stoc;
+ * 2. terminate, se vindeau — stoc zero, nimeni nu așteaptă; dacă varianta nu se poate
+ *    comanda la stoc zero, vânzarea se pierde fără să se vadă;
+ * 3. se termină curând — încă pe stoc, dar ține sub pragul de zile;
+ * 4. în trend și 5. nu se mișcă.
+ *
+ * Aceleași alerte pleacă dimineața și pe Slack.
  */
 export default async function Alerte({ searchParams }: { searchParams: Promise<{ magazin?: string }> }) {
   await cere('expediere');
@@ -18,80 +28,153 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
   const [lista, p] = await Promise.all([magazine(), praguri()]);
   const ales = lista.find((m) => m.id === f.magazin) ?? null;
   const a = alerte(await produseMagazine(ales?.id));
-  const cu = (m: string) => (ales ? '' : ` · ${m}`);
+  const toate = !ales;
+  const generat = new Date().toLocaleString('ro-RO', { timeZone: 'Europe/Bucharest', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fara = (n: number) => n === 0 && <p className="foaie-gol">Nimic aici acum.</p>;
+  const Mag = ({ m }: { m: string }) => (toate ? <td className="mic">{m}</td> : null);
+  const thMag = toate ? <th>Magazin</th> : null;
 
   return (
     <main className="lat">
-      <h1>Alerte magazine</h1>
+      <h1 className="nu-tipari">Alerte magazine</h1>
       <nav className="file">
-        <Link href="/magazine/alerte" className={!ales ? 'activ' : ''}>Toate</Link>
+        <Link href="/magazine/alerte" className={toate ? 'activ' : ''}>Toate</Link>
         {lista.map((m) => <Link key={m.id} href={`/magazine/alerte?magazin=${m.id}`} className={m.id === ales?.id ? 'activ' : ''}>{m.brand}</Link>)}
       </nav>
-      <p className="sumar">
-        {a.se_termina.length} mărimi se termină · {a.stoc_mort.length} produse nu se mișcă · {a.trend.length} în trend
-      </p>
+      <div className="liste-actiuni nu-tipari">
+        <span className="slab">raportul se tipărește pe A4, ca foile de picking</span>
+        <Tipareste />
+      </div>
 
-      <h2>Se termină <span className="slab">— mai ține sub {p.alerta_zile_stoc} zile la ritmul ultimelor 30 de zile</span></h2>
-      {a.se_termina.length === 0 ? <p className="slab">Nimic.</p> : (
-        <div className="tabel-derulant">
-          <table className="centralizator">
-            <thead><tr><th>Produs</th><th>Mărime</th><th className="nr">Stoc</th><th className="nr">Vândut 7 zile</th><th className="nr">30 zile</th><th>Ține</th></tr></thead>
-            <tbody>
-              {a.se_termina.map(({ p: x, m }) => (
-                <tr key={`${x.magazin_id}${x.produs}${m.marime}`}>
-                  <td><strong>{x.produs}</strong><span className="slab">{cu(x.magazin)}</span></td>
-                  <td>{m.marime}</td>
-                  <td className="nr">{m.stoc}</td>
-                  <td className="nr">{m.v7}</td>
-                  <td className="nr">{m.v30}</td>
-                  <td>{m.stoc === 0 ? <span className="insigna rosu">terminat, încă se cere</span>
-                    : <span className={`insigna ${m.zile! < 7 ? 'rosu' : 'galben'}`}>{m.zile} zile</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <article className="foaie">
+        <header className="foaie-antet">
+          <h1>Alerte stoc · {toate ? 'toate magazinele' : ales.brand}</h1>
+          <p className="foaie-sub">clienți care așteaptă · terminate · se termină curând · trend · nu se mișcă</p>
+          <p className="foaie-mic">vânzări din ultimele 60 de zile · stoc fizic Shopify · Generat {generat}</p>
+          <p className="foaie-rezumat">
+            {a.asteapta.length} mărimi cu clienți care așteaptă ({a.asteapta.reduce((s, x) => s + x.m.lipsa, 0)} buc lipsă) ·{' '}
+            {a.terminat.length} terminate · {a.curand.length} se termină curând · {a.trend.length} în trend · {a.stoc_mort.length} nu se mișcă
+          </p>
+        </header>
 
-      <h2>În trend <span className="slab">— ultimele 7 zile de cel puțin {p.trend_factor}× media săptămânală de dinainte, minim {p.trend_min_buc} buc</span></h2>
-      {a.trend.length === 0 ? <p className="slab">Nimic.</p> : (
-        <div className="tabel-derulant">
-          <table className="centralizator">
-            <thead><tr><th>Produs</th><th className="nr">Vândut 7 zile</th><th className="nr">30 zile</th><th>Creștere</th><th className="nr">Stoc</th><th>Ține</th></tr></thead>
-            <tbody>
-              {a.trend.map((x) => (
-                <tr key={`${x.magazin_id}${x.produs}`}>
-                  <td><strong>{x.produs}</strong><span className="slab">{cu(x.magazin)}</span></td>
-                  <td className="nr"><strong>{x.v7}</strong></td>
-                  <td className="nr">{x.v30}</td>
-                  <td><span className="insigna violet">{x.semnale.trend ? `×${x.semnale.trend}` : 'nou'}</span></td>
-                  <td className="nr">{x.stoc}</td>
-                  <td>{x.zile === null ? '—' : <span className={`insigna ${x.zile < 7 ? 'rosu' : x.zile < p.alerta_zile_stoc ? 'galben' : 'verde'}`}>{x.zile} zile</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        <section className="foaie-grupa">
+          <h2>1. Clienți care așteaptă</h2>
+          <p className="foaie-mic">Comenzile deschise cer mai mult decât e pe stoc. Cerere sigură: de produs sau de cumpărat.</p>
+          {fara(a.asteapta.length) || (
+            <table>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Stoc</th><th className="c">Comenzi</th><th className="c">Cerut</th><th className="c">Lipsă</th><th className="c">Vândut 30 z</th></tr></thead>
+              <tbody>
+                {a.asteapta.map(({ p: x, m }) => (
+                  <tr key={`${x.magazin_id}${x.produs}${m.marime}`}>
+                    <Mag m={x.magazin} />
+                    <td>{x.produs}{!x.activ && <span className="mic"> · scos din magazin</span>}</td>
+                    <td className="c">{m.marime}</td>
+                    <td className="c">{m.stoc}</td>
+                    <td className="c">{m.comenzi}</td>
+                    <td className="c">{m.asteapta}</td>
+                    <td className="c rosu-tare">{m.lipsa}</td>
+                    <td className="c">{m.v30}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
 
-      <h2>Nu se mișcă <span className="slab">— cel puțin {p.stoc_mort_min_buc} buc pe stoc și nicio vânzare în {p.stoc_mort_zile} de zile</span></h2>
-      {a.stoc_mort.length === 0 ? <p className="slab">Nimic.</p> : (
-        <div className="tabel-derulant">
-          <table className="centralizator">
-            <thead><tr><th>Produs</th><th className="nr">Stoc</th><th>Ultima vânzare</th><th>Mărimi · stoc</th></tr></thead>
-            <tbody>
-              {a.stoc_mort.map((x) => (
-                <tr key={`${x.magazin_id}${x.produs}`}>
-                  <td><strong>{x.produs}</strong><span className="slab">{cu(x.magazin)}</span></td>
-                  <td className="nr"><strong>{x.stoc}</strong></td>
-                  <td className="slab">{x.ultima ? `${x.ultima.slice(8)}.${x.ultima.slice(5, 7)}` : 'în ultimele 60 de zile, niciuna'}</td>
-                  <td className="marimi-stoc">{x.marimi.filter((m) => m.stoc > 0).map((m) => <span key={m.marime}>{m.marime} <strong>{m.stoc}</strong></span>)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        <section className="foaie-grupa">
+          <h2>2. Terminate, se vindeau</h2>
+          <p className="foaie-mic">
+            Stoc zero, nimeni nu așteaptă, dar s-au vândut în ultimele 30 de zile. Unde nu se mai poate comanda, vânzarea se
+            pierde fără să se vadă — estimat din ritmul de dinainte. Decizia: restoc sau nu.
+          </p>
+          {fara(a.terminat.length) || (
+            <table>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Vândut 30 z</th><th className="c">Ultima vânzare</th><th>În magazin</th></tr></thead>
+              <tbody>
+                {a.terminat.map(({ p: x, m }) => (
+                  <tr key={`${x.magazin_id}${x.produs}${m.marime}`}>
+                    <Mag m={x.magazin} />
+                    <td>{x.produs}</td>
+                    <td className="c">{m.marime}</td>
+                    <td className="c">{m.v30}</td>
+                    <td className="c mic">{zi(m.ultima)}</td>
+                    <td>{m.se_poate_comanda
+                      ? <span className="mic">se poate comanda — comenzile noi vor apărea la „așteaptă"</span>
+                      : <span className="rosu-tare">nu se mai poate comanda · ~{peSapt(m.v30)} buc/săpt pierdute</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="foaie-grupa">
+          <h2>3. Se termină curând</h2>
+          <p className="foaie-mic">Încă pe stoc, dar la ritmul ultimelor 30 de zile ține sub {p.alerta_zile_stoc} zile.</p>
+          {fara(a.curand.length) || (
+            <table>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Stoc</th><th className="c">Vândut 7 z</th><th className="c">30 z</th><th className="c">Ține</th></tr></thead>
+              <tbody>
+                {a.curand.map(({ p: x, m }) => (
+                  <tr key={`${x.magazin_id}${x.produs}${m.marime}`}>
+                    <Mag m={x.magazin} />
+                    <td>{x.produs}</td>
+                    <td className="c">{m.marime}</td>
+                    <td className="c stoc">{m.stoc}</td>
+                    <td className="c">{m.v7}</td>
+                    <td className="c">{m.v30}</td>
+                    <td className={`c ${m.zile! < 7 ? 'rosu-tare' : ''}`}>{m.zile} zile</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="foaie-grupa">
+          <h2>4. În trend</h2>
+          <p className="foaie-mic">Ultimele 7 zile de cel puțin {p.trend_factor}× media săptămânală de dinainte, minim {p.trend_min_buc} buc.</p>
+          {fara(a.trend.length) || (
+            <table>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Vândut 7 z</th><th className="c">30 z</th><th className="c">Creștere</th><th className="c">Stoc</th><th className="c">Ține</th></tr></thead>
+              <tbody>
+                {a.trend.map((x) => (
+                  <tr key={`${x.magazin_id}${x.produs}`}>
+                    <Mag m={x.magazin} />
+                    <td>{x.produs}</td>
+                    <td className="c"><strong>{x.v7}</strong></td>
+                    <td className="c">{x.v30}</td>
+                    <td className="c">{x.semnale.trend ? `×${x.semnale.trend}` : 'nou'}</td>
+                    <td className="c stoc">{x.stoc}</td>
+                    <td className="c">{x.zile === null ? '—' : `${x.zile} zile`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="foaie-grupa">
+          <h2>5. Nu se mișcă</h2>
+          <p className="foaie-mic">Cel puțin {p.stoc_mort_min_buc} buc pe stoc și nicio vânzare în {p.stoc_mort_zile} de zile.</p>
+          {fara(a.stoc_mort.length) || (
+            <table>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Stoc</th><th className="c">Ultima vânzare</th><th>Mărimi · stoc</th></tr></thead>
+              <tbody>
+                {a.stoc_mort.map((x) => (
+                  <tr key={`${x.magazin_id}${x.produs}`}>
+                    <Mag m={x.magazin} />
+                    <td>{x.produs}</td>
+                    <td className="c"><strong>{x.stoc}</strong></td>
+                    <td className="c mic">{x.ultima ? zi(x.ultima) : 'niciuna în 60 z'}</td>
+                    <td className="mic">{x.marimi.filter((m) => m.stoc > 0).map((m) => `${m.marime} ${m.stoc}`).join(' · ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </article>
     </main>
   );
 }

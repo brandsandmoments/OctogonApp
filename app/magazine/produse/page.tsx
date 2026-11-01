@@ -82,13 +82,15 @@ export default async function Produse({ searchParams }: { searchParams: Promise<
                   <td className="marimi-stoc">
                     {p.marimi.map((m) => (
                       <span key={m.marime} className={m.stoc === 0 ? (m.v30 > 0 ? 'gol-cerut' : 'gol') : ''}
-                            title={`vândut ${m.v30} în 30 de zile${m.zile !== null ? ` · ține ${m.zile} zile` : ''}`}>
+                            title={`vândut ${m.v30} în 30 de zile${m.zile !== null ? ` · ține ${m.zile} zile` : ''}${m.asteapta ? ` · ${m.asteapta} cerute de comenzi deschise` : ''}${m.stoc === 0 && !m.se_poate_comanda ? ' · nu se poate comanda la stoc zero' : ''}`}>
                         {m.marime} <strong>{m.stoc}</strong>
                       </span>
                     ))}
                   </td>
                   <td>
-                    {p.semnale.se_termina.length > 0 && <span className="insigna rosu">se termină: {p.semnale.se_termina.map((m) => m.marime).join(', ')}</span>}
+                    {p.semnale.asteapta.length > 0 && <span className="insigna rosu">așteaptă: {p.semnale.asteapta.map((m) => `${m.marime} −${m.lipsa}`).join(', ')}</span>}
+                    {p.semnale.terminat.length > 0 && <span className={`insigna ${p.semnale.terminat.some((m) => !m.se_poate_comanda) ? 'rosu' : 'gri'}`}>terminat: {p.semnale.terminat.map((m) => m.marime).join(', ')}</span>}
+                    {p.semnale.curand.length > 0 && <span className="insigna galben">curând: {p.semnale.curand.map((m) => m.marime).join(', ')}</span>}
                     {p.semnale.trend !== null && <span className="insigna violet">trend{p.semnale.trend ? ` ×${p.semnale.trend}` : ' nou'}</span>}
                     {p.semnale.stoc_mort && <span className="insigna galben">nu se mișcă</span>}
                   </td>

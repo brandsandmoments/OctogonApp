@@ -196,20 +196,21 @@ async function magazineShopify(): Promise<Grupa> {
   };
 }
 
-/** Alertele magazinelor: mărimi care se termină, produse în trend, stoc care nu se mișcă. */
+/** Alertele magazinelor: clienți care așteaptă stoc, mărimi terminate care se vindeau, ce se termină curând. */
 async function alerteMagazine(): Promise<Grupa> {
   const a = alerte(await produseMagazine());
+  const pierdute = a.terminat.filter((x) => !x.m.se_poate_comanda).length;
   return {
     nume: 'Alerte magazine',
     carduri: [
-      { titlu: 'Se termină', numar: a.se_termina.length, unitate: a.se_termina.length === 1 ? 'mărime' : 'mărimi',
-        detaliu: `${a.se_termina.filter((x) => x.m.stoc === 0).length} deja terminate, încă cerute`, href: '/magazine/alerte',
-        actiune: 'Vezi ce se termină', ton: a.se_termina.length ? 'rosu' : 'verde' },
-      { titlu: 'În trend', numar: a.trend.length, unitate: 'produse', detaliu: 'se vând mult peste media de dinainte',
-        href: '/magazine/alerte', actiune: 'Vezi trendurile', ton: a.trend.length ? 'galben' : 'verde' },
-      { titlu: 'Nu se mișcă', numar: a.stoc_mort.length, unitate: 'produse',
-        detaliu: `${nr(a.stoc_mort.reduce((s, p) => s + p.stoc, 0))} buc fără vânzări`, href: '/magazine/alerte',
-        actiune: 'Vezi stocul oprit', ton: a.stoc_mort.length ? 'galben' : 'verde' },
+      { titlu: 'Clienți care așteaptă', numar: a.asteapta.reduce((s, x) => s + x.m.lipsa, 0), unitate: 'buc lipsă',
+        detaliu: `${a.asteapta.length} mărimi cerute de comenzi deschise peste stoc`, href: '/magazine/alerte',
+        actiune: 'Vezi ce lipsește', ton: a.asteapta.length ? 'rosu' : 'verde' },
+      { titlu: 'Terminate, se vindeau', numar: a.terminat.length, unitate: 'mărimi',
+        detaliu: pierdute ? `${pierdute} nu se mai pot comanda: vânzări pierdute` : 'toate se mai pot comanda',
+        href: '/magazine/alerte', actiune: 'Restoc sau nu', ton: pierdute ? 'rosu' : a.terminat.length ? 'galben' : 'verde' },
+      { titlu: 'Se termină curând', numar: a.curand.length, unitate: 'mărimi', detaliu: `${a.trend.length} produse în trend · ${a.stoc_mort.length} nu se mișcă`,
+        href: '/magazine/alerte', actiune: 'Vezi alertele', ton: a.curand.length ? 'galben' : 'verde' },
     ],
   };
 }
