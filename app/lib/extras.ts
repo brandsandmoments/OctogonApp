@@ -13,7 +13,7 @@ import { firmaCurenta, interogare } from './sesiune';
  *
  * Apoi fiecare încasare de la Fan Courier se potrivește cu un lot de rambursuri (un lot
  * Fan = un ordin de plată), iar fiecare încasare Stripe cu un virament Shopify Payments:
- * aceeași sumă, la cel mult 7 zile după.
+ * aceeași sumă, la cel mult 7 zile distanță.
  */
 
 export type TranzactieBanca = { zi: string; sens: 'credit' | 'debit'; suma: number; tip: string; descriere: string; ref: string | null; sursa: string | null };
@@ -84,29 +84,48 @@ export async function citesteExtrasPdf(bytes: Uint8Array): Promise<Extras> {
 
 /**
  * Încasările nepotrivite, cu ce așteptăm: lotul Fan (suma rambursurilor lui) sau
- * viramentul Shopify Payments cu exact aceeași sumă, virat cu 0–7 zile înainte.
- * Se potrivește cel mai apropiat în timp, fiecare o singură dată.
+ * viramentul Shopify Payments cu exact aceeași sumă, la cel mult 7 zile distanță în
+ * oricare parte (Shopify datează viramentul uneori după ce banii au intrat). Se
+ * potrivește cel mai apropiat în timp, fiecare o singură dată.
  */
 export async function potrivesteBanca(c: PoolClient): Promise<number> {
-  const { rows: incasari } = await c.query<{ id: string; zi: string; suma: number; sursa: string }>(
-    `SELECT id, to_char(zi, 'YYYY-MM-DD') AS zi, suma::float AS suma, sursa FROM banca_tranzactie
+  // Restituirile de rețineri Fan nu corespund unui lot: se marchează ca atare.
+  await c.query(`UPDATE banca_tranzactie SET potrivit = 'fan:restituire'
+                  WHERE sens = 'credit' AND sursa = 'fan' AND potrivit IS NULL AND descriere ~* 'RESTITUIRE'`);
+  const { rows: incasari } = await c.query<{ id: string; zi: string; suma: number; sursa: string; descriere: string | null }>(
+    `SELECT id, to_char(zi, 'YYYY-MM-DD') AS zi, suma::float AS suma, sursa, descriere FROM banca_tranzactie
       WHERE sens = 'credit' AND sursa IN ('fan', 'shopify') AND potrivit IS NULL ORDER BY zi`);
   if (incasari.length === 0) return 0;
-  const { rows: asteptate } = await c.query<{ cheie: string; sursa: string; zi: string; suma: number }>(
-    `SELECT 'fan:' || lot AS cheie, 'fan' AS sursa, to_char(max(virat_zi), 'YYYY-MM-DD') AS zi, sum(suma)::float AS suma
+  const { rows: asteptate } = await c.query<{ cheie: string; sursa: string; zi: string; suma: number; plata: string | null }>(
+    `SELECT 'fan:' || lot AS cheie, 'fan' AS sursa, to_char(max(virat_zi), 'YYYY-MM-DD') AS zi, sum(suma)::float AS suma, max(plata) AS plata
        FROM ramburs_virat WHERE lot IS NOT NULL GROUP BY lot
      UNION ALL
-     SELECT 'card:' || id, 'shopify', to_char(data AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD'), net::float FROM card_virament`);
+     SELECT 'card:' || id, 'shopify', to_char(data AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD'), net::float, NULL FROM card_virament`);
   const folosite = new Set((await c.query<{ potrivit: string }>(`SELECT potrivit FROM banca_tranzactie WHERE potrivit IS NOT NULL`)).rows.map((r) => r.potrivit));
   const zile = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / 86_400_000;
   let n = 0;
   for (const inc of incasari) {
     const cand = asteptate
-      .filter((a) => a.sursa === inc.sursa && !folosite.has(a.cheie) && Math.abs(a.suma - inc.suma) < 0.005 && zile(inc.zi, a.zi) >= 0 && zile(inc.zi, a.zi) <= 7)
-      .sort((x, y) => zile(inc.zi, x.zi) - zile(inc.zi, y.zi))[0];
+      .filter((a) => a.sursa === inc.sursa && !folosite.has(a.cheie) && Math.abs(a.suma - inc.suma) < 0.005 && Math.abs(zile(inc.zi, a.zi)) <= 7)
+      .sort((x, y) => Math.abs(zile(inc.zi, x.zi)) - Math.abs(zile(inc.zi, y.zi)))[0];
     if (!cand) continue;
     folosite.add(cand.cheie);
-    await c.query(`UPDATE banca_tranzactie SET potrivit = $2 WHERE id = $1`, [inc.id, cand.cheie]);
+    inc.sursa = 'gata';
+    await c.query(`UPDATE banca_tranzactie SET potrivit = $2, diferenta = 0 WHERE id = $1`, [inc.id, cand.cheie]);
+    n++;
+  }
+  // A doua trecere, Fan: lotul virat doar în parte (Fan a reținut o sumă). Lotul nepotrivit
+  // mai mare, cel mai apropiat în timp (cel mult 4 zile); la egalitate, cel de felul plății
+  // pe care îl virează contul acela (Fan plătește loturile card din contul BT, cash din altele).
+  for (const inc of incasari.filter((x) => x.sursa === 'fan')) {
+    const card = /BTRL/.test(inc.descriere ?? '');
+    const cand = asteptate
+      .filter((a) => a.sursa === 'fan' && !folosite.has(a.cheie) && a.suma > inc.suma && Math.abs(zile(inc.zi, a.zi)) <= 4)
+      .sort((x, y) => Number((y.plata === 'card') === card) - Number((x.plata === 'card') === card)
+        || Math.abs(zile(inc.zi, x.zi)) - Math.abs(zile(inc.zi, y.zi)) || (x.suma - inc.suma) - (y.suma - inc.suma))[0];
+    if (!cand) continue;
+    folosite.add(cand.cheie);
+    await c.query(`UPDATE banca_tranzactie SET potrivit = $2, diferenta = $3 WHERE id = $1`, [inc.id, cand.cheie, rotund(cand.suma - inc.suma)]);
     n++;
   }
   return n;
@@ -135,16 +154,19 @@ export async function importaExtras(bytes: Uint8Array, firma: string | Context |
 
 // ---------------------------------------------------------------- pentru pagină
 
-export type BancaSursa = { sursa: string; incasari: number; suma: number; potrivite: number; suma_potrivita: number };
+export type BancaSursa = { sursa: string; incasari: number; suma: number; potrivite: number; suma_potrivita: number; retinut: number; restituit: number };
+export type Retinere = { zi: string; lot: string; suma: number; diferenta: number };
 export type BancaNepotrivita = { zi: string; sursa: string; suma: number; descriere: string | null };
 export type Neajuns = { sursa: string; cheie: string; zi: string; suma: number; magazin: string | null };
 
 /** Banii ajunși în bancă în perioadă, pe sursă, și ce s-a potrivit. */
 export async function banca(de: string, pana: string) {
-  const [surse, nepotrivite, neajunse, extrase] = await Promise.all([
+  const [surse, nepotrivite, neajunse, extrase, retineri] = await Promise.all([
     interogare<BancaSursa>(
       `SELECT sursa, count(*)::int AS incasari, sum(suma)::float AS suma, count(potrivit)::int AS potrivite,
-              coalesce(sum(suma) FILTER (WHERE potrivit IS NOT NULL), 0)::float AS suma_potrivita
+              coalesce(sum(suma) FILTER (WHERE potrivit IS NOT NULL), 0)::float AS suma_potrivita,
+              coalesce(sum(diferenta), 0)::float AS retinut,
+              coalesce(sum(suma) FILTER (WHERE potrivit = 'fan:restituire'), 0)::float AS restituit
          FROM banca_tranzactie WHERE sens = 'credit' AND sursa IS NOT NULL AND zi BETWEEN $1::date AND $2::date
         GROUP BY sursa ORDER BY sursa`, [de, pana]),
     interogare<BancaNepotrivita>(
@@ -166,6 +188,9 @@ export async function banca(de: string, pana: string) {
     interogare<{ cont: string; de: string; pana: string; tranzactii: number }>(
       `SELECT cont, to_char(min(zi), 'DD.MM.YYYY') AS de, to_char(max(zi), 'DD.MM.YYYY') AS pana, count(*)::int AS tranzactii
          FROM banca_tranzactie GROUP BY cont ORDER BY cont`),
+    interogare<Retinere>(
+      `SELECT to_char(zi, 'YYYY-MM-DD') AS zi, substring(potrivit FROM 5) AS lot, suma::float AS suma, diferenta::float AS diferenta
+         FROM banca_tranzactie WHERE diferenta > 0 AND zi BETWEEN $1::date AND $2::date ORDER BY zi`, [de, pana]),
   ]);
-  return { surse, nepotrivite, neajunse, extrase };
+  return { surse, nepotrivite, neajunse, extrase, retineri };
 }

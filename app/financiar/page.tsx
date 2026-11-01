@@ -353,7 +353,7 @@ export default async function Financiar({ searchParams }: {
               <h2>Banii ajunși în bancă, pe sursă</h2>
               {bnc.surse.length === 0 ? <p className="foaie-gol">Nicio încasare de la curieri sau Shopify în perioadă, în extrasele încărcate.</p> : (
                 <table>
-                  <thead><tr><th>De la</th><th className="c">Încasări</th><th className="c">Suma în bancă</th><th className="c">Potrivite</th><th className="c">Nepotrivite</th></tr></thead>
+                  <thead><tr><th>De la</th><th className="c">Încasări</th><th className="c">Suma în bancă</th><th className="c">Potrivite</th><th className="c">Nepotrivite</th><th className="c">Reținut / restituit</th></tr></thead>
                   <tbody>
                     {bnc.surse.map((x) => (
                       <tr key={x.sursa}>
@@ -362,6 +362,7 @@ export default async function Financiar({ searchParams }: {
                         <td className="c"><strong>{lei(x.suma)}</strong></td>
                         <td className="c">{x.potrivite}<div className="mic">{lei(x.suma_potrivita)}</div></td>
                         <td className={`c ${x.incasari - x.potrivite ? 'galben-tare' : ''}`}>{x.incasari - x.potrivite}<div className="mic">{lei(x.suma - x.suma_potrivita)}</div></td>
+                        <td className="c">{x.retinut || x.restituit ? <>{lei(x.retinut)}<div className="mic">restituit {lei(x.restituit)}</div></> : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -369,9 +370,26 @@ export default async function Financiar({ searchParams }: {
               )}
             </section>
 
+            {bnc.retineri.length > 0 && (
+              <section className="foaie-grupa">
+                <h2>Loturi Fan virate în parte · reținut {lei(bnc.retineri.reduce((s, x) => s + x.diferenta, 0))}</h2>
+                <p className="foaie-mic">Fan a virat mai puțin decât lotul și a reținut diferența; o dă înapoi ca „restituire reținere"
+                  (în perioadă: {lei(bnc.surse.find((x) => x.sursa === 'fan')?.restituit ?? 0)}).</p>
+                <table>
+                  <thead><tr><th>În bancă</th><th>Lot</th><th className="c">Lotul</th><th className="c">Primit</th><th className="c">Reținut</th></tr></thead>
+                  <tbody>
+                    {bnc.retineri.map((x) => (
+                      <tr key={x.lot}><td>{scurt(x.zi)}</td><td className="mic">{x.lot}</td><td className="c">{lei(x.suma + x.diferenta)}</td>
+                        <td className="c">{lei(x.suma)}</td><td className="c rosu-tare">{lei(x.diferenta)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            )}
+
             <section className="foaie-grupa">
               <h2>Încasări fără pereche · {bnc.nepotrivite.length}</h2>
-              <p className="foaie-mic">Bani veniți de la curieri sau Stripe care nu corespund unui lot de ramburs sau unui virament card (de exemplu restituiri de rețineri Fan).</p>
+              <p className="foaie-mic">Bani veniți de la curieri sau Stripe care nu corespund unui lot de ramburs sau unui virament card.</p>
               {bnc.nepotrivite.length === 0 ? <p className="foaie-gol">Toate încasările au pereche.</p> : (
                 <table>
                   <thead><tr><th>Ziua</th><th>De la</th><th className="c">Suma</th><th>Descriere</th></tr></thead>
