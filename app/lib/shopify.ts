@@ -25,7 +25,7 @@ import { caFirma, firmaDinMediu } from './db';
  */
 
 export const VERSIUNE_API = '2026-10';
-export const PERMISIUNI = 'read_products,read_inventory,read_orders,read_locations';
+export const PERMISIUNI = 'read_products,read_inventory,read_orders,read_locations,read_shopify_payments_accounts,read_shopify_payments_payouts';
 
 export class EroareShopify extends Error {}
 
@@ -501,6 +501,67 @@ export async function sincronizeaza(magazinId?: string, parti: Parte[] = ['produ
     rez.push(r);
   }
   return rez;
+}
+
+// ---------------------------------------------------------------- Shopify Payments
+
+type Bani = { amount: string };
+
+/**
+ * Încasările cu cardul ale unui magazin, din Shopify Payments, de la `de` încoace:
+ * fiecare tranzacție (plată, rambursare, ajustare) cu comisionul și netul ei, și
+ * viramentele către bancă. Cere permisiunile read_shopify_payments_*; fără ele,
+ * eroarea spune ce lipsește.
+ */
+export async function citestePlatiCard(c: PoolClient, magazinId: string, de: string): Promise<number> {
+  const a = await acces(c, magazinId);
+  if (!a) throw new EroareShopify('magazin nelegat');
+  let n = 0;
+  let dupa: string | null = null;
+  do {
+    const d: { shopifyPaymentsAccount: { balanceTransactions: { pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      nodes: { id: string; type: string; test: boolean; transactionDate: string; amount: Bani; fee: Bani; net: Bani;
+               associatedOrder: { name: string } | null; associatedPayout: { id: string | null; status: string | null } }[] } } | null } = await gql(a,
+      `query T($q: String!, $dupa: String) { shopifyPaymentsAccount { balanceTransactions(first: 100, after: $dupa, query: $q, hideTransfers: true) {
+         pageInfo { hasNextPage endCursor }
+         nodes { id type test transactionDate amount { amount } fee { amount } net { amount } associatedOrder { name } associatedPayout { id status } } } } }`,
+      { q: `processed_at:>=${de}`, dupa });
+    const lista = d.shopifyPaymentsAccount?.balanceTransactions;
+    if (!lista) break;
+    for (const t of lista.nodes.filter((x) => !x.test)) {
+      await c.query(
+        `INSERT INTO card_tranzactie (firma_id, magazin_id, id, tip, data, comanda, suma, comision, net, virament_id, virament_stare)
+         VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (magazin_id, id) DO UPDATE SET virament_id = EXCLUDED.virament_id, virament_stare = EXCLUDED.virament_stare,
+           suma = EXCLUDED.suma, comision = EXCLUDED.comision, net = EXCLUDED.net`,
+        [magazinId, t.id, t.type, t.transactionDate, t.associatedOrder?.name ?? null, Number(t.amount.amount), Number(t.fee.amount),
+         Number(t.net.amount), t.associatedPayout.id, t.associatedPayout.status]);
+      n++;
+    }
+    dupa = lista.pageInfo.hasNextPage ? lista.pageInfo.endCursor : null;
+  } while (dupa);
+
+  // Viramentele, cele mai noi întâi, până la data de început.
+  dupa = null;
+  do {
+    const d: { shopifyPaymentsAccount: { payouts: { pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      nodes: { id: string; issuedAt: string; status: string; net: Bani; summary: { chargesGross: Bani; chargesFee: Bani } }[] } } | null } = await gql(a,
+      `query P($dupa: String) { shopifyPaymentsAccount { payouts(first: 50, after: $dupa, reverse: true) {
+         pageInfo { hasNextPage endCursor }
+         nodes { id issuedAt status net { amount } summary { chargesGross { amount } chargesFee { amount } } } } } }`, { dupa });
+    const lista = d.shopifyPaymentsAccount?.payouts;
+    if (!lista) break;
+    for (const p of lista.nodes) {
+      await c.query(
+        `INSERT INTO card_virament (firma_id, magazin_id, id, data, stare, net, brut, comision)
+         VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (magazin_id, id) DO UPDATE SET stare = EXCLUDED.stare, net = EXCLUDED.net, brut = EXCLUDED.brut, comision = EXCLUDED.comision`,
+        [magazinId, p.id, p.issuedAt, p.status, Number(p.net.amount), Number(p.summary.chargesGross.amount), Number(p.summary.chargesFee.amount)]);
+    }
+    const ultimul = lista.nodes[lista.nodes.length - 1];
+    dupa = lista.pageInfo.hasNextPage && ultimul && ultimul.issuedAt.slice(0, 10) >= de ? lista.pageInfo.endCursor : null;
+  } while (dupa);
+  return n;
 }
 
 // ---------------------------------------------------------------- după instalare

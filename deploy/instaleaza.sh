@@ -126,9 +126,11 @@ install -m 644 "$COD/deploy/octogon-slack.service" /etc/systemd/system/octogon-s
 install -m 644 "$COD/deploy/octogon-slack.timer" /etc/systemd/system/octogon-slack.timer
 install -m 644 "$COD/deploy/octogon-livrari.service" /etc/systemd/system/octogon-livrari.service
 install -m 644 "$COD/deploy/octogon-livrari.timer" /etc/systemd/system/octogon-livrari.timer
+install -m 644 "$COD/deploy/octogon-financiar.service" /etc/systemd/system/octogon-financiar.service
+install -m 644 "$COD/deploy/octogon-financiar.timer" /etc/systemd/system/octogon-financiar.timer
 mkdir -p /var/backups/octogon && chown postgres:postgres /var/backups/octogon && chmod 700 /var/backups/octogon
 systemctl daemon-reload
-systemctl enable --now octogon.service octogon-backup.timer octogon-magazine.timer octogon-slack.timer octogon-livrari.timer
+systemctl enable --now octogon.service octogon-backup.timer octogon-magazine.timer octogon-slack.timer octogon-livrari.timer octogon-financiar.timer
 systemctl restart octogon.service
 
 pas "HTTPS pentru $DOMENIU"

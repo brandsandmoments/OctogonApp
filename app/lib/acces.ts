@@ -35,6 +35,7 @@ export const ZONE = {
   expediere: 'Expediere',
   aprobare: 'Aprobare PSF (date de KAM-i)',
   retete: 'Rețete și proces tehnologic',
+  financiar: 'Financiar (colete, facturi, rambursuri)',
 } as const;
 export type Zona = keyof typeof ZONE | 'oameni';
 export type Nivel = 'vede' | 'modifica';
@@ -100,6 +101,12 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
       { href: '/magazine/psc', nume: 'PSC din comenzi', ce: 'comenzile intrate pe modele: cât cer, stoc, în producție, de dat', zona: 'expediere' },
       { href: '/magazine/alerte', nume: 'Alerte', ce: 'ce se termină, ce nu se mișcă, ce e în trend', zona: 'expediere' },
       { href: '/magazine/legaturi', nume: 'Legături Shopify', ce: 'legarea magazinelor și sincronizarea', zona: 'oameni' },
+    ],
+  },
+  {
+    nume: 'Financiar',
+    ecrane: [
+      { href: '/financiar', nume: 'Financiar', ce: 'coletele trimise prin Fan și GLS: facturate, nefacturate, de stornat, ramburs încasat sau nu', zona: 'financiar' },
     ],
   },
   {

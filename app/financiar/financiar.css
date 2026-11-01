@@ -1,0 +1,3 @@
+/* Financiar: foaia pe toată lățimea (tabelele au multe coloane), aceeași pe A4. */
+main .foaie.foaie-lata { max-width: none; }
+.foaie .galben-tare { color: var(--galben-text); font-weight: 700; }

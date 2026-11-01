@@ -43,6 +43,9 @@ BEGIN;
 -- Clienții din magazine, anonimizați; la prima citire din Shopify primesc telefoane false stabile.
 UPDATE magazin_comanda SET client = 'Client ' || nume, telefon = NULL, nota = NULL;
 UPDATE magazin_livrare SET client = 'Client ' || comanda, telefon = NULL;
+-- Financiar: coletele de la curieri și comenzile din xConnector, fără nume și telefoane.
+UPDATE colet_curier SET destinatar = 'Client ' || coalesce(comanda, awb), telefon = NULL, referinta = NULL;
+UPDATE xc_comanda SET client = 'Client ' || nume, telefon = NULL;
 -- Comenzile și coletele se recitesc de la zero, ca toate să primească telefoane false stabile.
 UPDATE magazin SET livrari_pana_la = NULL;
 -- Doar contul demo intră: sesiunile, tabletele și ceilalți oameni nu.

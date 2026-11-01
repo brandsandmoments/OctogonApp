@@ -190,14 +190,14 @@ h1 { font-size: 1.55rem; font-weight: 800; letter-spacing: -.01em; }
 th.nr-auto, td.nr-auto { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Tabletă: mai strâns; un tabel prea lat se derulează în cutia lui, nu toată pagina. */
-@media (max-width: 1024px) {
+@media screen and (max-width: 1024px) {
   main { padding-left: .85rem; padding-right: .85rem; }
   main table.tabel-auto th, main table.tabel-auto td { padding: .45rem .4rem; }
   main table.tabel-auto.lata { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
 
 /* Telefon: fiecare rând e o fișă. Prima celulă e titlul fișei; restul, „coloană — valoare". */
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   main { padding: 1rem .75rem 3rem; }
   h1 { font-size: 1.2rem; }
   .tabel-derulant:has(table.tabel-auto) { max-height: none; overflow: visible; }
@@ -223,23 +223,23 @@ th.nr-auto, td.nr-auto { text-align: right; font-variant-numeric: tabular-nums; 
   main table.tabel-auto tr.grupa-model { background: var(--bej); border-color: var(--accent-linie); margin-top: 1rem; }
   main table.tabel-auto input:not([type="checkbox"]):not([type="radio"]), main table.tabel-auto select { max-width: 100%; }
 }
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   main table.tabel-auto tr.grupa-model.pliabil > td:first-child::before { position: static; display: inline-block; width: 1.1em; }
 }
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   /* Bifa de selecție din prima coloană stă în colțul fișei; titlul fișei e celula următoare. */
   main table.tabel-auto tr { position: relative; }
   main table.tabel-auto tr > td:first-child:has(> input[type="checkbox"]:only-child) { position: absolute; top: .5rem; right: .6rem; min-height: 0; padding: 0; }
   main table.tabel-auto tr > td:first-child:has(> input[type="checkbox"]:only-child) + td { padding-left: 0; padding-right: 2rem; border-top: 0; font-weight: 600; }
   main table.tabel-auto tr > td:first-child:has(> input[type="checkbox"]:only-child) + td::before { content: none; }
 }
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   main table.tabel-auto tr > td:empty, .tabel-derulant table.tabel-auto tbody tr > td:empty { display: none; }
   main table.tabel-auto tr > td:first-child:empty + td { padding-left: 0; border-top: 0; font-weight: 600; }
   main table.tabel-auto tr > td:first-child:empty + td::before { content: none; }
 }
 .tabel-auto .fara-rupere { white-space: nowrap; }
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   /* Pe fișă, insignele lungi și numerele se înșiră pe mai multe rânduri, nu ies din ecran. */
   main table.tabel-auto td .insigna, main table.tabel-auto td.nr-auto { white-space: normal; }
   main table.tabel-auto td { overflow-wrap: anywhere; }
