@@ -95,7 +95,14 @@ export default async function Produse({ searchParams }: { searchParams: Promise<
                     {p.semnale.trend !== null && <span className="insigna violet">trend{p.semnale.trend ? ` ×${p.semnale.trend}` : ' nou'}</span>}
                     {p.semnale.stoc_mort && <span className="insigna galben">nu se mișcă</span>}
                   </td>
-                  {daComenzi && <td>{p.produs_id && <Link href={`/comenzi/noua?din_produs=${p.produs_id}`} className="buton mic-buton">PSF →</Link>}</td>}
+                  {daComenzi && (
+                    <td className="lansari">
+                      {p.produs_id && <>
+                        <Link href={`/comenzi/noua?tip=PSF&din_produs=${p.produs_id}`} className="buton mic-buton" title="o lună de vânzări minus stoc și ce e pe drum">PSF →</Link>
+                        <Link href={`/comenzi/noua?tip=PSC&din_produs=${p.produs_id}`} className="buton mic-buton" title="ce așteaptă clienții minus stoc și ce e pe drum">PSC →</Link>
+                      </>}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

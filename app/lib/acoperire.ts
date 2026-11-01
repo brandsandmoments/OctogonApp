@@ -32,39 +32,67 @@ export async function peDrum(): Promise<Map<string, PeDrum>> {
 export const dePeDrum = (m: Map<string, PeDrum>, produs: string | null, marime: string | null): PeDrum =>
   (produs && marime && m.get(cheie(produs, marime))) || { in_productie: 0, de_aprobat: 0 };
 
-export type PropunerePsf = { brand_id: string; produs: string; linie: LinieNoua; rezumat: string };
+export type Propunere = { tip: 'PSF' | 'PSC'; brand_id: string; produs: string; linie: LinieNoua; rezumat: string };
 
 /**
- * Propunerea de PSF pentru un produs (model × culoare), pornită din alerte: pe fiecare
- * mărime, cât s-a vândut în 30 de zile în magazinele brandului — o lună de vânzări —
- * minus stocul din magazine, ce e în producție și ce așteaptă aprobarea. Termenul în
- * depozit peste 21 de zile, perioada de vânzare o lună de atunci. KAM-ul schimbă tot.
+ * Propunerea de comandă pentru un produs (model × culoare), pornită din produse sau
+ * din alerte. Pe fiecare mărime, din cerere se scad stocul din magazinele brandului și
+ * tot ce e pe drum (în producție sau de aprobat):
+ *
+ * - PSF: cererea e o lună de vânzări (ultimele 30 de zile); termen în depozit peste
+ *   21 de zile, perioada de vânzare o lună de atunci;
+ * - PSC: cererea e ce așteaptă clienții pe comenzile deschise; termen peste 14 zile.
+ *
+ * Omul vede propunerea în formularul de comandă și schimbă ce vrea.
  */
-export async function propunerePsf(produsId: string): Promise<PropunerePsf | null> {
-  const [randuri, drum] = await Promise.all([
-    interogare<{ brand_id: string; produs: string; marime_id: string; stoc: number; v30: number }>(
-      `SELECT p.brand_id, p.denumire AS produs, mz.id AS marime_id,
-              coalesce((SELECT sum(greatest(v.stoc_fizic, 0)) FROM magazin_varianta v WHERE v.produs_id = p.id AND v.marime_id = mz.id), 0)::int AS stoc,
-              coalesce((SELECT sum(z.cantitate) FROM vanzare z WHERE z.produs_id = p.id AND z.marime_id = mz.id
-                                                               AND z.data >= now() - interval '30 days'), 0)::int AS v30
-         FROM produs p CROSS JOIN marime mz
-        WHERE p.id = $1 AND EXISTS (SELECT 1 FROM magazin_varianta v WHERE v.produs_id = p.id AND v.marime_id = mz.id)
-        ORDER BY mz.ordine`, [produsId]),
-    peDrum(),
+export async function propunere(produsId: string, tip: 'PSF' | 'PSC'): Promise<Propunere | null> {
+  const [[p], marimi] = await Promise.all([
+    interogare<{ brand_id: string; produs: string }>(`SELECT brand_id, denumire AS produs FROM produs WHERE id = $1`, [produsId]),
+    stocPentruProdus(produsId),
   ]);
-  if (randuri.length === 0) return null;
+  if (!p) return null;
   const zi = (zile: number) => new Date(Date.now() + zile * 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Bucharest' });
   const cantitati: Record<string, number> = {};
-  let stoc = 0, v30 = 0, drumTot = 0;
-  for (const r of randuri) {
-    const d = dePeDrum(drum, produsId, r.marime_id);
-    stoc += r.stoc; v30 += r.v30; drumTot += d.in_productie + d.de_aprobat;
-    const q = r.v30 - r.stoc - d.in_productie - d.de_aprobat;
-    if (q > 0) cantitati[r.marime_id] = q;
+  const tot = { stoc: 0, v30: 0, drum: 0, asteapta: 0 };
+  for (const [marime, m] of Object.entries(marimi)) {
+    tot.stoc += m.stoc; tot.v30 += m.v30; tot.drum += m.drum; tot.asteapta += m.asteapta;
+    const q = (tip === 'PSF' ? m.v30 : m.asteapta) - m.stoc - m.drum;
+    if (q > 0) cantitati[marime] = q;
   }
   return {
-    brand_id: randuri[0].brand_id, produs: randuri[0].produs,
-    linie: { produsId, dataCeruta: zi(21), vanzareDeLa: zi(21), vanzarePanaLa: zi(51), cantitati },
-    rezumat: `${randuri[0].produs}: stoc ${stoc} buc în magazine, vândut ${v30} în 30 de zile, ${drumTot} deja pe drum (în producție sau de aprobat).`,
+    tip, ...p,
+    linie: tip === 'PSF'
+      ? { produsId, dataCeruta: zi(21), vanzareDeLa: zi(21), vanzarePanaLa: zi(51), cantitati }
+      : { produsId, dataCeruta: zi(14), vanzareDeLa: '', vanzarePanaLa: '', cantitati },
+    rezumat: `${p.produs}: stoc ${tot.stoc} buc în magazine, vândut ${tot.v30} în 30 de zile, ${tot.asteapta} așteaptă pe comenzi deschise, `
+      + `${tot.drum} deja pe drum (în producție sau de aprobat).`,
   };
+}
+
+export type StocMarime = { stoc: number; v30: number; drum: number; asteapta: number };
+
+/**
+ * Pentru formularul de comandă: pe fiecare mărime a unui produs, stocul fizic din
+ * magazinele brandului, vânzările din 30 de zile, ce e deja pe drum (în producție sau
+ * de aprobat) și cât așteaptă clienții pe comenzi deschise. Omul vede asta lângă
+ * cantitatea pe care o scrie.
+ */
+export async function stocPentruProdus(produsId: string): Promise<Record<string, StocMarime>> {
+  const [randuri, drum] = await Promise.all([
+    interogare<{ marime_id: string; stoc: number; v30: number; asteapta: number }>(
+      `SELECT mz.id AS marime_id,
+              coalesce((SELECT sum(greatest(v.stoc_fizic, 0)) FROM magazin_varianta v WHERE v.produs_id = $1 AND v.marime_id = mz.id), 0)::int AS stoc,
+              coalesce((SELECT sum(z.cantitate) FROM vanzare z WHERE z.produs_id = $1 AND z.marime_id = mz.id
+                                                               AND z.data >= now() - interval '30 days'), 0)::int AS v30,
+              coalesce((SELECT sum(l.de_livrat) FROM magazin_comanda_linie l
+                          JOIN magazin_varianta v ON v.varianta_gid = l.varianta_gid
+                          JOIN magazin_comanda mc ON mc.id = l.comanda_id AND mc.magazin_id = v.magazin_id
+                         WHERE v.produs_id = $1 AND v.marime_id = mz.id AND l.de_livrat > 0), 0)::int AS asteapta
+         FROM marime mz`, [produsId]),
+    peDrum(),
+  ]);
+  return Object.fromEntries(randuri.map((r) => {
+    const d = dePeDrum(drum, produsId, r.marime_id);
+    return [r.marime_id, { stoc: r.stoc, v30: r.v30, asteapta: r.asteapta, drum: d.in_productie + d.de_aprobat }];
+  }));
 }

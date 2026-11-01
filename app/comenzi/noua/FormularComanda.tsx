@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+import type { StocMarime } from '../../lib/acoperire';
 import type { LinieNoua, Nomenclatoare } from '../../lib/comenzi';
 import { salveazaComanda } from './actiuni';
 import CautaProdus from './CautaProdus';
@@ -28,6 +29,19 @@ export default function FormularComanda({
   const [prioritate, setPrioritate] = useState(3);
   const [observatii, setObservatii] = useState(observatiiImplicite ?? '');
   const [linii, setLinii] = useState<LinieNoua[]>(liniiInitiale?.length ? liniiInitiale : [linieGoala()]);
+
+  // Stocul pe mărimi al fiecărui produs ales, adus o dată pe produs: omul vede, lângă
+  // cantitate, ce e pe stoc, cât s-a vândut, ce e deja pe drum și cât așteaptă clienții.
+  const [stocuri, setStocuri] = useState<Record<string, Record<string, StocMarime>>>({});
+  const alese = [...new Set(linii.map((l) => l.produsId).filter(Boolean))];
+  useEffect(() => {
+    for (const id of alese) {
+      if (stocuri[id]) continue;
+      fetch(`/comenzi/noua/stoc?produs=${id}`).then((r) => (r.ok ? r.json() : null)).then((d) => {
+        if (d) setStocuri((s) => ({ ...s, [id]: d }));
+      }).catch(() => {});
+    }
+  }, [alese.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Doar produsele brandului ales: o comandă e a unui singur brand.
   const produseBrand = produse.filter((p) => p.brand_id === brandId);
@@ -169,6 +183,18 @@ export default function FormularComanda({
                       }
                       aria-label={`Cantitate ${m.cod}`}
                     />
+                    {(() => {
+                      const st = l.produsId ? stocuri[l.produsId]?.[m.id] : undefined;
+                      if (!st || (!st.stoc && !st.v30 && !st.drum && !st.asteapta)) return null;
+                      return (
+                        <div className="stoc-marime" title="stoc în magazine · vândut în 30 de zile · pe drum (în producție sau de aprobat) · așteaptă pe comenzi">
+                          <span className={st.stoc ? '' : 'zero'}>stoc {st.stoc}</span>
+                          {st.v30 > 0 && <span>30z {st.v30}</span>}
+                          {st.drum > 0 && <span>drum {st.drum}</span>}
+                          {st.asteapta > 0 && <span className="asteapta">așteaptă {st.asteapta}</span>}
+                        </div>
+                      );
+                    })()}
                   </td>
                 ))}
                 <td className="nr"><strong>{totalLinie(l) || ''}</strong></td>

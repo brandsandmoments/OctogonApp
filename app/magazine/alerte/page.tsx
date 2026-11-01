@@ -27,7 +27,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
   const f = await searchParams;
   const daComenzi = await poateModifica('comenzi');
   // „PSF →" pe rândurile unde poate ajuta o comandă de producție; pe foaia tipărită nu apare.
-  const psf = (id: string | null) => daComenzi && id ? <td className="nu-tipari"><Link href={`/comenzi/noua?din_produs=${id}`}>PSF →</Link></td> : daComenzi ? <td className="nu-tipari" /> : null;
+  const psf = (id: string | null, tip: 'PSF' | 'PSC' = 'PSF') => daComenzi && id ? <td className="nu-tipari"><Link href={`/comenzi/noua?tip=${tip}&din_produs=${id}`}>{tip} →</Link></td> : daComenzi ? <td className="nu-tipari" /> : null;
   const thPsf = daComenzi ? <th className="nu-tipari" /> : null;
   const [lista, p] = await Promise.all([magazine(), praguri()]);
   const ales = lista.find((m) => m.id === f.magazin) ?? null;
@@ -67,7 +67,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
             {daComenzi && <span className="nu-tipari"> <Link href={`/magazine/psc${ales ? `?magazin=${ales.id}` : ''}`}>PSC pe modele, fără ce e deja în producție →</Link></span>}</p>
           {fara(a.asteapta.length) || (
             <table>
-              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Stoc</th><th className="c">Comenzi</th><th className="c">Cerut</th><th className="c">Lipsă</th><th className="c">Vândut 30 z</th></tr></thead>
+              <thead><tr>{thMag}<th>Produs</th><th className="c">Măr.</th><th className="c">Stoc</th><th className="c">Comenzi</th><th className="c">Cerut</th><th className="c">Lipsă</th><th className="c">Vândut 30 z</th>{thPsf}</tr></thead>
               <tbody>
                 {a.asteapta.map(({ p: x, m }) => (
                   <tr key={`${x.magazin_id}${x.produs}${m.marime}`}>
@@ -79,6 +79,7 @@ export default async function Alerte({ searchParams }: { searchParams: Promise<{
                     <td className="c">{m.asteapta}</td>
                     <td className="c rosu-tare">{m.lipsa}</td>
                     <td className="c">{m.v30}</td>
+                    {psf(x.produs_id, 'PSC')}
                   </tr>
                 ))}
               </tbody>

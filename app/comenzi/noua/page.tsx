@@ -1,5 +1,5 @@
 import { nomenclatoareComanda } from '../../lib/comenzi';
-import { propunerePsf } from '../../lib/acoperire';
+import { propunere } from '../../lib/acoperire';
 import { lipsuriPentruPsc } from '../../lib/magazine';
 import { cere } from '../../lib/sesiune';
 import FormularComanda from './FormularComanda';
@@ -20,14 +20,15 @@ export default async function ComandaNouaPagina({ searchParams }: { searchParams
   const kamImplicit = eu.roluri.includes('kam') ? eu.id : '';
   // PSC din ce lipsește ca să plece comenzile deschise ale unui magazin Shopify.
   const lipsuri = q.din_magazin ? await lipsuriPentruPsc(q.din_magazin, q.model) : null;
-  // PSF pornit din alerte sau din produse: o lună de vânzări minus stoc și ce e pe drum.
-  const psf = !lipsuri && q.din_produs ? await propunerePsf(q.din_produs) : null;
+  // Pornit din produse sau din alerte: PSF = o lună de vânzări, PSC = ce așteaptă clienții,
+  // în ambele cazuri minus stoc și ce e pe drum.
+  const psf = !lipsuri && q.din_produs ? await propunere(q.din_produs, q.tip === 'PSC' ? 'PSC' : 'PSF') : null;
   const azi = new Date().toLocaleDateString('ro-RO', { timeZone: 'Europe/Bucharest' });
   return (
-    <FormularComanda {...nom} kamImplicit={kamImplicit} tipImplicit={lipsuri ? 'PSC' : psf ? 'PSF' : tip}
+    <FormularComanda {...nom} kamImplicit={kamImplicit} tipImplicit={lipsuri ? 'PSC' : psf ? psf.tip : tip}
       brandImplicit={lipsuri?.brand_id ?? psf?.brand_id} liniiInitiale={lipsuri?.linii ?? (psf ? [psf.linie] : undefined)}
       observatiiImplicite={lipsuri
         ? `Din comenzile ${lipsuri.brand} care așteaptă stoc, ${azi}: ${lipsuri.bucati} buc${lipsuri.necunoscute ? ` (+${lipsuri.necunoscute} buc pe variante fără produs în catalog)` : ''}. Scăzut ce e deja în producție sau de aprobat.`
-        : psf ? `Din alerte, ${azi}. ${psf.rezumat}` : undefined} />
+        : psf ? `${psf.tip} din produse/alerte, ${azi}. ${psf.rezumat}` : undefined} />
   );
 }

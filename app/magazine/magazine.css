@@ -35,3 +35,4 @@
 .buton.activ-buton { background: var(--bej); border-color: var(--accent-linie); }
 .produse-magazin td .insigna { margin: 0 .25rem .15rem 0; }
 .buton.mic-buton { font-size: .78rem; padding: .2rem .5rem; white-space: nowrap; }
+.lansari { white-space: nowrap; } .lansari .buton + .buton { margin-left: .3rem; }
