@@ -6,6 +6,7 @@ import { cere, poateModifica } from '../lib/sesiune';
 import { esteAdmin } from '../lib/acces';
 import Tipareste from '../Tipareste';
 import { dinLista, Foaie, LISTE, type Lista } from './Liste';
+import PeModele from './PeModele';
 import './magazine.css';
 import './foaie.css';
 
@@ -50,7 +51,7 @@ function Numere({ lista, href }: { lista: ComandaClasificata[]; href: (v: Vedere
  * dublă. „Toate" le arată pe toate magazinele; fiecare magazin are fila lui. Cele
  * mai vechi sus — sunt cele mai urgente.
  */
-export default async function Magazine({ searchParams }: { searchParams: Promise<{ magazin?: string; vedere?: string; lista?: string; cauta?: string }> }) {
+export default async function Magazine({ searchParams }: { searchParams: Promise<{ magazin?: string; vedere?: string; lista?: string; cauta?: string; grupare?: string }> }) {
   const u = await cere('expediere');
   const f = await searchParams;
   const [toateMagazinele, toate] = await Promise.all([magazine(), comenziMagazine()]);
@@ -62,7 +63,7 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
   const lista = dinMagazin
     .filter((c) => vedere === 'toate' || (vedere === 'duble' ? c.dubla : c.situatie === vedere))
     .filter((c) => potriveste(f.cauta, c.nume, c.client, c.telefon, c.oras, ...c.linii.map((l) => `${l.produs} ${l.sku ?? ''}`)));
-  const adresa = (o: { magazin?: string | null; vedere?: Vedere; lista?: Lista }) => {
+  const adresa = (o: { magazin?: string | null; vedere?: Vedere; lista?: Lista; grupare?: string }) => {
     const q = new URLSearchParams();
     const m = o.magazin === undefined ? ales?.id : o.magazin;
     if (m) q.set('magazin', m);
@@ -70,8 +71,11 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
     const v = o.vedere ?? vedere;
     if (v !== 'toate' || (m && !o.lista)) q.set('vedere', v);
     if (f.cauta) q.set('cauta', f.cauta);
+    const g = o.grupare === undefined ? f.grupare : o.grupare;
+    if (g) q.set('grupare', g);
     return `/magazine${q.size ? `?${q}` : ''}`;
   };
+  const peModel = f.grupare === 'model';
   const nelegate = toateMagazinele.filter((m) => !m.legat && !m.sincronizat_la);
 
   return (
@@ -139,10 +143,18 @@ export default async function Magazine({ searchParams }: { searchParams: Promise
         ))}
       </nav>
       {vedere !== 'toate' && vedere !== 'duble' && <p className="slab">{SITUATII[vedere].ce}</p>}
-      <Cauta valoare={f.cauta} pastreaza={{ magazin: ales?.id, vedere: vedere === 'toate' ? undefined : vedere }}
+      <p className="filtre">
+        <span className="slab">Afișează:</span>
+        <Link href={adresa({ grupare: '' })} className={`buton ${!peModel ? 'activ-buton' : ''}`}>pe comenzi, cele mai vechi sus</Link>
+        <Link href={adresa({ grupare: 'model' })} className={`buton ${peModel ? 'activ-buton' : ''}`}>pe model, culoare și mărime, cele mai multe comenzi sus</Link>
+      </p>
+      <Cauta valoare={f.cauta} pastreaza={{ magazin: ales?.id, vedere: vedere === 'toate' ? undefined : vedere, grupare: f.grupare }}
              placeholder="caută: comandă, client, telefon, produs, SKU" />
 
-      {lista.length === 0 ? <p className="slab">Nicio comandă aici.</p> : (
+      {peModel ? (
+        <PeModele comenzi={lista} doarLipsa={vedere === 'fara_stoc' || vedere === 'de_sunat'} cuMagazin={!ales}
+                  semn={`${ales?.id ?? ''}${vedere}${f.cauta ?? ''}`} />
+      ) : lista.length === 0 ? <p className="slab">Nicio comandă aici.</p> : (
         <div className="tabel-derulant">
           <table className="centralizator comenzi-magazin">
             <thead>
