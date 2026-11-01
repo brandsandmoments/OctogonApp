@@ -4,7 +4,7 @@ import Cauta from '../Cauta';
 import Tipareste from '../Tipareste';
 import { esteAdmin } from '../lib/acces';
 import { azi, potriveste } from '../lib/format';
-import { card, colete, rezumat, surse, viramente, viramenteCard, type Colet, type Filtru, type Vedere } from '../lib/financiar';
+import { card, colete, LIMITA, rezumat, surse, viramente, viramenteCard, type Colet, type Filtru, type Vedere } from '../lib/financiar';
 import { banca, importaExtras } from '../lib/extras';
 import { magazine } from '../lib/magazine';
 import { cere, poateModifica } from '../lib/sesiune';
@@ -170,7 +170,7 @@ export default async function Financiar({ searchParams }: {
           {PERIOADE.map(([n, nume]) => (
             <Link key={n} href={adresa({ de: ziua(azia, 1 - n) })} className={`buton ${presetare?.[0] === n ? 'activ-buton' : ''}`}>{nume}</Link>
           ))}
-          <form method="get" className="in-rand">
+          <form method="get" className="in-rand" key={`p${de}${pana}`}>
             {fila !== 'rezumat' && <input type="hidden" name="fila" value={fila} />}
             {ales && <input type="hidden" name="magazin" value={ales.id} />}
             {curier && <input type="hidden" name="curier" value={curier} />}
@@ -301,7 +301,7 @@ export default async function Financiar({ searchParams }: {
                      placeholder="caută: AWB, comandă, client, telefon, oraș, factură" />
             </div>
             <p className="foaie-rezumat">
-              {gasite.length} colete{gasite.length === 2000 ? ' (primele 2000)' : ''} · ramburs {lei(gasite.reduce((s, c) => s + c.ramburs, 0))}
+              {gasite.length} colete{randuri.length === LIMITA ? ` (primele ${LIMITA}: caută sau alege o perioadă mai scurtă pentru restul)` : ''} · ramburs {lei(gasite.reduce((s, c) => s + c.ramburs, 0))}
             </p>
             {gasite.length === 0 ? <p className="foaie-gol">Nimic aici în perioada aleasă.</p> : (
               <table>

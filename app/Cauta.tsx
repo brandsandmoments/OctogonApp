@@ -10,7 +10,7 @@ export default function Cauta({ valoare, pastreaza = {}, placeholder = 'caută: 
       {Object.entries(pastreaza).filter(([k, v]) => v && k !== 'cauta').map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
-      <input name="cauta" type="search" defaultValue={valoare ?? ''} placeholder={placeholder} aria-label="Caută" />
+      <input key={valoare ?? ''} name="cauta" type="search" defaultValue={valoare ?? ''} placeholder={placeholder} aria-label="Caută" />
       <button>Caută</button>
     </form>
   );

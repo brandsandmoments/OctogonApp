@@ -514,6 +514,17 @@ type Bani = { amount: string };
  * eroarea spune ce lipsește.
  */
 export async function citestePlatiCard(c: PoolClient, magazinId: string, de: string): Promise<number> {
+  try {
+    return await citestePlatiCardFaraMesaj(c, magazinId, de);
+  } catch (e) {
+    if (/access denied|access scope/i.test((e as Error).message)) {
+      throw new EroareShopify('lipsesc permisiunile Shopify Payments: adaugă-le în aplicația din Dev Dashboard și apasă din nou Instalează în Legături Shopify');
+    }
+    throw e;
+  }
+}
+
+async function citestePlatiCardFaraMesaj(c: PoolClient, magazinId: string, de: string): Promise<number> {
   const a = await acces(c, magazinId);
   if (!a) throw new EroareShopify('magazin nelegat');
   let n = 0;

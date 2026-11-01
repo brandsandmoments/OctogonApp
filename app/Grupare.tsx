@@ -13,7 +13,7 @@ export default function Grupare({ ales, pastreaza = {} }: { ales: string; pastre
       {Object.entries(pastreaza).filter(([k, v]) => v && k !== 'grupare').map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
-      <select name="grupare" defaultValue={ales || 'fara'} aria-label="Grupare">
+      <select key={ales || 'fara'} name="grupare" defaultValue={ales || 'fara'} aria-label="Grupare">
         <option value="fara">fără grupare</option>
         {Object.entries(GRUPARI).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
       </select>

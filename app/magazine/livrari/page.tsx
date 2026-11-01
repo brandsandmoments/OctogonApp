@@ -19,12 +19,12 @@ const data = (s?: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s ?? '') ? s! : null);
 const PERIOADE: [number, string][] = [[7, 'ultimele 7 zile'], [14, 'ultimele 14 zile'], [30, 'ultimele 30 de zile']];
 
 /**
- * Ce e în colet. Până la două produse se văd direct; mai multe se strâng într-o listă
- * care se deschide la clic („+5 produse · 9 buc"). Pe foaia tipărită apar toate.
+ * Ce e în colet. Până la trei produse se văd direct; de la patru, primele două și o
+ * listă care se deschide la clic („+5 produse · 9 buc"). Pe foaia tipărită apar toate.
  */
 function Produse({ text, bucati }: { text: string; bucati?: number }) {
   const linii = text.split(/(?<=×\d+), /);
-  if (linii.length <= 2) return <>{text}{bucati && bucati > 1 ? <span className="mic"> · {bucati} buc</span> : null}</>;
+  if (linii.length <= 3) return <>{text}{bucati && bucati > 1 ? <span className="mic"> · {bucati} buc</span> : null}</>;
   const rest = linii.slice(2);
   return (
     <>
@@ -130,7 +130,10 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
   ];
   const aleasa = LISTE.find((l) => l.cheie === f.lista) ?? null;
   // Fără o listă aleasă: toată foaia zilei (situația de acum doar pe ziua de azi).
-  const deAratat = aleasa ? [aleasa] : LISTE.filter((l) => !l.acum || zi === azia);
+  // Pe o perioadă, foaia întreagă arată rezumatul și listele cu probleme; ridicatele și livratele
+  // (mii de rânduri pe o lună) se deschid din numerele lor.
+  const lungi: Cheie[] = ['ridicate', 'livrate'];
+  const deAratat = aleasa ? [aleasa] : LISTE.filter((l) => (!l.acum || zi === azia) && !(perioada && lungi.includes(l.cheie)));
   // Pe o perioadă: câte pe fiecare zi și, pe „Toate", pe fiecare magazin.
   const EVENIMENTE = ['ridicate', 'livrate', 'refuzate', 'nelivrate'] as const;
   const zile = perioada ? Array.from({ length: Math.round((Date.parse(pana) - Date.parse(de)) / 86_400_000) + 1 }, (_, i) => ziua(pana, -i)) : [];
@@ -148,7 +151,7 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
         {lista.map((m) => <Link key={m.id} href={adresa({ magazin: m.id })} className={m.id === ales?.id ? 'activ' : ''}>{m.brand}</Link>)}
       </nav>
 
-      <form method="get" className="filtre cauta-colet nu-tipari">
+      <form method="get" className="filtre cauta-colet nu-tipari" key={`c${cauta}`}>
         {ales && <input type="hidden" name="magazin" value={ales.id} />}
         <input name="cauta" defaultValue={cauta} placeholder="caută orice comandă: nume, număr comandă, AWB, telefon, produs" aria-label="Caută colet" />
         <button className="buton">Caută</button>
@@ -221,7 +224,7 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
               <Link key={n} href={adresa({ de: ziua(azia, 1 - n) })} className={`buton ${presetare?.[0] === n ? 'activ-buton' : ''}`}>{nume}</Link>
             ))}
           </div>
-          <form method="get" className="perioada-proprie">
+          <form method="get" className="perioada-proprie" key={`p${de}${pana}`}>
             {ales && <input type="hidden" name="magazin" value={ales.id} />}
             {f.lista && <input type="hidden" name="lista" value={f.lista} />}
             <label>de la <input type="date" name="de" defaultValue={perioada ? de : ziua(azia, -6)} max={azia} /></label>
@@ -242,7 +245,7 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
           {!perioada && <Link href={adresa({ zi: ziua(zi, -1) })} className="buton">← ziua dinainte</Link>}
           <Link href={adresa({ zi: azia })} className={`buton ${!perioada && zi === azia ? 'activ-buton' : ''}`}>azi</Link>
           {!perioada && zi < azia && <Link href={adresa({ zi: ziua(zi, 1) })} className="buton">ziua următoare →</Link>}
-          <form method="get" className="in-rand">
+          <form method="get" className="in-rand" key={`z${zi}${perioada}`}>
             {ales && <input type="hidden" name="magazin" value={ales.id} />}
             {f.lista && <input type="hidden" name="lista" value={f.lista} />}
             <input type="date" name="zi" defaultValue={zi} max={azia} aria-label="Ziua" />
@@ -257,7 +260,7 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
           {PERIOADE.map(([n, nume]) => (
             <Link key={n} href={adresa({ de: ziua(azia, 1 - n) })} className={`buton ${presetare?.[0] === n ? 'activ-buton' : ''}`}>{nume}</Link>
           ))}
-          <form method="get" className="in-rand">
+          <form method="get" className="in-rand" key={`p${de}${pana}`}>
             {ales && <input type="hidden" name="magazin" value={ales.id} />}
             {f.lista && <input type="hidden" name="lista" value={f.lista} />}
             <span className="slab">de la</span>
@@ -311,6 +314,9 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
               </tbody>
             </table>
           </section>
+        )}
+        {perioada && !aleasa && (
+          <p className="foaie-mic nu-tipari">Ridicatele ({z.ridicate.length}) și livratele ({z.livrate.length}) din perioadă se deschid din numerele de sus.</p>
         )}
         {deAratat.map((l, i) => (
           <section key={l.cheie} className="foaie-grupa">

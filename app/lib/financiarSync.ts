@@ -407,18 +407,44 @@ async function potriveste(c: PoolClient) {
         AND (k.comanda IS DISTINCT FROM x.nume OR k.potrivire IS DISTINCT FROM 'referinta')`);
   await c.query(
     `UPDATE colet_curier k SET comanda = x.nume, magazin_id = coalesce(k.magazin_id, x.magazin_id), potrivire = 'awb'
-       FROM xc_comanda x WHERE k.awb = ANY(x.awb) AND (k.comanda IS DISTINCT FROM x.nume OR k.potrivire IS DISTINCT FROM 'awb')`);
+       FROM xc_comanda x WHERE x.awb @> ARRAY[k.awb] AND (k.comanda IS DISTINCT FROM x.nume OR k.potrivire IS DISTINCT FROM 'awb')`);
   await c.query(
     `WITH p AS (
        SELECT k.id, x.nume, x.magazin_id FROM colet_curier k
        CROSS JOIN LATERAL (
          SELECT x.nume, x.magazin_id FROM xc_comanda x
-          WHERE right(regexp_replace(coalesce(x.telefon, ''), '\\D', '', 'g'), 9) = right(regexp_replace(k.telefon, '\\D', '', 'g'), 9)
-            AND (k.magazin_id IS NULL OR x.magazin_id = k.magazin_id)
+          WHERE x.tel9 = k.tel9 AND (k.magazin_id IS NULL OR x.magazin_id = k.magazin_id)
           ORDER BY x.creata_la DESC NULLS LAST LIMIT 1) x
-        WHERE (k.potrivire IS NULL OR k.potrivire = 'telefon') AND length(regexp_replace(coalesce(k.telefon, ''), '\\D', '', 'g')) >= 9)
+        WHERE (k.potrivire IS NULL OR k.potrivire = 'telefon') AND k.tel9 IS NOT NULL)
      UPDATE colet_curier k SET comanda = p.nume, magazin_id = coalesce(k.magazin_id, p.magazin_id), potrivire = 'telefon'
-       FROM p WHERE p.id = k.id`);
+       FROM p WHERE p.id = k.id AND (k.comanda IS DISTINCT FROM p.nume OR k.potrivire IS DISTINCT FROM 'telefon')`);
+  // Facturile fiecărui colet, ținute pe colet ca pagina doar să citească: din xConnector (comanda
+  // lui) și din SmartBill — sigur, după comanda scrisă pe factură; probabil, după telefon sau nume,
+  // în jurul zilei coletului. Cele probabile închid „fără factură", dar nu cer stornare.
+  await c.query(
+    `WITH f AS (
+       SELECT k.id, coalesce(x.facturi, '{}') || coalesce(s.facturi, '{}') AS facturi,
+              coalesce(x.facturi, '{}') || coalesce(s.sigure, '{}') AS sigure,
+              coalesce(x.stornari, '{}') || coalesce(s.stornari, '{}') AS stornari, x.total
+         FROM colet_curier k
+         LEFT JOIN LATERAL (SELECT facturi, stornari, total FROM xc_comanda x
+                             WHERE x.nume = k.comanda AND (k.magazin_id IS NULL OR x.magazin_id = k.magazin_id)
+                             ORDER BY (x.awb @> ARRAY[k.awb]) DESC LIMIT 1) x ON true
+         LEFT JOIN LATERAL (
+           SELECT array_agg(DISTINCT s.serie || '-' || s.numar) FILTER (WHERE s.total >= 0) AS facturi,
+                  array_agg(DISTINCT s.serie || '-' || s.numar) FILTER (WHERE s.total >= 0 AND s.sigur) AS sigure,
+                  array_agg(DISTINCT s.serie || '-' || s.numar) FILTER (WHERE s.total < 0) AS stornari
+             FROM (SELECT serie, numar, total, true AS sigur FROM factura_smartbill WHERE exista AND k.comanda IS NOT NULL AND comanda = k.comanda
+                   UNION ALL
+                   SELECT serie, numar, total, false FROM factura_smartbill
+                    WHERE exista AND k.tel9 IS NOT NULL AND tel9 = k.tel9 AND data BETWEEN k.creat_zi - 15 AND k.creat_zi + 30
+                   UNION ALL
+                   SELECT serie, numar, total, false FROM factura_smartbill
+                    WHERE exista AND k.destinatar IS NOT NULL AND lower(btrim(client)) = lower(btrim(k.destinatar))
+                      AND data BETWEEN k.creat_zi - 15 AND k.creat_zi + 30) s) s ON true)
+     UPDATE colet_curier k SET facturi = f.facturi, facturi_sigure = f.sigure, stornari = f.stornari, total = f.total
+       FROM f WHERE f.id = k.id
+        AND (k.facturi, k.facturi_sigure, k.stornari, k.total) IS DISTINCT FROM (f.facturi, f.sigure, f.stornari, f.total)`);
 }
 
 // ---------------------------------------------------------------- tot
