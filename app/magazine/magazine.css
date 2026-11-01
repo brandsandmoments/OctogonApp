@@ -46,3 +46,8 @@ a.numar-situatie:hover { background: var(--bej); }
 .numar-situatie.activ-numar { background: var(--bej); box-shadow: inset 0 0 0 1.5px var(--accent-linie); }
 .cauta-colet input[name="cauta"] { min-width: min(34rem, 100%); }
 .cautare-colete td.drum div { white-space: nowrap; }
+
+/* Livrări: ziua și perioada, aliniate la stânga, pe toată lățimea */
+.liste-actiuni.perioade { max-width: none; margin: 0; }
+.liste-actiuni.perioade .filtre { margin: .5rem 0; }
+.liste-actiuni.perioade .in-rand { gap: .4rem; align-items: center; flex-wrap: wrap; }

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Tipareste from '../../Tipareste';
 import { azi } from '../../lib/format';
 import { potriveste } from '../../lib/format';
-import { cautaColete, livrariPeZi, type Colet } from '../../lib/livrari';
+import { cautaColete, livrariPerioada, type Colet } from '../../lib/livrari';
 import { comenziMagazine, magazine } from '../../lib/magazine';
 import { cere } from '../../lib/sesiune';
 import '../magazine.css';
@@ -13,6 +13,9 @@ export const dynamic = 'force-dynamic';
 const STARI: Record<string, string> = { awb: 'AWB generat', in_tranzit: 'în tranzit', in_livrare: 'în livrare', livrat: 'livrat', refuzat: 'refuzat', nelivrat: 'nelivrat' };
 const ziua = (zi: string, pas: number) => new Date(Date.parse(zi) + pas * 86_400_000).toISOString().slice(0, 10);
 const frumos = (zi: string) => new Date(`${zi}T12:00:00`).toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
+const scurt = (zi: string) => `${zi.slice(8)}.${zi.slice(5, 7)}`;
+const data = (s?: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s ?? '') ? s! : null);
+const PERIOADE: [number, string][] = [[7, 'ultimele 7 zile'], [14, 'ultimele 14 zile'], [30, 'ultimele 30 de zile']];
 
 function Tabel({ lista, cuMagazin, coloana }: { lista: Colet[]; cuMagazin: boolean; coloana: { nume: string; val: (c: Colet) => React.ReactNode } }) {
   if (lista.length === 0) return <p className="foaie-gol">Niciun colet.</p>;
@@ -38,7 +41,8 @@ function Tabel({ lista, cuMagazin, coloana }: { lista: Colet[]; cuMagazin: boole
 }
 
 /**
- * Situația coletelor la curier, pe zi și pe magazin: ce a ridicat curierul, ce s-a
+ * Situația coletelor la curier, pe zi sau pe o perioadă (ultimele 7, 14, 30 de zile sau
+ * oricare de la–până la) și pe magazin: ce a ridicat curierul, ce s-a
  * livrat, ce a fost refuzat și ce nu s-a livrat (retur), cu numărul comenzii, ce a
  * comandat clientul și telefonul — apoi ce e încă pe drum și AWB-urile neridicate.
  * Un clic pe un număr deschide doar lista aceea. Căutarea găsește orice comandă,
@@ -46,15 +50,24 @@ function Tabel({ lista, cuMagazin, coloana }: { lista: Colet[]; cuMagazin: boole
  */
 type Cheie = 'ridicate' | 'livrate' | 'refuzate' | 'nelivrate' | 'pe_drum' | 'neridicate';
 
-export default async function Livrari({ searchParams }: { searchParams: Promise<{ magazin?: string; zi?: string; lista?: string; cauta?: string }> }) {
+export default async function Livrari({ searchParams }: { searchParams: Promise<{ magazin?: string; zi?: string; de?: string; pana?: string; lista?: string; cauta?: string }> }) {
   await cere('expediere');
   const f = await searchParams;
-  const zi = /^\d{4}-\d{2}-\d{2}$/.test(f.zi ?? '') ? f.zi! : azi();
+  // O zi (zi=) sau o perioadă (de= și pana=), niciodată după azi.
+  const azia = azi();
+  let [de, pana] = data(f.de) && data(f.pana) ? [f.de!, f.pana!] : [data(f.zi) ?? azia, data(f.zi) ?? azia];
+  if (de > pana) [de, pana] = [pana, de];
+  if (pana > azia) pana = azia;
+  if (de > azia) de = azia;
+  const zi = pana;
+  const perioada = de !== pana;
+  const presetare = perioada && pana === azia ? PERIOADE.find(([n]) => ziua(azia, 1 - n) === de) : undefined;
+  const eticheta = perioada ? `${presetare ? `${presetare[1]} · ` : ''}${scurt(de)} – ${scurt(pana)}` : frumos(zi);
   const lista = await magazine();
   const ales = lista.find((m) => m.id === f.magazin) ?? null;
   const cauta = f.cauta?.trim() ?? '';
   const [z, gasite, deschise] = await Promise.all([
-    livrariPeZi(zi, ales?.id),
+    livrariPerioada(de, pana, ales?.id),
     cauta ? cautaColete(cauta, ales?.id) : Promise.resolve([]),
     cauta ? comenziMagazine() : Promise.resolve([]),
   ]);
@@ -63,12 +76,13 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
     && potriveste(cauta, c.nume, c.client, c.telefon?.replace(/\D/g, ''), ...c.linii.map((l) => l.produs))
     && !gasite.some((g) => g.comanda === c.nume && g.magazin_id === c.magazin_id));
   const cuMagazin = !ales;
-  const adresa = (o: { magazin?: string | null; zi?: string; lista?: Cheie | null }) => {
+  const adresa = (o: { magazin?: string | null; zi?: string; de?: string; lista?: Cheie | null }) => {
     const q = new URLSearchParams();
     const m = o.magazin === undefined ? ales?.id : o.magazin;
     if (m) q.set('magazin', m);
-    const d = o.zi ?? zi;
-    if (d !== azi()) q.set('zi', d);
+    // zi= alege o singură zi; de= (până azi) o perioadă; fără ele rămâne ce e ales.
+    const [d1, d2] = o.zi ? [o.zi, o.zi] : o.de ? [o.de, azia] : [de, pana];
+    if (d1 !== d2) { q.set('de', d1); q.set('pana', d2); } else if (d1 !== azia) q.set('zi', d1);
     const l = o.lista === undefined ? f.lista : o.lista;
     if (l) q.set('lista', l);
     return `/magazine/livrari${q.size ? `?${q}` : ''}`;
@@ -90,7 +104,15 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
   ];
   const aleasa = LISTE.find((l) => l.cheie === f.lista) ?? null;
   // Fără o listă aleasă: toată foaia zilei (situația de acum doar pe ziua de azi).
-  const deAratat = aleasa ? [aleasa] : LISTE.filter((l) => !l.acum || zi === azi());
+  const deAratat = aleasa ? [aleasa] : LISTE.filter((l) => !l.acum || zi === azia);
+  // Pe o perioadă: câte pe fiecare zi și, pe „Toate", pe fiecare magazin.
+  const EVENIMENTE = ['ridicate', 'livrate', 'refuzate', 'nelivrate'] as const;
+  const zile = perioada ? Array.from({ length: Math.round((Date.parse(pana) - Date.parse(de)) / 86_400_000) + 1 }, (_, i) => ziua(pana, -i)) : [];
+  const numara = (filtru: (c: Colet) => boolean) => Object.fromEntries(EVENIMENTE.map((e) => [e, z[e].filter(filtru).length])) as Record<typeof EVENIMENTE[number], number>;
+  const refuz = (n: Record<typeof EVENIMENTE[number], number>) => {
+    const inchise = n.livrate + n.refuzate + n.nelivrate;
+    return inchise ? `${Math.round(((n.refuzate + n.nelivrate) / inchise) * 100)}%` : '—';
+  };
 
   return (
     <main className="lat">
@@ -162,23 +184,40 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
         </article>
       ) : (
       <>
-      <div className="liste-actiuni nu-tipari">
+      <div className="liste-actiuni perioade nu-tipari">
         <span className="filtre">
-          <Link href={adresa({ zi: ziua(zi, -1) })} className="buton">← ziua dinainte</Link>
-          <Link href={adresa({ zi: azi() })} className={`buton ${zi === azi() ? 'activ-buton' : ''}`}>azi</Link>
-          {zi < azi() && <Link href={adresa({ zi: ziua(zi, 1) })} className="buton">ziua următoare →</Link>}
+          {!perioada && <Link href={adresa({ zi: ziua(zi, -1) })} className="buton">← ziua dinainte</Link>}
+          <Link href={adresa({ zi: azia })} className={`buton ${!perioada && zi === azia ? 'activ-buton' : ''}`}>azi</Link>
+          {!perioada && zi < azia && <Link href={adresa({ zi: ziua(zi, 1) })} className="buton">ziua următoare →</Link>}
           <form method="get" className="in-rand">
             {ales && <input type="hidden" name="magazin" value={ales.id} />}
             {f.lista && <input type="hidden" name="lista" value={f.lista} />}
-            <input type="date" name="zi" defaultValue={zi} max={azi()} aria-label="Ziua" />
-            <button className="buton">Arată</button>
+            <input type="date" name="zi" defaultValue={zi} max={azia} aria-label="Ziua" />
+            <button className="buton">Arată ziua</button>
           </form>
         </span>
         <Tipareste />
       </div>
+      <div className="liste-actiuni perioade nu-tipari">
+        <span className="filtre">
+          <span className="slab">Perioadă:</span>
+          {PERIOADE.map(([n, nume]) => (
+            <Link key={n} href={adresa({ de: ziua(azia, 1 - n) })} className={`buton ${presetare?.[0] === n ? 'activ-buton' : ''}`}>{nume}</Link>
+          ))}
+          <form method="get" className="in-rand">
+            {ales && <input type="hidden" name="magazin" value={ales.id} />}
+            {f.lista && <input type="hidden" name="lista" value={f.lista} />}
+            <span className="slab">de la</span>
+            <input type="date" name="de" defaultValue={perioada ? de : ziua(azia, -6)} max={azia} aria-label="De la" />
+            <span className="slab">până la</span>
+            <input type="date" name="pana" defaultValue={pana} max={azia} aria-label="Până la" />
+            <button className={`buton ${perioada && !presetare ? 'activ-buton' : ''}`}>Arată perioada</button>
+          </form>
+        </span>
+      </div>
 
       <div className="numere-magazin nu-tipari">
-        <Link href={adresa({ lista: null })} className={`numar-situatie ${!aleasa ? 'activ-numar' : ''}`}><strong>Toate</strong> foaia zilei</Link>
+        <Link href={adresa({ lista: null })} className={`numar-situatie ${!aleasa ? 'activ-numar' : ''}`}><strong>Toate</strong> {perioada ? 'foaia perioadei' : 'foaia zilei'}</Link>
         {LISTE.map((l) => (
           <Link key={l.cheie} href={adresa({ lista: l.cheie })} className={`numar-situatie ${l.ton} ${aleasa?.cheie === l.cheie ? 'activ-numar' : ''}`}>
             <strong>{z[l.cheie].length}</strong> {l.titlu.toLowerCase().replace('awb generat, neridicat de curier', 'AWB neridicate')}
@@ -189,15 +228,37 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
 
       <article className="foaie">
         <header className="foaie-antet">
-          <h1>{aleasa ? `${aleasa.titlu} · ${aleasa.acum ? 'acum' : frumos(zi)}` : `Livrări · ${frumos(zi)}`}</h1>
+          <h1>{aleasa ? `${aleasa.titlu} · ${aleasa.acum ? 'acum' : eticheta}` : `Livrări · ${eticheta}`}</h1>
           <p className="foaie-sub">{ales ? ales.brand : 'toate magazinele'} · coletele la curier, din evenimentele trimise de curier în Shopify</p>
           <p className="foaie-mic">Generat {generat}</p>
           <p className="foaie-rezumat">
             {aleasa ? `${z[aleasa.cheie].length} colete · ${buc(z[aleasa.cheie])} buc`
               : `${z.ridicate.length} ridicate de curier · ${z.livrate.length} livrate · ${z.refuzate.length} refuzate · ${z.nelivrate.length} nelivrate (retur)`
-                + (zi === azi() ? ` · ${z.pe_drum.length} încă pe drum · ${z.neridicate.length} AWB neridicate` : '')}
+                + (zi === azia ? ` · ${z.pe_drum.length} încă pe drum · ${z.neridicate.length} AWB neridicate` : '')}
           </p>
         </header>
+        {perioada && !aleasa && (
+          <section className="foaie-grupa">
+            <h2>Pe scurt</h2>
+            <p className="foaie-mic">Refuz + retur: din coletele care au ajuns la capăt în perioadă (livrate, refuzate, nelivrate), cât nu s-a livrat.</p>
+            <table>
+              <thead><tr><th>{cuMagazin ? 'Magazin / zi' : 'Zi'}</th><th className="c">Ridicate</th><th className="c">Livrate</th><th className="c">Refuzate</th><th className="c">Nelivrate</th><th className="c">Refuz + retur</th></tr></thead>
+              <tbody>
+                {[
+                  ...(cuMagazin ? lista.map((m) => ({ k: m.id, nume: m.brand, n: numara((c) => c.magazin_id === m.id), tare: false, href: adresa({ magazin: m.id }) })) : []),
+                  { k: 'total', nume: cuMagazin ? 'Toate magazinele' : 'Total', n: numara(() => true), tare: true, href: null },
+                  ...zile.map((d) => ({ k: d, nume: frumos(d), n: numara((c) => c.zi === d), tare: false, href: adresa({ zi: d }) })),
+                ].map((r) => (
+                  <tr key={r.k} className={r.tare ? 'grupa-model' : ''}>
+                    <td>{r.href ? <Link href={r.href}>{r.nume}</Link> : <strong>{r.nume}</strong>}</td>
+                    {EVENIMENTE.map((e) => <td key={e} className="c">{r.tare ? <strong>{r.n[e]}</strong> : r.n[e] || <span className="mic">0</span>}</td>)}
+                    <td className="c">{refuz(r.n)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
         {deAratat.map((l, i) => (
           <section key={l.cheie} className="foaie-grupa">
             <h2>{aleasa ? '' : `${i + 1}. `}{l.titlu} · {z[l.cheie].length}</h2>

@@ -1,7 +1,7 @@
 import { interogare } from './sesiune';
 
 /**
- * Coletele la curier, pe o zi: ce a ridicat curierul, ce s-a livrat, ce a fost
+ * Coletele la curier, pe o zi sau pe o perioadă (de la, până la, inclusiv): ce a ridicat curierul, ce s-a livrat, ce a fost
  * refuzat și ce nu s-a livrat (retur) — plus ce e încă pe drum și AWB-urile generate
  * pe care curierul nu le-a ridicat încă. Zilele se socotesc la ora României.
  */
@@ -10,7 +10,8 @@ export type Colet = {
   magazin_id: string; magazin: string; comanda: string; comandata: string; client: string | null; telefon: string | null;
   oras: string | null; produse: string; bucati: number; curier: string | null; awb: string | null; urmarire: string | null;
   stare: string; motiv: string | null; awb_la: string; ridicat_la: string | null; livrat_la: string | null; esuat_la: string | null;
-  ora: string | null;          // ora evenimentului din lista în care apare
+  ora: string | null;          // ora evenimentului din lista în care apare (cu ziua, pe o perioadă)
+  zi: string | null;           // ziua evenimentului, AAAA-LL-ZZ
   zile: number | null;         // de câte zile e la curier / de când s-a generat AWB-ul
 };
 
@@ -25,31 +26,37 @@ const CAMPURI = `
   to_char(l.esuat_la AT TIME ZONE 'Europe/Bucharest', 'DD.MM HH24:MI') AS esuat_la`;
 
 export async function livrariPeZi(zi: string, magazinId?: string): Promise<ZiLivrari> {
+  return livrariPerioada(zi, zi, magazinId);
+}
+
+export async function livrariPerioada(de: string, pana: string, magazinId?: string): Promise<ZiLivrari> {
+  // Pe o singură zi ajunge ora; pe o perioadă, ziua și ora.
+  const fmt = de === pana ? 'HH24:MI' : 'DD.MM HH24:MI';
+  const ev = (col: string) => `to_char(${col} AT TIME ZONE 'Europe/Bucharest', '${fmt}') AS ora, to_char(${col} AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD') AS zi`;
+  const inPerioada = (col: string) => `(${col} AT TIME ZONE 'Europe/Bucharest')::date BETWEEN $1::date AND $3::date`;
   const randuri = await interogare<Colet & { lista: keyof ZiLivrari }>(
-    `WITH l AS (SELECT * FROM magazin_livrare WHERE ($2::uuid IS NULL OR magazin_id = $2) AND stare <> 'anulat'),
-          z AS (SELECT $1::date AS zi)
-     SELECT 'ridicate' AS lista, ${CAMPURI}, to_char(l.ridicat_la AT TIME ZONE 'Europe/Bucharest', 'HH24:MI') AS ora, NULL::int AS zile
-       FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id, z
-      WHERE (l.ridicat_la AT TIME ZONE 'Europe/Bucharest')::date = z.zi
+    `WITH l AS (SELECT * FROM magazin_livrare WHERE ($2::uuid IS NULL OR magazin_id = $2) AND stare <> 'anulat')
+     SELECT 'ridicate' AS lista, ${CAMPURI}, ${ev('l.ridicat_la')}, NULL::int AS zile
+       FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id
+      WHERE ${inPerioada('l.ridicat_la')}
      UNION ALL
-     SELECT 'livrate', ${CAMPURI}, to_char(l.livrat_la AT TIME ZONE 'Europe/Bucharest', 'HH24:MI'),
+     SELECT 'livrate', ${CAMPURI}, ${ev('l.livrat_la')},
             floor(extract(epoch FROM l.livrat_la - coalesce(l.ridicat_la, l.awb_la)) / 86400)::int
-       FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id, z
-      WHERE l.stare = 'livrat' AND (l.livrat_la AT TIME ZONE 'Europe/Bucharest')::date = z.zi
+       FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id
+      WHERE l.stare = 'livrat' AND ${inPerioada('l.livrat_la')}
      UNION ALL
-     SELECT CASE WHEN l.stare = 'refuzat' THEN 'refuzate' ELSE 'nelivrate' END, ${CAMPURI},
-            to_char(l.esuat_la AT TIME ZONE 'Europe/Bucharest', 'HH24:MI'), NULL
-       FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id, z
-      WHERE l.stare IN ('refuzat', 'nelivrat') AND (l.esuat_la AT TIME ZONE 'Europe/Bucharest')::date = z.zi
+     SELECT CASE WHEN l.stare = 'refuzat' THEN 'refuzate' ELSE 'nelivrate' END, ${CAMPURI}, ${ev('l.esuat_la')}, NULL
+       FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id
+      WHERE l.stare IN ('refuzat', 'nelivrat') AND ${inPerioada('l.esuat_la')}
      UNION ALL
-     SELECT 'pe_drum', ${CAMPURI}, NULL, (now()::date - (l.ridicat_la AT TIME ZONE 'Europe/Bucharest')::date)
+     SELECT 'pe_drum', ${CAMPURI}, NULL, NULL, (now()::date - (l.ridicat_la AT TIME ZONE 'Europe/Bucharest')::date)
        FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id
       WHERE l.stare IN ('in_tranzit', 'in_livrare')
      UNION ALL
-     SELECT 'neridicate', ${CAMPURI}, NULL, (now()::date - (l.awb_la AT TIME ZONE 'Europe/Bucharest')::date)
+     SELECT 'neridicate', ${CAMPURI}, NULL, NULL, (now()::date - (l.awb_la AT TIME ZONE 'Europe/Bucharest')::date)
        FROM l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id
       WHERE l.stare = 'awb' AND l.awb_la > now() - interval '30 days'
-     ORDER BY 1, 2, ora NULLS LAST, zile DESC NULLS LAST`, [zi, magazinId ?? null]);
+     ORDER BY 1, 2, zi DESC NULLS LAST, ora NULLS LAST, zile DESC NULLS LAST`, [de, magazinId ?? null, pana]);
   const z: ZiLivrari = { ridicate: [], livrate: [], refuzate: [], nelivrate: [], pe_drum: [], neridicate: [] };
   for (const { lista, ...c } of randuri) z[lista].push(c);
   return z;
@@ -68,7 +75,7 @@ export async function cautaColete(text: string, magazinId?: string): Promise<Col
   const cifre = t.replace(/\D/g, '');
   return interogare<ColetGasit>(
     `SELECT ${CAMPURI}, to_char(l.in_livrare_la AT TIME ZONE 'Europe/Bucharest', 'DD.MM HH24:MI') AS in_livrare_la,
-            NULL::text AS ora, NULL::int AS zile
+            NULL::text AS ora, NULL::text AS zi, NULL::int AS zile
        FROM magazin_livrare l JOIN magazin m ON m.id = l.magazin_id JOIN brand b ON b.id = m.brand_id
       WHERE ($2::uuid IS NULL OR l.magazin_id = $2)
         AND (l.comanda ILIKE '%' || $1 || '%' OR l.client ILIKE '%' || $1 || '%' OR l.awb ILIKE '%' || $1 || '%'
