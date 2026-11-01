@@ -14,25 +14,51 @@ const STARI: Record<string, string> = { awb: 'AWB generat', in_tranzit: 'în tra
 const ziua = (zi: string, pas: number) => new Date(Date.parse(zi) + pas * 86_400_000).toISOString().slice(0, 10);
 const frumos = (zi: string) => new Date(`${zi}T12:00:00`).toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
 const scurt = (zi: string) => `${zi.slice(8)}.${zi.slice(5, 7)}`;
+const ziScurt = (zi: string) => `${new Date(`${zi}T12:00:00`).toLocaleDateString('ro-RO', { weekday: 'short' })} ${scurt(zi)}`;
 const data = (s?: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s ?? '') ? s! : null);
 const PERIOADE: [number, string][] = [[7, 'ultimele 7 zile'], [14, 'ultimele 14 zile'], [30, 'ultimele 30 de zile']];
+
+/**
+ * Ce e în colet. Până la două produse se văd direct; mai multe se strâng într-o listă
+ * care se deschide la clic („+5 produse · 9 buc"). Pe foaia tipărită apar toate.
+ */
+function Produse({ text, bucati }: { text: string; bucati?: number }) {
+  const linii = text.split(/(?<=×\d+), /);
+  if (linii.length <= 2) return <>{text}{bucati && bucati > 1 ? <span className="mic"> · {bucati} buc</span> : null}</>;
+  const rest = linii.slice(2);
+  return (
+    <>
+      <span className="doar-tipar">{text}</span>
+      <span className="nu-tipari">
+        {linii.slice(0, 2).map((l) => <span key={l} className="produs-linie">{l}</span>)}
+        <details className="produse-mai-multe">
+          <summary>+{rest.length} produse{bucati ? ` · ${bucati} buc în total` : ''}</summary>
+          {rest.map((l, i) => <span key={i} className="produs-linie">{l}</span>)}
+        </details>
+      </span>
+    </>
+  );
+}
+
+/** Telefonul se poate apăsa: pe telefon și pe tabletă sună direct. */
+const Telefon = ({ nr }: { nr: string | null }) => (nr ? <a href={`tel:${nr.replace(/[^\d+]/g, '')}`} className="telefon">{nr}</a> : <>—</>);
 
 function Tabel({ lista, cuMagazin, coloana }: { lista: Colet[]; cuMagazin: boolean; coloana: { nume: string; val: (c: Colet) => React.ReactNode } }) {
   if (lista.length === 0) return <p className="foaie-gol">Niciun colet.</p>;
   return (
-    <table>
+    <table className="colete">
       <thead><tr>{cuMagazin && <th>Magazin</th>}<th>Comandă</th><th>Client</th><th>Telefon</th><th>Oraș</th><th>Ce a comandat</th><th>Curier · AWB</th><th>{coloana.nume}</th></tr></thead>
       <tbody>
         {lista.map((c) => (
           <tr key={`${c.magazin_id}${c.comanda}${c.awb}`}>
-            {cuMagazin && <td className="mic">{c.magazin}</td>}
-            <td><strong>{c.comanda}</strong><div className="mic">{c.comandata}</div></td>
-            <td>{c.client ?? '—'}</td>
-            <td>{c.telefon ?? '—'}</td>
-            <td className="mic">{c.oras ?? '—'}</td>
-            <td className="produs">{c.produse}{c.bucati > 1 && <span className="mic"> · {c.bucati} buc</span>}</td>
-            <td className="mic">{c.curier ?? '—'}{c.awb && <div>{c.urmarire ? <a href={c.urmarire} target="_blank" rel="noreferrer">{c.awb}</a> : c.awb}</div>}</td>
-            <td>{coloana.val(c)}</td>
+            {cuMagazin && <td className="mic c-mag">{c.magazin}</td>}
+            <td className="c-cmd"><strong>{c.comanda}</strong><div className="mic">{c.comandata}</div></td>
+            <td className="c-client">{c.client ?? '—'}<div className="mic doar-mobil">{c.telefon && <><Telefon nr={c.telefon} />{c.oras && ' · '}</>}{c.oras}</div></td>
+            <td className="c-tel"><Telefon nr={c.telefon} /></td>
+            <td className="mic c-oras">{c.oras ?? '—'}</td>
+            <td className="produs c-prod"><Produse text={c.produse} bucati={c.bucati} /></td>
+            <td className="mic c-awb">{c.curier ?? '—'}{c.awb && <div>{c.urmarire ? <a href={c.urmarire} target="_blank" rel="noreferrer">{c.awb}</a> : c.awb}</div>}</td>
+            <td className="c-val">{coloana.val(c)}</td>
           </tr>
         ))}
       </tbody>
@@ -137,18 +163,18 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
           </header>
           {gasite.length === 0 && neexpediate.length === 0 && <p className="foaie-gol">Nimic găsit. Caută după numărul comenzii (#25448), nume, telefon sau AWB.</p>}
           {gasite.length > 0 && (
-            <table className="cautare-colete">
+            <table className="colete cautare-colete">
               <thead><tr>{cuMagazin && <th>Magazin</th>}<th>Comandă</th><th>Client · telefon</th><th>Ce a comandat</th><th>Curier · AWB</th><th>Stadiu</th><th>Drumul coletului</th></tr></thead>
               <tbody>
                 {gasite.map((c) => (
                   <tr key={`${c.magazin_id}${c.comanda}${c.awb}${c.awb_la}`}>
-                    {cuMagazin && <td className="mic">{c.magazin}</td>}
-                    <td><strong>{c.comanda}</strong><div className="mic">comandată {c.comandata}</div></td>
-                    <td>{c.client ?? '—'}<div className="mic">{[c.telefon, c.oras].filter(Boolean).join(' · ')}</div></td>
-                    <td className="produs">{c.produse}</td>
-                    <td className="mic">{c.curier ?? '—'}{c.awb && <div>{c.urmarire ? <a href={c.urmarire} target="_blank" rel="noreferrer">{c.awb}</a> : c.awb}</div>}</td>
-                    <td><span className={`insigna ${({ livrat: 'verde', refuzat: 'rosu', nelivrat: 'rosu', anulat: 'gri', awb: 'galben' } as Record<string, string>)[c.stare] ?? 'albastru'}`}>{STARI[c.stare] ?? c.stare}</span></td>
-                    <td className="mic drum">
+                    {cuMagazin && <td className="mic c-mag">{c.magazin}</td>}
+                    <td className="c-cmd"><strong>{c.comanda}</strong><div className="mic">comandată {c.comandata}</div></td>
+                    <td className="c-client">{c.client ?? '—'}<div className="mic">{c.telefon && <><Telefon nr={c.telefon} />{c.oras && ' · '}</>}{c.oras}</div></td>
+                    <td className="produs c-prod"><Produse text={c.produse} bucati={c.bucati} /></td>
+                    <td className="mic c-awb">{c.curier ?? '—'}{c.awb && <div>{c.urmarire ? <a href={c.urmarire} target="_blank" rel="noreferrer">{c.awb}</a> : c.awb}</div>}</td>
+                    <td className="c-val"><span className={`insigna ${({ livrat: 'verde', refuzat: 'rosu', nelivrat: 'rosu', anulat: 'gri', awb: 'galben' } as Record<string, string>)[c.stare] ?? 'albastru'}`}>{STARI[c.stare] ?? c.stare}</span></td>
+                    <td className="mic drum c-drum">
                       <div>AWB {c.awb_la}</div>
                       {c.ridicat_la && <div>ridicat {c.ridicat_la}</div>}
                       {c.in_livrare_la && <div>în livrare {c.in_livrare_la}</div>}
@@ -163,16 +189,16 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
           {neexpediate.length > 0 && (
             <section className="foaie-grupa">
               <h2>Încă neexpediate</h2>
-              <table>
+              <table className="colete">
                 <thead><tr>{cuMagazin && <th>Magazin</th>}<th>Comandă</th><th>Client · telefon</th><th>Ce a comandat</th><th>Situație</th></tr></thead>
                 <tbody>
                   {neexpediate.map((c) => (
                     <tr key={c.id}>
-                      {cuMagazin && <td className="mic">{c.magazin}</td>}
-                      <td><strong>{c.nume}</strong><div className="mic">comandată {c.creata_la.slice(8)}.{c.creata_la.slice(5, 7)}</div></td>
-                      <td>{c.client ?? '—'}<div className="mic">{[c.telefon, c.oras].filter(Boolean).join(' · ')}</div></td>
-                      <td className="produs">{c.linii.map((l) => `${l.produs} ${l.marime}${l.bucati > 1 ? ` ×${l.bucati}` : ''}`).join(', ')}</td>
-                      <td><span className={`insigna ${{ livrabila: 'verde', de_sunat: 'galben', fara_stoc: 'rosu' }[c.situatie]}`}>
+                      {cuMagazin && <td className="mic c-mag">{c.magazin}</td>}
+                      <td className="c-cmd"><strong>{c.nume}</strong><div className="mic">comandată {c.creata_la.slice(8)}.{c.creata_la.slice(5, 7)}</div></td>
+                      <td className="c-client">{c.client ?? '—'}<div className="mic">{c.telefon && <><Telefon nr={c.telefon} />{c.oras && ' · '}</>}{c.oras}</div></td>
+                      <td className="produs c-prod"><Produse text={c.linii.map((l) => `${l.produs} ${l.marime} ×${l.bucati}`).join(', ')} bucati={c.bucati} /></td>
+                      <td className="c-val"><span className={`insigna ${{ livrabila: 'verde', de_sunat: 'galben', fara_stoc: 'rosu' }[c.situatie]}`}>
                         {{ livrabila: 'de trimis, pe stoc', de_sunat: 'de sunat: avem o parte', fara_stoc: 'fără stoc' }[c.situatie]}</span>
                         <div className="mic">așteaptă de {c.zile} {c.zile === 1 ? 'zi' : 'zile'}</div></td>
                     </tr>
@@ -184,6 +210,33 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
         </article>
       ) : (
       <>
+      {/* Pe telefon: ziua și perioada într-o singură listă care se deschide. */}
+      <details className="alege-perioada nu-tipari">
+        <summary><span className="slab">Perioadă:</span> <strong>{perioada ? eticheta : zi === azia ? 'azi' : frumos(zi)}</strong></summary>
+        <div className="alege-perioada-corp">
+          <div className="filtre">
+            <Link href={adresa({ zi: azia })} className={`buton ${!perioada && zi === azia ? 'activ-buton' : ''}`}>azi</Link>
+            <Link href={adresa({ zi: ziua(azia, -1) })} className={`buton ${!perioada && zi === ziua(azia, -1) ? 'activ-buton' : ''}`}>ieri</Link>
+            {PERIOADE.map(([n, nume]) => (
+              <Link key={n} href={adresa({ de: ziua(azia, 1 - n) })} className={`buton ${presetare?.[0] === n ? 'activ-buton' : ''}`}>{nume}</Link>
+            ))}
+          </div>
+          <form method="get" className="perioada-proprie">
+            {ales && <input type="hidden" name="magazin" value={ales.id} />}
+            {f.lista && <input type="hidden" name="lista" value={f.lista} />}
+            <label>de la <input type="date" name="de" defaultValue={perioada ? de : ziua(azia, -6)} max={azia} /></label>
+            <label>până la <input type="date" name="pana" defaultValue={pana} max={azia} /></label>
+            <button className="buton">Arată perioada</button>
+          </form>
+          {!perioada && (
+            <div className="filtre">
+              <Link href={adresa({ zi: ziua(zi, -1) })} className="buton">← ziua dinainte</Link>
+              {zi < azia && <Link href={adresa({ zi: ziua(zi, 1) })} className="buton">ziua următoare →</Link>}
+            </div>
+          )}
+        </div>
+      </details>
+
       <div className="liste-actiuni perioade nu-tipari">
         <span className="filtre">
           {!perioada && <Link href={adresa({ zi: ziua(zi, -1) })} className="buton">← ziua dinainte</Link>}
@@ -241,13 +294,13 @@ export default async function Livrari({ searchParams }: { searchParams: Promise<
           <section className="foaie-grupa">
             <h2>Pe scurt</h2>
             <p className="foaie-mic">Refuz + retur: din coletele care au ajuns la capăt în perioadă (livrate, refuzate, nelivrate), cât nu s-a livrat.</p>
-            <table>
-              <thead><tr><th>{cuMagazin ? 'Magazin / zi' : 'Zi'}</th><th className="c">Ridicate</th><th className="c">Livrate</th><th className="c">Refuzate</th><th className="c">Nelivrate</th><th className="c">Refuz + retur</th></tr></thead>
+            <table className="pe-scurt">
+              <thead><tr><th>{cuMagazin ? 'Magazin / zi' : 'Zi'}</th><th className="c">Rid<span className="ascuns-mobil">icate</span></th><th className="c">Liv<span className="ascuns-mobil">rate</span></th><th className="c">Ref<span className="ascuns-mobil">uzate</span></th><th className="c">Nel<span className="ascuns-mobil">ivrate</span></th><th className="c">Refuz<span className="ascuns-mobil"> + retur</span></th></tr></thead>
               <tbody>
                 {[
                   ...(cuMagazin ? lista.map((m) => ({ k: m.id, nume: m.brand, n: numara((c) => c.magazin_id === m.id), tare: false, href: adresa({ magazin: m.id }) })) : []),
                   { k: 'total', nume: cuMagazin ? 'Toate magazinele' : 'Total', n: numara(() => true), tare: true, href: null },
-                  ...zile.map((d) => ({ k: d, nume: frumos(d), n: numara((c) => c.zi === d), tare: false, href: adresa({ zi: d }) })),
+                  ...zile.map((d) => ({ k: d, nume: <><span className="ascuns-mobil">{frumos(d)}</span><span className="doar-mobil-text">{ziScurt(d)}</span></>, n: numara((c) => c.zi === d), tare: false, href: adresa({ zi: d }) })),
                 ].map((r) => (
                   <tr key={r.k} className={r.tare ? 'grupa-model' : ''}>
                     <td>{r.href ? <Link href={r.href}>{r.nume}</Link> : <strong>{r.nume}</strong>}</td>
