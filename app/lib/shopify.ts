@@ -409,8 +409,8 @@ type ComandaLivrari = {
 /**
  * Coletele unei comenzi, din evenimentele curierului: primul eveniment după AWB
  * (în tranzit, preluat) înseamnă că l-a ridicat curierul; „în livrare", livrat sau
- * eșec. La eșec, mesajul curierului spune de ce: „Refuz primire" e refuz, restul
- * (de obicei „Retur") e colet nelivrat, întors.
+ * eșec. La eșec, mesajele curierului spun de ce: dacă vreunul e „Refuz primire", e
+ * refuz; altfel (de obicei „Retur") e colet nelivrat, întors.
  */
 async function scrieLivrari(c: PoolClient, magazinId: string, o: ComandaLivrari) {
   for (const f of o.fulfillments) {
@@ -419,7 +419,11 @@ async function scrieLivrari(c: PoolClient, magazinId: string, o: ComandaLivrari)
     const esec = [...ev].reverse().find((e) => e.status === 'FAILURE');
     const ridicat = primul('CARRIER_PICKED_UP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILURE', 'ATTEMPTED_DELIVERY');
     const livrat = f.deliveredAt ?? primul('DELIVERED');
-    const refuz = esec && /refuz/i.test(esec.message ?? '');
+    // Fan Courier trimite întâi „Refuz primire", apoi „Retur" când coletul se întoarce: un refuz
+    // rămâne refuz, oricare ar fi ultimul mesaj. Motivul păstrează tot drumul: „Refuz primire → Retur".
+    const esecuri = ev.filter((e) => e.status === 'FAILURE');
+    const refuz = esecuri.some((e) => /refuz/i.test(e.message ?? ''));
+    const motiv = [...new Set(esecuri.map((e) => e.message?.trim()).filter(Boolean))].join(' → ') || null;
     // Ce contează e ultimul deznodământ: un colet refuzat și apoi relivrat e livrat.
     const ultim = [...ev].reverse().find((e) => e.status === 'DELIVERED' || e.status === 'FAILURE');
     const stare = f.status === 'CANCELLED' ? 'anulat'
@@ -445,7 +449,7 @@ async function scrieLivrari(c: PoolClient, magazinId: string, o: ComandaLivrari)
        peTest ? telefonFals(telefon) : telefon, o.shippingAddress?.city ?? null,
        linii.map((l) => `${l.lineItem.title}${l.lineItem.variantTitle ? ` ${l.lineItem.variantTitle}` : ''} ×${l.quantity}`).join(', '),
        linii.reduce((s, l) => s + l.quantity, 0), t?.company ?? null, t?.number ?? null, t?.url ?? null, f.createdAt,
-       ridicat, primul('OUT_FOR_DELIVERY'), livrat, esec?.happenedAt ?? null, esec?.message ?? null, stare]);
+       ridicat, primul('OUT_FOR_DELIVERY'), livrat, esec?.happenedAt ?? null, motiv, stare]);
   }
 }
 
