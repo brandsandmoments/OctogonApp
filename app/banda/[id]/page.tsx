@@ -3,6 +3,7 @@ import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { detaliiTransa, ETAPE_BANDA, schimbaEtapa, type EtapaBanda } from '../../lib/banda';
 import { cantitate } from '../../lib/format';
+import { adaugaAlocare, alocari, FUNCTII, marcheaza, operatiiTransa, personal, stergeAlocare, utilaje } from '../../lib/alocare';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -16,16 +17,32 @@ export default async function TransaPagina({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ eroare?: string }>;
+  searchParams: Promise<{ eroare?: string; faza?: string; utilaj?: string }>;
 }) {
   await cere('banda');
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('banda');
-  const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
+  const [{ id }, { eroare, faza: fazaAleasa, utilaj: utilajAles }] = await Promise.all([params, searchParams]);
   const d = await detaliiTransa(id);
   if (!d) notFound();
+  const [faze, aloc, oameni, masini] = await Promise.all([operatiiTransa(id), alocari(id), personal(), utilaje()]);
+  const acum = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Bucharest' }).slice(0, 16).replace(' ', 'T');
   const { transa: t, marimi } = d;
   const total = marimi.reduce((s, m) => s + m.cantitate, 0);
+
+  async function aloca(date: FormData) {
+    'use server';
+    await cere('banda', 'modifica');
+    inapoi(id, await adaugaAlocare(id, date));
+  }
+
+  async function marcheazaAlocare(date: FormData) {
+    'use server';
+    await cere('banda', 'modifica');
+    const ce = String(date.get('ce'));
+    if (ce === 'sterge') { await stergeAlocare(String(date.get('alocare'))); inapoi(id, null); }
+    inapoi(id, await marcheaza(String(date.get('alocare')), ce === 'incepe' ? 'incepe' : 'gata'));
+  }
 
   async function etapa(date: FormData) {
     'use server';
@@ -76,6 +93,79 @@ export default async function TransaPagina({
         ))}
       </ol>
 
+      <h2 id="oameni">Cine lucrează</h2>
+      {faze.length === 0 ? (
+        <p className="slab">Modelul n-are încă procesul tehnologic (fazele). Se adaugă din Modele și rețete; până atunci faza se scrie de mână.</p>
+      ) : (
+        <table className="faze-alocare">
+          <thead><tr><th className="nr">#</th><th>Faza</th><th>Utilaj</th><th className="nr">Min/buc</th><th>Oameni</th><th /></tr></thead>
+          <tbody>
+            {faze.map((o) => {
+              const ai = aloc.filter((a) => a.operatie_id === o.id);
+              return (
+                <tr key={o.id} className={ai.length ? '' : 'fara-om'}>
+                  <td className="nr">{o.ordine}</td>
+                  <td>{o.denumire}</td>
+                  <td className="slab">{o.utilaj ?? '—'}</td>
+                  <td className="nr">{cantitate(o.timp_min)}</td>
+                  <td>{ai.length ? ai.map((a) => (
+                    <span key={a.id} className={`insigna ${a.gata_la ? 'verde' : a.incepe_la ? 'albastru' : ''}`}>{a.om}{a.gata_la ? ' ✓' : ''}</span>
+                  )) : <span className="insigna galben">fără om</span>}</td>
+                  <td>{m && <a href={`?faza=${encodeURIComponent(o.denumire)}&utilaj=${encodeURIComponent(o.utilaj ?? '')}#aloca`} className="buton mic-buton">Alocă</a>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      <datalist id="lista-oameni">
+        {oameni.map((o) => (
+          <option key={o.id} value={o.nume} label={`${o.functii.map((f) => FUNCTII[f] ?? f).join(', ')}${o.ocupat ? ` · lucrează la ${o.ocupat}` : ' · liber'}`} />
+        ))}
+      </datalist>
+      <datalist id="lista-utilaje">{masini.map((u) => <option key={u.nume} value={u.nume} />)}</datalist>
+      <datalist id="lista-faze">{faze.map((o) => <option key={o.id} value={o.denumire} label={[o.utilaj, `${cantitate(o.timp_min)} min/buc`].filter(Boolean).join(' · ')} />)}</datalist>
+
+      {m && (
+        <form action={aloca} id="aloca" className="antet-comanda alocare" key={`${fazaAleasa ?? ''}${utilajAles ?? ''}`}>
+          <label className="lat-2"><span>Faza</span><input name="faza" list="lista-faze" defaultValue={fazaAleasa ?? ''} placeholder="scrie sau alege faza" required autoComplete="off" /></label>
+          <label><span>Utilaj</span><input name="utilaj" list="lista-utilaje" defaultValue={utilajAles ?? ''} placeholder="mașina sau postul" autoComplete="off" /></label>
+          <label><span>Om</span><input name="om" list="lista-oameni" placeholder="scrie numele…" required autoComplete="off" autoFocus={Boolean(fazaAleasa)} /></label>
+          <label><span>Începe</span><input name="incepe" type="datetime-local" defaultValue={acum} /></label>
+          <label><span>Gata</span><input name="gata" type="datetime-local" /></label>
+          <label className="lat"><span>Observații</span><input name="observatii" placeholder="opțional" /></label>
+          <div className="lat"><button>Alocă omul</button></div>
+        </form>
+      )}
+
+      {aloc.length > 0 && (
+        <table className="alocari">
+          <thead><tr><th>Faza</th><th>Utilaj</th><th>Om</th><th>Început</th><th>Gata</th><th className="nr">Durată</th><th /></tr></thead>
+          <tbody>
+            {aloc.map((a) => (
+              <tr key={a.id}>
+                <td>{a.faza}{a.observatii && <div className="slab">{a.observatii}</div>}</td>
+                <td className="slab">{a.utilaj ?? '—'}</td>
+                <td><strong>{a.om}</strong></td>
+                <td>{a.incepe_la ?? '—'}</td>
+                <td>{a.gata_la ?? (a.incepe_la ? <span className="insigna albastru">în lucru</span> : '—')}</td>
+                <td className="nr">{a.minute != null && a.incepe_la ? `${Math.floor(a.minute / 60)}h ${String(a.minute % 60).padStart(2, '0')}m` : '—'}</td>
+                <td>
+                  {m && (
+                    <form action={marcheazaAlocare} className="in-rand actiuni-alocare">
+                      <input type="hidden" name="alocare" value={a.id} />
+                      {!a.incepe_la && <button name="ce" value="incepe" className="mic-buton">Începe acum</button>}
+                      {!a.gata_la && <button name="ce" value="gata" className="mic-buton">Gata acum</button>}
+                      <button name="ce" value="sterge" className="mic-buton slab">Șterge</button>
+                    </form>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </main>
   );
 }

@@ -81,6 +81,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
       { href: '/planificare', nume: 'Planificare', ce: 'necesarul, gruparea pe model și trimiterea la croit', zona: 'planificare' },
       { href: '/croit', nume: 'Croit', ce: 'ce e de croit, ce s-a croit, ce a rămas', zona: 'croit' },
       { href: '/banda', nume: 'Bandă', ce: 'alimentarea benzii; în lucru și terminate', zona: 'banda' },
+      { href: '/banda/oameni', nume: 'Oameni producție', ce: 'personalul pe funcții: operatori, alimentator, control, călcat, CTC, croit', zona: 'banda' },
     ],
     si: ['/necesar'],
   },

@@ -171,3 +171,21 @@
 .rand-operatie input { font: inherit; font-size: .85rem; padding: .25rem .4rem; border: 1px solid var(--linie); border-radius: .3rem; background: #fff; }
 .rand-operatie input[name="denumire"] { min-width: 14rem; }
 .rand-operatie input.timp { width: 4.5rem; text-align: right; }
+
+/* Alocarea oamenilor pe faze, la o tranșă de pe bandă */
+.faze-alocare td { vertical-align: middle; }
+.faze-alocare tr.fara-om td { background: #fffaf0; }
+.faze-alocare .insigna { margin: .1rem .25rem .1rem 0; }
+.formular .alocare { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); padding: 1rem; border: 1px solid var(--linie); border-radius: .5rem; background: var(--bej); }
+.formular .alocare .lat-2 { grid-column: span 2; }
+.formular .alocare button { width: auto; }
+.actiuni-alocare { gap: .3rem; flex-wrap: wrap; }
+.formular .actiuni-alocare button { min-height: 2rem; padding: 0 .6rem; font-size: .8rem; width: auto; }
+@media screen and (max-width: 760px) { .formular .alocare .lat-2 { grid-column: auto; } }
+.oameni-productie tr.scos td { opacity: .55; }
+.functii-om { display: flex; gap: .35rem; align-items: center; }
+.functii-om summary { cursor: pointer; }
+.functii-alege { display: flex; flex-direction: column; gap: .2rem; padding: .5rem 0; }
+.functii-alege label { display: flex; gap: .4rem; align-items: center; font-size: .85rem; }
+.formular .functii-alege input { width: auto; }
+.formular .functii-om button { min-height: 2rem; padding: 0 .6rem; font-size: .8rem; width: auto; }
