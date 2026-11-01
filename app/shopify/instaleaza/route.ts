@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { esteAdmin } from '../../lib/acces';
 import { utilizatorCurent } from '../../lib/sesiune';
-import { adresaInstalare, codMagazin, domeniuValid, shopifyConfigurat } from '../../lib/shopify';
+import { adresaInstalare, adresaPublica, codMagazin, domeniuValid, shopifyConfigurat } from '../../lib/shopify';
 
 /**
  * Începe instalarea aplicației Octogon pe un magazin: un cont master alege brandul
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
   const magazin = q.get('magazin') ?? '';
   const domeniu = (q.get('domeniu') ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-  const inapoi = (eroare: string) => NextResponse.redirect(new URL(`/magazine/legaturi?eroare=${encodeURIComponent(eroare)}`, req.url));
+  const inapoi = (eroare: string) => NextResponse.redirect(adresaPublica(`/magazine/legaturi?eroare=${encodeURIComponent(eroare)}`));
   const cod = await codMagazin(magazin);
   if (!cod) return inapoi('Magazinul nu există.');
   if (!shopifyConfigurat(cod)) return inapoi('Aplicația Shopify nu e configurată pe server (SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, SHOPIFY_CHEIE, APP_URL).');

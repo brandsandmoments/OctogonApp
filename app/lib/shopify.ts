@@ -83,10 +83,17 @@ const egal = (a: string, b: string) => {
 export function hmacParametriValid(parametri: URLSearchParams, cod: string): boolean {
   const hmac = parametri.get('hmac');
   if (!hmac) return false;
-  const mesaj = [...parametri].filter(([k]) => k !== 'hmac' && k !== 'signature')
-    .sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join('&');
-  return egal(createHmac('sha256', aplicatiaSigur(cod).secret).update(mesaj).digest('hex'), hmac);
+  const restul = [...parametri].filter(([k]) => k !== 'hmac' && k !== 'signature').sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  // Shopify semnează parametrii codați ca într-un query string (host-ul, base64, poate avea „="); unele
+  // biblioteci îi semnează decodați. Primim oricare dintre cele două forme, ambele cu secretul aplicației.
+  const codat = new URLSearchParams(restul).toString();
+  const decodat = restul.map(([k, v]) => `${k}=${v}`).join('&');
+  const semneaza = (m: string) => createHmac('sha256', aplicatiaSigur(cod).secret).update(m).digest('hex');
+  return egal(semneaza(codat), hmac) || egal(semneaza(decodat), hmac);
 }
+
+/** Adresa publică a aplicației: în spatele lui Caddy, cererea se vede ca venind la localhost. */
+export const adresaPublica = (cale: string) => new URL(cale, mediu('APP_URL'));
 
 /** Webhook-urile poartă semnătura corpului brut, în X-Shopify-Hmac-Sha256 (base64). */
 export function hmacWebhookValid(corp: string, semnatura: string | null, cod: string): boolean {
