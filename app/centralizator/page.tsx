@@ -5,7 +5,9 @@ import Grupare from '../Grupare';
 import Pliere from '../Pliere';
 import { grupareDinAdresa, grupeaza, perioada } from '../lib/perioade';
 import { modeleComenzi } from '../lib/modele';
-import { cere, poateModifica } from '../lib/sesiune';
+import { redirect } from 'next/navigation';
+import { cere, interogare, poateModifica } from '../lib/sesiune';
+import { puneInTaiere, ramasDeCroit } from '../lib/croitTaiere';
 import { branduriActive, centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 import RandCascada from '../productie/RandCascada';
 import MarimiComanda from '../productie/MarimiComanda';
@@ -13,7 +15,7 @@ import '../productie/productie.css';
 
 export const dynamic = 'force-dynamic';
 
-type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string; stadiu?: string; grupare?: string };
+type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string; stadiu?: string; grupare?: string; eroare?: string };
 
 /**
  * Centralizatorul: toate liniile PSF și PSC, pe mărimi, cu drumul fiecăreia —
@@ -24,11 +26,20 @@ type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string; s
  * model, pentru că la croit mai multe PSF și PSC pe același model se pot tăia
  * împreună.
  */
+/** Dreptul pe om de a face taieri direct de aici (0044): azi, doar șefa de croit. */
+async function croiesteDinCentralizator(id: string): Promise<boolean> {
+  const [r] = await interogare<{ da: boolean }>(`SELECT croieste_din_centralizator AS da FROM utilizator WHERE id = $1`, [id]);
+  return Boolean(r?.da);
+}
+
 export default async function Centralizator({ searchParams }: { searchParams: Promise<Cautare> }) {
-  await cere('centralizator');
+  const eu = await cere('centralizator');
   const comandaNoua = await poateModifica('comenzi');
   const f = await searchParams;
   const peModel = f.stadiu === 'necroita';
+  // Pe „Rămas de croit", șefa de croit taie direct de aici: bifează comenzile (sau tot
+  // modelul) și „Croiește" face taierea cu tot ce le-a rămas.
+  const croieste = peModel && (await poateModifica('croit')) && (await croiesteDinCentralizator(eu.id));
   const [{ randuri, numarate, toate: toateLiniile }, branduri, modele] = await Promise.all([
     centralizatorPeStadii({ ...f, toate: f.toate === '1', peModel }),
     branduriActive(),
@@ -63,6 +74,29 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
     const q = new URLSearchParams(Object.entries({ ...f, stadiu }).filter(([, v]) => v) as [string, string][]);
     return `/centralizator${q.size ? `?${q}` : ''}`;
   };
+
+  async function taie(date: FormData) {
+    'use server';
+    const cine = await cere('croit', 'modifica');
+    if (!(await croiesteDinCentralizator(cine.id))) redirect('/centralizator?stadiu=necroita');
+    const ramas = await ramasDeCroit();
+    const una = String(date.get('una') ?? '');
+    const model = String(date.get('model') ?? '');
+    const chei = new Set(una ? [una] : date.getAll('croieste').map(String));
+    const alese = ramas.filter((r) => (model ? r.model === model : chei.has(`${r.comanda}|${r.model}`)) && r.disponibil > 0);
+    const inapoi = '/centralizator?stadiu=necroita';
+    if (alese.length === 0) {
+      redirect(`${inapoi}&eroare=${encodeURIComponent(chei.size === 0 && !model
+        ? 'Bifează ce croiești (sau apasă „Croiește" pe un rând).'
+        : 'Nu mai e nimic de pus în taiere: bucățile sunt deja într-o taiere deschisă (Croit → Taieri).')}`);
+    }
+    const rez = await puneInTaiere(alese.map((r) => ({
+      planificareId: r.planificare_id,
+      marimi: new Map(r.marimi.filter((x) => x.disponibil > 0).map((x) => [x.marime_id, x.disponibil] as [string, number])),
+    })));
+    if (typeof rez === 'string') redirect(`${inapoi}&eroare=${encodeURIComponent(rez)}`);
+    redirect(`/croit/taiere/${rez.id}`);
+  }
 
   const suma = (k: 'cerut' | 'planificat' | 'croit' | 'banda' | 'intrat') => randuri.reduce((s, r) => s + r[k], 0);
   const comenzi = new Set(randuri.map((r) => r.comanda)).size;
@@ -109,6 +143,15 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
         {' · '}croit {suma('croit')} · pe bandă {suma('banda')} · în depozit {suma('intrat')} buc
       </p>
 
+      {f.eroare && <p className="eroare">{f.eroare}</p>}
+      {croieste && (
+        <p className="filtre">
+          <span className="slab">Bifează comenzile de pe același model și apasă</span>
+          <button form="croieste" className="principal">Croiește selectatele</button>
+          <span className="slab">— se face taierea cu tot ce le-a rămas. Pentru alte cantități pe mărimi: <Link href="/croit?vedere=ramas">Croit → Rămas de croit</Link>.</span>
+        </p>
+      )}
+      <form id="croieste" action={taie} />
       <div className="tabel-derulant">
         <table className="centralizator">
           <thead>
@@ -124,6 +167,7 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
               <th className="nr">Bandă</th>
               <th className="nr">În depozit</th>
               <th className="nr">Lipsesc</th>
+              {croieste && <th />}
             </tr>
           </thead>
           <tbody>
@@ -163,13 +207,21 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                     <td className="nr"><strong>{suma2(deModel, 'cerut')}</strong></td>
                     <td className="nr">{suma2(deModel, 'planificat') || '—'}</td>
                     <td colSpan={4} />
+                    {croieste && (
+                      <td>
+                        <button form="croieste" name="model" value={model} className="secundar">
+                          Croiește tot modelul
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )}
-                <RandCascada coloane={11}
+                <RandCascada coloane={croieste ? 12 : 11}
                   detalii={<MarimiComanda linii={culori} masuri={[['cerut', 'Cerut'], ['planificat', 'Planificat'], ['croit', 'Croit'],
                     ['banda', 'Pe bandă'], ['intrat', 'În depozit'], ['lipsesc', 'Lipsesc']]} />}
                   celule={<>
                     <td className="cascada">
+                      {croieste && <input type="checkbox" form="croieste" name="croieste" value={`${r.comanda}|${model}`} aria-label={`Croiește ${r.comanda}`} />}{' '}
                       <Link href={`/necesar/${encodeURIComponent(r.comanda)}`}>{r.comanda}</Link>{' '}
                       <span className="slab">{r.tip} · {r.brand} · P{r.prioritate}{r.stare === 'ciorna' && ' · ciornă'}{r.stare === 'de_aprobat' && ' · de aprobat'}</span>
                     </td>
@@ -183,6 +235,9 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                     <td className="nr">{suma2(x.randuri, 'banda') || '—'}</td>
                     <td className="nr">{suma2(x.randuri, 'intrat') || '—'}</td>
                     <td className="nr">{gata ? <span className="slab">gata</span> : lipsesc > 0 ? <strong>{lipsesc}</strong> : '—'}</td>
+                    {croieste && (
+                      <td><button form="croieste" name="una" value={`${r.comanda}|${model}`} className="buton">Croiește</button></td>
+                    )}
                   </>} />
                 </Fragment>
               );
