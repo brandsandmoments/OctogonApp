@@ -89,10 +89,17 @@ const ORE_OM = `
  * Fără operatori sau timp pe bucată nu se estimează nimic — o dată inventată e mai
  * rea decât niciuna.
  */
+/**
+ * Câți oameni lucrează la tranșă: cei alocați în „Cine lucrează" care n-au ieșit încă
+ * gata; fără nicio alocare, numărul scris la alimentare.
+ */
+const ALOCATI = `(SELECT count(DISTINCT x.angajat_id) FROM alocare_operatie x WHERE x.alimentare_id = ab.id AND x.gata_la IS NULL)`;
+const PERSOANE = `coalesce(nullif(${ALOCATI}, 0), ab.persoane)`;
+
 const ETA = `
-  CASE WHEN ab.persoane IS NOT NULL AND ab.timp_min_buc IS NOT NULL THEN
+  CASE WHEN ${PERSOANE} IS NOT NULL AND ab.timp_min_buc IS NOT NULL THEN
     adauga_zile_lucratoare(coalesce(ab.intrat_productie_la, ab.alimentat_la)::date,
-      greatest(1, ceil(${ORE_OM} / (ab.persoane * coalesce((SELECT valoare FROM parametru WHERE cheie = 'ore_pe_zi'), 8))))::int)
+      greatest(1, ceil(${ORE_OM} / (${PERSOANE} * coalesce((SELECT valoare FROM parametru WHERE cheie = 'ore_pe_zi'), 8))))::int)
   END`;
 
 const ETAPA = `
@@ -221,7 +228,7 @@ export async function alimenteaza(a: AlimentareNoua): Promise<{ id: string } | {
 export type DetaliiTransa = {
   transa: { id: string; cod: string; lot_id: string; comanda: string; prioritate: number; data_ceruta: string;
             produs: string; cod_sku: string; alimentat_la: string; responsabil: string | null;
-            persoane: number | null; timp_min_buc: string | null; observatii: string | null;
+            persoane: number | null; alocati: number; timp_min_buc: string | null; observatii: string | null;
             eta: string | null; marja_zile: number | null; ore_om: string | null } & Record<EtapaBanda, string | null>;
   marimi: { marime: string; cantitate: number }[];
   accesorii: { material_id: string; denumire: string; unitate: string; consumat: string }[];
@@ -233,7 +240,7 @@ export async function detaliiTransa(id: string): Promise<DetaliiTransa | null> {
       `SELECT ab.id, c.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot || '/B' || ab.numar AS cod,
               lc.id AS lot_id, c.numar AS comanda, c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
               p.denumire AS produs, p.cod_sku, to_char(ab.alimentat_la, 'YYYY-MM-DD HH24:MI') AS alimentat_la,
-              ab.responsabil, ab.persoane, ab.timp_min_buc::text AS timp_min_buc, ab.observatii,
+              ab.responsabil, ${PERSOANE}::int AS persoane, ${ALOCATI}::int AS alocati, ab.timp_min_buc::text AS timp_min_buc, ab.observatii,
               to_char(ab.intrat_productie_la, 'YYYY-MM-DD HH24:MI') AS intrat_productie_la,
               to_char(ab.iesit_productie_la, 'YYYY-MM-DD HH24:MI') AS iesit_productie_la,
               to_char(ab.ctc_la, 'YYYY-MM-DD HH24:MI') AS ctc_la,

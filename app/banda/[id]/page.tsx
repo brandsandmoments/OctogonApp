@@ -72,10 +72,12 @@ export default async function TransaPagina({
           <dd>{t.marja_zile === null ? '—' : `${t.marja_zile > 0 ? '+' : ''}${t.marja_zile}`} <span>zile</span></dd>
         </div>
         <div><dt>Ore de lucru</dt><dd>{t.ore_om ? cantitate(t.ore_om) : '—'}</dd></div>
-        <div><dt>Operatori</dt><dd>{t.persoane ?? '—'}</dd></div>
+        <div><dt>Operatori</dt><dd>{t.persoane ?? '—'} <span>{t.alocati ? 'alocați acum' : t.persoane ? 'de la alimentare' : ''}</span></dd></div>
       </dl>
       {t.responsabil && <p className="slab">Lucrează: {t.responsabil}</p>}
       {!t.eta && <p className="slab">Fără numărul de operatori și minutele pe bucată nu se estimează data în depozit.</p>}
+      <p className="slab">Operatorii estimării sunt oamenii alocați mai jos, în „Cine lucrează", care n-au ieșit încă gata
+        {t.alocati ? '' : ' — fără nicio alocare, numărul scris la alimentare'}. Data se recalculează la fiecare alocare.</p>
 
       <h2>Pe bandă</h2>
       <ol className="etape">
