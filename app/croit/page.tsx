@@ -1,8 +1,9 @@
 import { Stadiu, Termen } from '../Insigne';
 import Link from 'next/link';
+import AlegeOameni from './taiere/[id]/AlegeOameni';
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
-import { inchideComanda, puneInTaiere, ramasDeCroit, taieriDeschiseToate, taieriLaCroit, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
+import { croiesteDirect, inchideComanda, loturiCroite, oameniCroit, OPERATII, ramasDeCroit, taieriLaCroit, type LotCroit, type Operatie, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
 import { numarDinFormular } from '../lib/format';
 import { motiveCroit } from '../lib/planificare';
 import Cauta from '../Cauta';
@@ -31,9 +32,9 @@ const VEDERI: [string, string][] = [
  * „Taieri" sunt cele făcute și încă necroite, „Croite" cele terminate; se pot
  * grupa pe săptămâni, luni, trimestre sau ani.
  */
-export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; eroare?: string; cauta?: string }> }) {
+export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; eroare?: string; cauta?: string; pe?: string }> }) {
   await cere('croit');
-  const { vedere = 'toate', grupare, eroare, cauta } = await searchParams;
+  const { vedere = 'toate', grupare, eroare, cauta, pe } = await searchParams;
   // Croitul pornește pe săptămâni, strâns: altfel sunt sute de taieri de derulat.
   const g = grupareDinAdresa(grupare, 'saptamana');
 
@@ -47,7 +48,15 @@ export default async function Croit({ searchParams }: { searchParams: Promise<{ 
       </nav>
       {eroare && <p className="eroare">{eroare}</p>}
       <Cauta valoare={cauta} pastreaza={{ vedere, grupare }} placeholder="caută: model, comandă, produs, taiere" />
-      {vedere === 'ramas' ? <Ramas cauta={cauta} /> : (
+      {vedere === 'croite' && (
+        <div className="filtre">
+          {([['taieri', 'Pe taieri'], ['comenzi', 'Pe comenzi (PSF, PSC)'], ['modele', 'Pe modele']] as const).map(([k, nume]) => (
+            <Link key={k} href={`/croit?vedere=croite&pe=${k}${cauta ? `&cauta=${encodeURIComponent(cauta)}` : ''}`}
+                  className={`buton ${(pe ?? 'taieri') === k ? 'activ-buton' : ''}`}>{nume}</Link>
+          ))}
+        </div>
+      )}
+      {vedere === 'croite' && (pe === 'comenzi' || pe === 'modele') ? <CroitePe pe={pe} cauta={cauta} /> : vedere === 'ramas' ? <Ramas cauta={cauta} /> : (
         <>
           <Grupare ales={g} pastreaza={{ vedere, cauta }} />
           <Taieri vedere={vedere as VedereCroit} grupare={g} cauta={cauta} />
@@ -114,14 +123,74 @@ async function Taieri({ vedere, grupare, cauta }: { vedere: VedereCroit; grupare
   );
 }
 
+/**
+ * Croitele pe comenzi (PSF, PSC) sau pe modele: fiecare grupă cu totalul ei, iar
+ * dedesubt fiecare culoare croită, cu mărimile și taierea în care s-a tăiat — o comandă
+ * tăiată în două taieri apare de două ori, o taiere cu un PSF și un PSC apare la amândouă.
+ */
+async function CroitePe({ pe, cauta }: { pe: 'comenzi' | 'modele'; cauta?: string }) {
+  const lista = (await loturiCroite()).filter((l) => potriveste(cauta, l.cod, l.comanda, l.model, l.produs, l.taiere));
+  const grupe = new Map<string, LotCroit[]>();
+  for (const l of lista) {
+    const k = pe === 'comenzi' ? l.comanda : l.model;
+    grupe.set(k, [...(grupe.get(k) ?? []), l]);
+  }
+  return (
+    <>
+      <p className="sumar">{lista.reduce((s, l) => s + l.croit, 0)} buc croite · {grupe.size} {pe === 'comenzi' ? 'comenzi' : 'modele'} · {new Set(lista.map((l) => l.taiere)).size} taieri</p>
+      <p className="filtre"><Pliere semn={`croite-${pe}`} /></p>
+      {lista.length === 0 ? <p className="slab">Nimic croit.</p> : (
+        <div className="tabel-derulant">
+          <table className="centralizator">
+            <thead>
+              <tr><th>{pe === 'comenzi' ? 'Comandă' : 'Model'}</th><th>{pe === 'comenzi' ? 'Model' : 'Comandă'}</th><th>Culoare</th>
+                  <th>Mărimi croite</th><th className="nr">Croit</th><th>Taiere</th><th>Croit la</th></tr>
+            </thead>
+            <tbody>
+              {[...grupe].map(([k, loturi]) => (
+                <Fragment key={k}>
+                  <tr className="grupa-model">
+                    <td colSpan={4}>
+                      <strong>{k}</strong>{' '}
+                      <span className="slab">
+                        {pe === 'comenzi' ? `${loturi[0].tip} · ${loturi[0].brand} · ${loturi[0].model}` : `${new Set(loturi.map((l) => l.comanda)).size} comenzi`}
+                        {' · '}{new Set(loturi.map((l) => l.taiere)).size} {new Set(loturi.map((l) => l.taiere)).size === 1 ? 'taiere' : 'taieri'}
+                      </span>
+                    </td>
+                    <td className="nr"><strong>{loturi.reduce((s, l) => s + l.croit, 0)}</strong></td>
+                    <td colSpan={2} className="slab">{[...new Set(loturi.map((l) => l.taiere).filter(Boolean))].join(', ')}</td>
+                  </tr>
+                  {loturi.map((l) => (
+                    <tr key={l.lot_id}>
+                      <td><Link href={`/croit/${l.lot_id}`}>{l.cod}</Link></td>
+                      <td>{pe === 'comenzi' ? l.model : <>{l.comanda} <span className="slab">{l.tip}</span></>}</td>
+                      <td>{l.produs}</td>
+                      <td className="slab">{l.marimi ?? '—'}</td>
+                      <td className="nr">{l.croit}</td>
+                      <td>{l.taiere_id ? <Link href={`/croit/taiere/${l.taiere_id}`}>{l.taiere}</Link> : '—'}</td>
+                      <td className="slab">{l.croit_la}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 async function Ramas({ cauta }: { cauta?: string }) {
   const m = await poateModifica('croit');
-  const [toate, motive, deschise, inTaieri] = await Promise.all([ramasDeCroit(), motiveCroit(), taieriDeschiseToate(), taieriLaCroit('taieri')]);
+  const [toate, motive, inTaieri, om] = await Promise.all([ramasDeCroit(), motiveCroit(), taieriLaCroit('taieri'), oameniCroit()]);
   const lista = toate.filter((r) => potriveste(cauta, r.cod, r.comanda, r.produs, r.model));
   // Ce e pus deja într-o taiere, dar încă necroit: tot de croit, doar că se croiește din taierea lui.
   const puse = inTaieri.filter((t) => potriveste(cauta, t.cod, t.comenzi, t.model));
   const peModel = new Map<string, RamasDeCroit[]>();
   for (const r of lista) peModel.set(r.model_cheie, [...(peModel.get(r.model_cheie) ?? []), r]);
+  // În fiecare model, pe culori: comenzile aceleiași culori stau una lângă alta.
+  for (const [k, v] of peModel) peModel.set(k, [...v].sort((a, b) => a.produs.localeCompare(b.produs, 'ro') || (a.ordine ?? 0) - (b.ordine ?? 0)));
 
   async function stinge(date: FormData) {
     'use server';
@@ -131,8 +200,9 @@ async function Ramas({ cauta }: { cauta?: string }) {
     redirect(`/croit?vedere=ramas${e ? `&eroare=${encodeURIComponent(e)}` : ''}`);
   }
 
-  // Ce s-a scris pe mărimi; „tot" pe o comandă ia tot ce i-a rămas, pe mărimile lăsate goale.
-  async function taie(date: FormData) {
+  // Croitul direct: ce s-a tăiat pe mărimi („tot" ia tot ce a rămas, pe mărimile lăsate
+  // goale) și cine a lucrat. Abia acum se face taierea, deja croită.
+  async function croieste(date: FormData) {
     'use server';
     await cere('croit', 'modifica');
     const ramas = await ramasDeCroit(date.getAll('pl').map(String));
@@ -144,7 +214,9 @@ async function Ramas({ cauta }: { cauta?: string }) {
         return [x.marime_id, q] as [string, number];
       })),
     }));
-    const rez = await puneInTaiere(alocari, String(date.get('taiere') ?? '') || undefined);
+    const oameni = new Map((['intins', 'taiat', 'separat', 'termocolat'] as const)
+      .map((op) => [op, date.getAll(`om:${op}`).map(String).filter(Boolean)] as [Operatie, string[]]));
+    const rez = await croiesteDirect(alocari, oameni);
     if (typeof rez === 'string') redirect(`/croit?vedere=ramas&eroare=${encodeURIComponent(rez)}`);
     redirect(`/croit/taiere/${rez.id}`);
   }
@@ -152,7 +224,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
   return (
     <>
       <p className="sumar">
-        {lista.reduce((s, r) => s + r.disponibil, 0)} buc de pus în taieri · {lista.length} comenzi · {peModel.size} modele
+        {lista.reduce((s, r) => s + r.disponibil, 0)} buc de croit · {lista.length} comenzi · {peModel.size} modele
         {puse.length > 0 && <> · <strong>{puse.reduce((s, t) => s + t.cerut - t.croit, 0)} buc în {puse.length} {puse.length === 1 ? 'taiere începută' : 'taieri începute'}, încă necroite</strong></>}
       </p>
       {puse.length > 0 && (
@@ -177,15 +249,15 @@ async function Ramas({ cauta }: { cauta?: string }) {
               </tbody>
             </table>
           </div>
-          <h2>De pus în taieri</h2>
+          <h2>De croit</h2>
         </section>
       )}
       <p className="filtre"><Pliere semn="ramas" /></p>
       <datalist id="motive-croit">{motive.map((x) => <option key={x.id} value={x.nume} />)}</datalist>
       <p className="slab">
-        Scrie, la fiecare mărime, câte bucăți tai acum — doar unele mărimi, sau doar o parte dintr-o mărime. „Tot” ia tot ce
-        a rămas din comandă. Poți pune în aceeași taiere mai multe comenzi de pe același model (PSF cu PSF, PSF cu PSC).
-        Ce nu scrii rămâne aici.
+        Pe fiecare model, pe culori: scrie la fiecare comandă câte bucăți ai tăiat pe mărimi (sau bifează „tot"), alege cine
+        a lucrat și „Salvează croitul" — abia atunci se face taierea, deja croită. Se pot tăia împreună mai multe comenzi de pe
+        același model (PSF cu PSF, PSF cu PSC); o comandă se poate tăia și în mai multe taieri: ce nu tai acum rămâne aici.
       </p>
       {lista.length === 0 ? <p className="slab">{puse.length ? 'Tot ce e de croit e pus deja în taieri (mai sus).' : 'Nu a rămas nimic de croit.'}</p> : (
         <div className="tabel-derulant">
@@ -194,7 +266,6 @@ async function Ramas({ cauta }: { cauta?: string }) {
             <tbody>
               {[...peModel].map(([cheie, randuri]) => {
                 const formular = `t-${cheie}`;
-                const ale = deschise.filter((t) => t.model_cheie === cheie);
                 return (
                   <Fragment key={cheie}>
                     <tr className="grupa-model">
@@ -210,18 +281,10 @@ async function Ramas({ cauta }: { cauta?: string }) {
                       </td>
                       <td className="nr"><strong>{randuri.reduce((s, r) => s + r.disponibil, 0)}</strong></td>
                       <td>
-                        <form id={formular} action={taie} className="in-rand">
-                          <fieldset disabled={!m} className="fara-chenar">
-                            {randuri.map((r) => <input key={r.planificare_id} type="hidden" name="pl" value={r.planificare_id} />)}
-                            {ale.length > 0 && (
-                              <select name="taiere" defaultValue="" aria-label="În ce taiere">
-                                <option value="">taiere nouă</option>
-                                {ale.map((t) => <option key={t.id} value={t.id}>adaugă în {t.cod}</option>)}
-                              </select>
-                            )}
-                            <button>Fă taierea</button>
-                          </fieldset>
+                        <form id={formular} action={croieste}>
+                          {randuri.map((r) => <input key={r.planificare_id} type="hidden" name="pl" value={r.planificare_id} />)}
                         </form>
+                        <span className="slab">deschide și scrie ce tai</span>
                       </td>
                     </tr>
                     {randuri.map((r) => (
@@ -271,6 +334,22 @@ async function Ramas({ cauta }: { cauta?: string }) {
                         </td>
                       </tr>
                     ))}
+                    <tr className="cine-croieste">
+                      <td colSpan={7}>
+                        <strong>Cine a lucrat</strong>
+                        <span className="cine-operatii">
+                          {(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => (
+                            <label key={op}>
+                              <span>{OPERATII[op]}</span>
+                              <AlegeOameni nume={`om:${op}`} form={formular} croit={om.oameni} altii={om.altii} ales="" dezactivat={!m}
+                                obligatoriu={op === 'intins' || op === 'taiat'} />
+                            </label>
+                          ))}
+                        </span>
+                        <button form={formular} className="principal" disabled={!m}>Salvează croitul</button>
+                        <span className="slab"> — devine taierea (deja croită); ce nu tai rămâne aici.</span>
+                      </td>
+                    </tr>
                   </Fragment>
                 );
               })}

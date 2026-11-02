@@ -250,3 +250,7 @@ th.nr-auto, td.nr-auto { text-align: right; font-variant-numeric: tabular-nums; 
   border-radius: 1rem; background: var(--card); font-size: .85rem; cursor: pointer; white-space: nowrap; }
 .oameni-bife label:has(input:checked) { border-color: var(--text); background: var(--bej); font-weight: 600; }
 .oameni-bife input { margin: 0; }
+tr.cine-croieste td { background: color-mix(in srgb, var(--bej) 55%, transparent); padding: .6rem .75rem; }
+tr.cine-croieste .cine-operatii { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin: .4rem 0 .6rem; }
+tr.cine-croieste .cine-operatii > label { display: inline-flex; flex-direction: column; gap: .2rem; font-size: .85rem; }
+.alege-oameni { display: inline-flex; flex-wrap: wrap; gap: .3rem; align-items: center; }

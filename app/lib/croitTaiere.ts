@@ -233,6 +233,70 @@ export async function scoateDinTaiere(taiereId: string, lotId: string): Promise<
 }
 
 /**
+ * Croitul direct din „rămas de croit": ce s-a tăiat din fiecare comandă (pe mărimi) și
+ * cine a lucrat. Taierea se face abia acum, deja croită — numele ei e al comenzii cu cele
+ * mai multe bucăți, /T1, /T2. Ce nu s-a tăiat rămâne de croit. Doar comenzi de pe
+ * același model se taie împreună.
+ */
+export async function croiesteDirect(alocari: Alocare[], oameni: Map<Operatie, string[]>): Promise<{ id: string } | string> {
+  if (!(oameni.get('intins')?.length)) return 'Alege cine a întins.';
+  if (!(oameni.get('taiat')?.length)) return 'Alege cine a tăiat.';
+  const alese = alocari
+    .map((a) => ({ ...a, marimi: [...a.marimi].filter(([, q]) => q !== 0) }))
+    .filter((a) => a.marimi.length > 0);
+  if (alese.length === 0) return 'Scrie ce s-a tăiat (bucăți pe mărimi sau „tot").';
+  const ramas = await ramasDeCroit(alese.map((a) => a.planificareId));
+  for (const a of alese) {
+    const r = ramas.find((x) => x.planificare_id === a.planificareId);
+    if (!r) return 'O comandă nu mai e de croit.';
+    for (const [marime, q] of a.marimi) {
+      const m = r.marimi.find((x) => x.marime_id === marime);
+      if (!m || !Number.isInteger(q) || q < 0) return `${r.cod}: cantitate nevalidă.`;
+      if (q > m.disponibil) return `${r.cod}: la ${m.marime} au rămas de croit doar ${m.disponibil}.`;
+    }
+  }
+  if (new Set(ramas.filter((r) => alese.some((a) => a.planificareId === r.planificare_id)).map((r) => r.model_cheie)).size > 1) {
+    return 'Împreună se taie doar comenzi de pe același model.';
+  }
+
+  return cuOprire(() => caFirma(firmaCurenta(), async (c) => {
+    const id = await taiereNoua(c);
+    const croit = new Map<string, Map<string, number>>();
+    for (const a of alese) {
+      await c.query(`SELECT 1 FROM planificare WHERE id = $1 FOR UPDATE`, [a.planificareId]);
+      let lot: string;
+      try {
+        ({ rows: [{ id: lot }] } = await c.query<{ id: string }>(
+          `INSERT INTO lot_croit (firma_id, planificare_id, numar_lot, taiere_id)
+           VALUES (firma_curenta(), $1, (SELECT coalesce(max(numar_lot), 0) + 1 FROM lot_croit WHERE planificare_id = $1), $2)
+           RETURNING id`, [a.planificareId, id]));
+      } catch (e) {
+        if ((e as { code?: string }).code === '23514') opreste('Împreună se taie doar comenzi de pe același model.');
+        throw e;
+      }
+      for (const [marime, q] of a.marimi) {
+        await c.query(
+          `INSERT INTO lot_croit_cantitate (firma_id, lot_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)`,
+          [lot, marime, q]);
+      }
+      croit.set(lot, new Map(a.marimi));
+    }
+    for (const [operatie, cine] of oameni) {
+      for (const om of new Set(cine.filter(Boolean))) {
+        await c.query(
+          `INSERT INTO taiere_operatie (firma_id, taiere_id, componenta_id, operatie, angajat_id, inceput_la, terminat_la, fata_verificata)
+           VALUES (firma_curenta(), $1, NULL, $2, $3, now(), now(), $4)
+           ON CONFLICT ON CONSTRAINT taiere_operatie_un_om_pe_operatie DO NOTHING`, [id, operatie, om, operatie === 'intins']);
+      }
+    }
+    const e = await croiesteLoturiDeschise(c, { taiereId: id, croit, motivId: null, incheie: false, motivIncheiereId: null, observatiiIncheiere: '' });
+    if (e) opreste(e);
+    await c.query(`UPDATE taiere SET cod = coalesce(cod_taiere(id), cod) WHERE id = $1`, [id]);
+    return { id };
+  }));
+}
+
+/**
  * Schimbă ce intră într-o taiere încă neîncepută: pe fiecare comandă și mărime, câte
  * bucăți. Ce se scade se întoarce în „rămas de croit" (pentru altă taiere); se poate
  * crește până la cât a rămas din comandă și nu stă în alte taieri. O comandă rămasă
@@ -309,6 +373,33 @@ export type TaiereLaCroit = {
   taiate: number;
   imperecheat: boolean;
 };
+
+export type LotCroit = {
+  lot_id: string; cod: string; comanda: string; tip: string; brand: string; model: string; produs: string;
+  taiere_id: string | null; taiere: string | null; croit_la: string; croit: number;
+  marimi: string;   // „XS 4 · S 6"
+};
+
+/** Ce s-a croit, pe loturi (o comandă, o culoare, într-o taiere): pentru gruparea pe comenzi și pe modele. */
+export async function loturiCroite(): Promise<LotCroit[]> {
+  return interogare<LotCroit>(
+    `SELECT lc.id AS lot_id, c.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot AS cod, c.numar AS comanda,
+            c.tip::text AS tip, b.nume AS brand, coalesce(mo.denumire, p.denumire) AS model, p.denumire AS produs,
+            lc.taiere_id, t.cod AS taiere, to_char(lc.croit_la, 'YYYY-MM-DD') AS croit_la,
+            (SELECT coalesce(sum(cantitate), 0) FROM lot_croit_efectiv WHERE lot_id = lc.id)::int AS croit,
+            (SELECT string_agg(m.cod || ' ' || le.cantitate, ' · ' ORDER BY m.ordine) FROM lot_croit_efectiv le
+               JOIN marime m ON m.id = le.marime_id WHERE le.lot_id = lc.id AND le.cantitate > 0) AS marimi
+       FROM lot_croit lc
+       JOIN planificare pl   ON pl.id = lc.planificare_id
+       JOIN comanda_linie cl ON cl.id = pl.linie_id
+       JOIN comanda c        ON c.id = cl.comanda_id
+       JOIN brand b          ON b.id = c.brand_id
+       JOIN produs p         ON p.id = cl.produs_id
+       LEFT JOIN model mo    ON mo.id = p.model_id
+       LEFT JOIN taiere t    ON t.id = lc.taiere_id
+      WHERE lc.croit_la IS NOT NULL
+      ORDER BY lc.croit_la DESC, c.numar, p.denumire`);
+}
 
 /** Taierile: în lucru (necroite încă, cele mai vechi sus) și croite (cele mai noi sus). */
 export async function taieriLaCroit(vedere: VedereCroit): Promise<TaiereLaCroit[]> {
@@ -483,6 +574,16 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
     const { model_id: _, ...t } = taiere;
     return { taiere: t, componente, operatii, culori, loturi: [...loturi.values()], oameni, altii, rest_deschis: rest };
   });
+}
+
+/** Oamenii din producție pentru operațiile de croit: întâi cei de la croit, apoi ceilalți. */
+export async function oameniCroit(): Promise<{ oameni: { id: string; nume: string }[]; altii: { id: string; nume: string }[] }> {
+  const toti = await interogare<{ id: string; nume: string; croit: boolean }>(
+    `SELECT id, nume, functii && ARRAY['taietor', 'croit_auxiliar', 'sef_croit'] AS croit FROM angajat WHERE activ ORDER BY nume`);
+  return {
+    oameni: toti.filter((x) => x.croit).map(({ id, nume }) => ({ id, nume })),
+    altii: toti.filter((x) => !x.croit).map(({ id, nume }) => ({ id, nume })),
+  };
 }
 
 // ---------------------------------------------------------------- operații
