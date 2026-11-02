@@ -22,6 +22,11 @@ echo "==> migrări noi"
 sudo -H -u octogon bash -c "cd $COD && scripts/migreaza.sh '$MIGRARI_URL'"
 echo "==> construire"
 sudo -H -u octogon bash -c "cd $COD && npm run build"
+echo "==> aștept sincronizările în curs (financiar, magazine, livrări), ca repornirea să nu le taie"
+for i in $(seq 1 60); do
+  systemctl is-active --quiet octogon-financiar.service octogon-magazine.service octogon-livrari.service 2>/dev/null || break
+  sleep 10
+done
 echo "==> repornire"
 systemctl restart octogon.service
 sleep 3

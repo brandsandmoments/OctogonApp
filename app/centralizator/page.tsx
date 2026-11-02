@@ -8,7 +8,6 @@ import { modeleComenzi } from '../lib/modele';
 import { cere, interogare, poateModifica } from '../lib/sesiune';
 import { branduriActive, centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 import RandCascada from '../productie/RandCascada';
-import MarimiComanda from '../productie/MarimiComanda';
 import '../productie/productie.css';
 
 export const dynamic = 'force-dynamic';
@@ -178,8 +177,8 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
                   </tr>
                 )}
                 <RandCascada coloane={croieste ? 12 : 11}
-                  detalii={<MarimiComanda linii={culori} masuri={[['cerut', 'Cerut'], ['planificat', 'Planificat'], ['croit', 'Croit'],
-                    ['banda', 'Pe bandă'], ['intrat', 'În depozit'], ['lipsesc', 'Lipsesc']]} />}
+                  grila={{ linii: culori, masuri: [['cerut', 'Cerut'], ['planificat', 'Planificat'], ['croit', 'Croit'],
+                    ['banda', 'Pe bandă'], ['intrat', 'În depozit'], ['lipsesc', 'Lipsesc']] }}
                   celule={<>
                     <td className="cascada">
                       <Link href={`/necesar/${encodeURIComponent(r.comanda)}`}>{r.comanda}</Link>{' '}

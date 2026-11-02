@@ -13,7 +13,6 @@ import { parametriTimp } from '../lib/parametriTimp';
 import './productie.css';
 import FileProductie from './FileProductie';
 import RandCascada from './RandCascada';
-import MarimiComanda from './MarimiComanda';
 
 export const dynamic = 'force-dynamic';
 
@@ -244,7 +243,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
                       )}
                     </tr>
                     {c.linii.filter((l) => l.de_programat > 0).map((l) => (
-                      <RandCascada key={l.linie_id} coloane={m ? 8 : 7} detalii={<Marimi linii={[l]} />} celule={<>
+                      <RandCascada key={l.linie_id} coloane={m ? 8 : 7} grila={grilaLinie(l)} celule={<>
                         <td><input type="checkbox" name="linie" value={l.linie_id} disabled={!m} aria-label={`Programează ${l.produs}`} /></td>
                         <td className="cascada"><strong>{l.produs}</strong></td>
                         <td><Termen data={l.data_ceruta} /></td>
@@ -308,7 +307,7 @@ function TabelSaptamana({ s, lista, loturiPe, transePe, oameni, m, muta }: {
               <td colSpan={coloane}>{FAZE[g.k]} · {g.randuri.length} culori · {g.randuri.reduce((t, x) => t + x.bucati, 0)} buc</td>
             </tr>
           {g.randuri.map(({ c, l, p, bucati }) => (
-            <RandCascada key={p.id} coloane={coloane} detalii={<Marimi linii={[l]} />} celule={<>
+            <RandCascada key={p.id} coloane={coloane} grila={grilaLinie(l)} celule={<>
               <td className="cascada">
                 <Link href={`/necesar/${encodeURIComponent(c.numar)}`}>{c.numar}</Link> <strong>{l.produs}</strong>{' '}
                 <span className="slab">{c.tip} · P{c.prioritate}</span>
@@ -369,10 +368,11 @@ function InLucru({ c, l, loturi, transe, oameni }: {
   );
 }
 
-/** O comandă desfăcută: pe fiecare culoare și mărime — cerut, rămas de croit, croit, pe bandă, în depozit. */
-const Marimi = ({ linii }: { linii: LinieInPlan[] }) => (
-  <MarimiComanda linii={linii} masuri={[['cerut', 'Cerut'], ['rest', 'Rămas de croit'], ['croit', 'Croit'], ['banda', 'Pe bandă'], ['intrat', 'În depozit']]} />
-);
+/** O culoare desfăcută pe mărimi — cerut, rămas de croit, croit, pe bandă, în depozit —, ca date pentru grilă. */
+const grilaLinie = (l: LinieInPlan) => ({
+  linii: [{ produs: l.produs, cod_sku: l.cod_sku, marimi: l.marimi }],
+  masuri: [['cerut', 'Cerut'], ['rest', 'Rămas de croit'], ['croit', 'Croit'], ['banda', 'Pe bandă'], ['intrat', 'În depozit']] as [string, string][],
+});
 
 function grupa<T>(lista: T[], cheie: (x: T) => string): Map<string, T[]> {
   const pe = new Map<string, T[]>();

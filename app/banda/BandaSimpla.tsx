@@ -27,6 +27,9 @@ export default async function BandaSimpla({ m, cauta, parte }: { m: boolean; cau
   const lucru = inLucru.filter((t) => potriveste(cauta, t.cod, t.comanda, t.model, t.produs, t.oameni));
   const pe = new Map<string, LotDeDat[]>();
   for (const l of lista) pe.set(l.comanda, [...(pe.get(l.comanda) ?? []), l]);
+  // În lucru, pe comenzi: fiecare comandă se desface în culorile ei.
+  const peComanda = new Map<string, typeof lucru>();
+  for (const t of lucru) peComanda.set(t.comanda, [...(peComanda.get(t.comanda) ?? []), t]);
 
   async function da(date: FormData) {
     'use server';
@@ -50,6 +53,13 @@ export default async function BandaSimpla({ m, cauta, parte }: { m: boolean; cau
   }
 
   const q = cauta ? `&cauta=${encodeURIComponent(cauta)}` : '';
+  async function gataToate(date: FormData) {
+    'use server';
+    await cere('banda', 'modifica');
+    for (const id of date.getAll('id').map(String)) await iesitGata(id);
+    redirect(`/banda?vedere=in_lucru&ok=${encodeURIComponent('Comanda a ieșit gata.')}`);
+  }
+
   return (
     <>
       <div className="filtre">
@@ -125,15 +135,36 @@ export default async function BandaSimpla({ m, cauta, parte }: { m: boolean; cau
       </>}
 
       {parte === 'in_lucru' && <>
-      <h2>Date în lucru <span className="slab">· {lucru.reduce((s, t) => s + t.bucati, 0)} buc în {lucru.length} tranșe</span></h2>
+      <h2>Date în lucru <span className="slab">· {lucru.reduce((s, t) => s + t.bucati, 0)} buc · {peComanda.size} comenzi · {lucru.length} culori</span></h2>
+      <p className="filtre"><Pliere semn={`lucru-${cauta ?? ''}`} /></p>
       {lucru.length === 0 ? <p className="slab">Nimic în lucru.</p> : (
         <div className="tabel-derulant">
           <table className="centralizator">
             <thead><tr><th>Comandă · culoare</th><th>Mărimi</th><th className="nr">Buc</th><th>Intrat în lucru</th><th>În lucru de</th><th>Termen</th><th>Cine lucrează</th><th /></tr></thead>
             <tbody>
-              {lucru.map((t) => (
+              {[...peComanda].map(([comanda, ts]) => (
+                <Fragment key={comanda}>
+                  <tr className="grupa-model">
+                    <td colSpan={2}>
+                      <strong>{comanda}</strong> <span className="slab">{ts[0].model} · {ts.length} {ts.length === 1 ? 'culoare' : 'culori'} în lucru</span>
+                    </td>
+                    <td className="nr"><strong>{ts.reduce((s, t) => s + t.bucati, 0)}</strong></td>
+                    <td className="slab">{ts.map((t) => t.intrat_ora).sort()[0]}</td>
+                    <td><strong>{durata(Math.max(...ts.map((t) => t.minute)))}</strong></td>
+                    <td><Termen data={ts.map((t) => t.data_ceruta).sort()[0]} /></td>
+                    <td className="slab">{((n) => (n ? `${n} ${n === 1 ? 'om' : 'oameni'}` : '—'))(new Set(ts.flatMap((t) => t.oameni?.split(', ') ?? [])).size)}</td>
+                    <td>
+                      {m && ts.length > 1 && (
+                        <form action={gataToate}>
+                          {ts.map((t) => <input key={t.id} type="hidden" name="id" value={t.id} />)}
+                          <button className="secundar" title="Toate culorile comenzii au ieșit gata">Toate au ieșit gata</button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+              {ts.map((t) => (
                 <tr key={t.id}>
-                  <td><Link href={`/banda/${t.id}`}>{t.comanda}</Link> <strong>{culoare(t.produs, t.model)}</strong> <span className="slab">{t.model}</span></td>
+                  <td><Link href={`/banda/${t.id}`}><strong>{culoare(t.produs, t.model)}</strong></Link> <span className="slab">{t.cod.slice(comanda.length + 1)}</span></td>
                   <td className="slab">{t.marimi}</td>
                   <td className="nr">{t.bucati}</td>
                   <td className="slab">{t.intrat_ora}</td>
@@ -149,6 +180,8 @@ export default async function BandaSimpla({ m, cauta, parte }: { m: boolean; cau
                     )}
                   </td>
                 </tr>
+              ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
