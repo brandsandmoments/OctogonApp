@@ -93,16 +93,14 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
   if (linii.some((l) => !l.dataCeruta)) {
     return { ok: false, eroare: 'Fiecare linie are nevoie de data cerută în depozit.' };
   }
-  // La PSF, KAM-ul își asumă și perioada de vânzare: din ea se măsoară, săptămânal,
-  // cât de bine a citit piața. Fără ea, PSF-ul n-ar avea cu ce fi comparat.
-  if (cmd.tip === 'PSF') {
-    if (!cmd.kamId) return { ok: false, eroare: 'La PSF, alege KAM-ul care îl dă.' };
-    if (linii.some((l) => !l.vanzareDeLa || !l.vanzarePanaLa)) {
-      return { ok: false, eroare: 'La PSF, fiecare linie are nevoie de perioada în care crezi că se vinde.' };
-    }
-    if (linii.some((l) => l.vanzarePanaLa < l.vanzareDeLa)) {
-      return { ok: false, eroare: 'Perioada de vânzare se termină înainte să înceapă.' };
-    }
+  // La PSF și la PSC, KAM-ul își asumă și perioada în care se vinde stocul cerut: din
+  // ea se măsoară, săptămânal, cât de bine a citit piața (evaluarea KAM-ilor).
+  if (cmd.tip === 'PSF' && !cmd.kamId) return { ok: false, eroare: 'La PSF, alege KAM-ul care îl dă.' };
+  if (linii.some((l) => !l.vanzareDeLa || !l.vanzarePanaLa)) {
+    return { ok: false, eroare: 'Fiecare linie are nevoie de perioada în care estimezi că se vinde stocul cerut.' };
+  }
+  if (linii.some((l) => l.vanzarePanaLa < l.vanzareDeLa)) {
+    return { ok: false, eroare: 'Perioada de vânzare se termină înainte să înceapă.' };
   }
 
   try {

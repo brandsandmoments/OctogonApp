@@ -126,8 +126,8 @@ export default function FormularComanda({
             <tr>
               <th>Produs</th>
               <th>Cerut în depozit</th>
-              {tip === 'PSF' && <th>Se vinde de la</th>}
-              {tip === 'PSF' && <th>până la</th>}
+              <th>Se vinde de la</th>
+              <th>până la</th>
               {marimi.map((m) => (
                 <th key={m.id} className="nr">
                   {m.cod}
@@ -157,20 +157,16 @@ export default function FormularComanda({
                     aria-label="Data cerută în depozit"
                   />
                 </td>
-                {tip === 'PSF' && (
-                  <>
-                    <td>
-                      <input type="date" value={l.vanzareDeLa}
-                        onChange={(e) => schimbaLinie(i, { vanzareDeLa: e.target.value })}
-                        aria-label="Se vinde de la" />
-                    </td>
-                    <td>
-                      <input type="date" value={l.vanzarePanaLa} min={l.vanzareDeLa || undefined}
-                        onChange={(e) => schimbaLinie(i, { vanzarePanaLa: e.target.value })}
-                        aria-label="Se vinde până la" />
-                    </td>
-                  </>
-                )}
+                <td>
+                  <input type="date" value={l.vanzareDeLa}
+                    onChange={(e) => schimbaLinie(i, { vanzareDeLa: e.target.value })}
+                    aria-label="Se vinde de la" />
+                </td>
+                <td>
+                  <input type="date" value={l.vanzarePanaLa} min={l.vanzareDeLa || undefined}
+                    onChange={(e) => schimbaLinie(i, { vanzarePanaLa: e.target.value })}
+                    aria-label="Se vinde până la" />
+                </td>
                 {marimi.map((m) => (
                   <td key={m.id} className="nr">
                     <input
