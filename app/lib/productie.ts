@@ -37,10 +37,10 @@ type Rand = Omit<ComandaInPlan, 'stadiu' | 'cerut' | 'rest_de_croit' | 'croit' |
 };
 
 /**
- * Comenzile deschise (lansate, în producție) și cele programate în săptămâna
- * cerută, chiar dacă s-au închis între timp — ca săptămâna să arate și ce s-a terminat.
+ * Comenzile deschise (lansate, în producție) și cele programate în săptămânile
+ * cerute, chiar dacă s-au închis între timp — ca săptămâna să arate și ce s-a terminat.
  */
-export async function comenziInPlan(saptamana: string): Promise<ComandaInPlan[]> {
+export async function comenziInPlan(saptamani: string[]): Promise<ComandaInPlan[]> {
   const randuri = await interogare<Rand>(
     `WITH croit AS (
          SELECT pl.linie_id, le.marime_id, sum(le.cantitate)::int AS q
@@ -76,8 +76,8 @@ export async function comenziInPlan(saptamana: string): Promise<ComandaInPlan[]>
        LEFT JOIN banda bd  ON bd.linie_id = cl.id AND bd.marime_id = cc.marime_id
        LEFT JOIN intrat i  ON i.linie_id = cl.id AND i.marime_id = cc.marime_id
        LEFT JOIN rest rs   ON rs.linie_id = cl.id AND rs.marime_id = cc.marime_id
-      WHERE c.stare IN ('lansata', 'in_productie') OR ps.saptamana = $1::date
-      ORDER BY c.prioritate, c.numar`, [saptamana]);
+      WHERE c.stare IN ('lansata', 'in_productie') OR ps.saptamana = ANY ($1::date[])
+      ORDER BY c.prioritate, c.numar`, [saptamani]);
 
   const pe = new Map<string, { c: ComandaInPlan; linii: Map<string, Rand[]> }>();
   for (const r of randuri) {

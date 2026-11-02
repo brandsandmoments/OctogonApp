@@ -66,7 +66,7 @@ async function croit(): Promise<Grupa> {
 
 async function planificare(): Promise<Grupa> {
   const curenta = luni(azi());
-  const comenzi = await comenziInPlan(curenta);
+  const comenzi = await comenziInPlan([curenta]);
   const deProgramat = comenzi.filter((c) => !c.saptamana && c.stadiu !== 'gata');
   const ramase = comenzi.filter((c) => c.saptamana && c.saptamana < curenta && c.stadiu !== 'gata');
   const cate = (n: number) => (n === 1 ? 'comandă' : 'comenzi');
