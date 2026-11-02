@@ -12,7 +12,7 @@ import { parametriTimp } from '../lib/parametriTimp';
 import './productie.css';
 import FileProductie from './FileProductie';
 import RandCascada from './RandCascada';
-import { rangMarime } from '../lib/format';
+import MarimiComanda from './MarimiComanda';
 
 export const dynamic = 'force-dynamic';
 
@@ -320,41 +320,10 @@ function InLucru({ c, loturi, transe, oameni }: {
   );
 }
 
-/**
- * O comandă desfăcută: pe fiecare culoare (produs) și mărime — cerut, croit, pe
- * bandă, în depozit și ce a rămas de croit. Mărimile de la cea mai mică la cea mai mare.
- */
-function Marimi({ linii }: { linii: LinieInPlan[] }) {
-  const marimi = [...new Set(linii.flatMap((l) => l.marimi.map((x) => x.marime)))].sort((a, b) => rangMarime(a) - rangMarime(b));
-  const RANDURI: [keyof Omit<LinieInPlan['marimi'][number], 'marime'>, string][] = [
-    ['cerut', 'Cerut'], ['rest', 'Rămas de croit'], ['croit', 'Croit'], ['banda', 'Pe bandă'], ['intrat', 'În depozit'],
-  ];
-  return (
-    <div className="tabel-derulant">
-      <table className="marimi-comanda">
-        <thead>
-          <tr><th>Culoare</th><th />{marimi.map((x) => <th key={x}>{x}</th>)}<th>Total</th></tr>
-        </thead>
-        <tbody>
-          {linii.map((l) => RANDURI.map(([k, nume], i) => {
-            const total = l.marimi.reduce((t, x) => t + x[k], 0);
-            return (
-              <tr key={`${l.cod_sku}${k}`} className={`${k === 'cerut' ? 'cerut' : ''} ${i === 0 ? 'prima-culoare' : ''}`}>
-                {i === 0 && <td className="culoare" rowSpan={RANDURI.length}>{l.produs} <span className="slab">{l.cod_sku}</span></td>}
-                <td className="ce slab">{nume}</td>
-                {marimi.map((x) => {
-                  const v = l.marimi.find((y) => y.marime === x)?.[k];
-                  return <td key={x}>{v ? v : <span className="slab">—</span>}</td>;
-                })}
-                <td className="total">{total || <span className="slab">—</span>}</td>
-              </tr>
-            );
-          }))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+/** O comandă desfăcută: pe fiecare culoare și mărime — cerut, rămas de croit, croit, pe bandă, în depozit. */
+const Marimi = ({ linii }: { linii: LinieInPlan[] }) => (
+  <MarimiComanda linii={linii} masuri={[['cerut', 'Cerut'], ['rest', 'Rămas de croit'], ['croit', 'Croit'], ['banda', 'Pe bandă'], ['intrat', 'În depozit']]} />
+);
 
 function grupa<T>(lista: T[], cheie: (x: T) => string): Map<string, T[]> {
   const pe = new Map<string, T[]>();
