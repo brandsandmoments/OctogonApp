@@ -52,13 +52,8 @@ async function croit(): Promise<Grupa> {
       {
         titlu: 'Rămas de croit', numar: bucati, unitate: buc(bucati),
         detaliu: `${ramas.length} ${comenzi(ramas.length)}${presante.length ? ` · ${presante.length} cu termen în 3 zile sau trecut` : ''}`,
-        href: '/croit?vedere=ramas', actiune: 'Fă taieri',
+        href: '/croit?vedere=ramas', actiune: 'Croiește',
         ton: ramas.length === 0 ? 'verde' : presante.some((r) => intarziat(zilePanaLa(r.data_ceruta))) ? 'rosu' : presante.length ? 'galben' : 'neutru',
-      },
-      {
-        titlu: 'Taieri în lucru', numar: inLucru.length, unitate: inLucru.length === 1 ? 'taiere' : 'taieri',
-        detaliu: `${nr(inLucru.reduce((s, t) => s + t.cerut - t.croit, 0))} buc de croit`,
-        href: '/croit?vedere=taieri', actiune: 'Vezi taierile', ton: inLucru.length ? 'neutru' : 'verde',
       },
     ],
   };

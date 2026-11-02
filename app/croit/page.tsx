@@ -19,7 +19,6 @@ const VEDERI: [string, string][] = [
   ['toate', 'Toate'],
   ['croite', 'Croite'],
   ['ramas', 'Rămas de croit'],
-  ['taieri', 'Taieri'],
 ];
 
 
@@ -29,8 +28,8 @@ const VEDERI: [string, string][] = [
  * „Rămas de croit" e ce a trimis planificarea și n-a intrat încă în nicio taiere,
  * pe model și pe mărimi; de aici șefa de croit face taierile — ce se taie odată —
  * și tot de aici stinge, cu observații, o comandă care nu se mai croiește.
- * „Taieri" sunt cele făcute și încă necroite, „Croite" cele terminate; se pot
- * grupa pe săptămâni, luni, trimestre sau ani.
+ * O taiere se face abia la croire, deci „Croite" sunt taierile: pe taieri (grupate pe
+ * săptămâni, luni, trimestre, ani), pe comenzi sau pe modele.
  */
 export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; eroare?: string; cauta?: string; pe?: string }> }) {
   await cere('croit');

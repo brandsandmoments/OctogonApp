@@ -147,7 +147,7 @@ export default async function FisaTaierePagina({
 
   return (
     <main className="formular lat">
-      <p className="slab"><Link href="/croit?vedere=de_croit">← Croit</Link></p>
+      <p className="slab"><Link href="/croit?vedere=croite">← Croite</Link></p>
       <h1>{f.taiere.cod} · {f.taiere.model}</h1>
       <p className="sumar">
         {f.loturi.length} {f.loturi.length === 1 ? 'comandă' : 'comenzi'} ·{' '}
