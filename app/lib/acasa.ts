@@ -62,15 +62,16 @@ async function croit(): Promise<Grupa> {
 async function planificare(): Promise<Grupa> {
   const curenta = luni(azi());
   const comenzi = await comenziInPlan([curenta]);
-  const deProgramat = comenzi.filter((c) => !c.saptamana && c.stadiu !== 'gata');
-  const ramase = comenzi.filter((c) => c.saptamana && c.saptamana < curenta && c.stadiu !== 'gata');
+  // Comenzile cu culori încă neprogramate, și cele cu culori rămase din săptămânile trecute.
+  const deProgramat = comenzi.filter((c) => c.linii.some((l) => l.de_programat > 0));
+  const ramase = comenzi.filter((c) => c.linii.some((l) => l.stadiu !== 'gata' && l.plan.some((p) => p.saptamana < curenta)));
   const cate = (n: number) => (n === 1 ? 'comandă' : 'comenzi');
   return {
     nume: 'Producție',
     carduri: [
       {
         titlu: 'De programat', numar: deProgramat.length, unitate: cate(deProgramat.length),
-        detaliu: 'PSF și PSC lansate, fără săptămână de lucru',
+        detaliu: 'PSF și PSC cu culori încă neprogramate pe o săptămână',
         href: '/productie', actiune: 'Programează',
         ton: deProgramat.length === 0 ? 'verde' : deProgramat.some((c) => intarziat(zilePanaLa(c.data_ceruta))) ? 'rosu' : 'neutru',
       },

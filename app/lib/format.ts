@@ -44,3 +44,13 @@ export function rangMarime(m: string): number {
   const n = Number(t.replace(',', '.'));
   return Number.isFinite(n) && t !== '' ? 100 + n : 10_000;
 }
+
+/** O durată în minute, de citit: „45 min", „5 h 20 min", „2 zile 3 h". */
+export function durata(minute: number): string {
+  const m = Math.max(0, Math.round(minute));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+  const z = Math.floor(h / 24);
+  return `${z} ${z === 1 ? 'zi' : 'zile'}${h % 24 ? ` ${h % 24} h` : ''}`;
+}
