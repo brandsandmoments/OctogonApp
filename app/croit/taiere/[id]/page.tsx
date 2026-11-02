@@ -47,8 +47,15 @@ export default async function FisaTaierePagina({
   async function incepeOp(date: FormData) {
     'use server';
     await cereOperatorCroit();
-    inapoi(id, await incepe(id, String(date.get('componenta') ?? '') || null, String(date.get('operatie')) as Operatie,
-      String(date.get('operator') ?? '')));
+    // Unul sau mai mulți oameni deodată pe aceeași operație: fiecare primește rândul lui.
+    const cine = date.getAll('operator').map(String).filter(Boolean);
+    if (cine.length === 0) inapoi(id, 'Bifează cine lucrează.');
+    const erori: string[] = [];
+    for (const om of cine) {
+      const e = await incepe(id, String(date.get('componenta') ?? '') || null, String(date.get('operatie')) as Operatie, om);
+      if (e) erori.push(e);
+    }
+    inapoi(id, erori[0] ?? null);
   }
   async function terminaOp(date: FormData) {
     'use server';
@@ -91,7 +98,8 @@ export default async function FisaTaierePagina({
   }
 
   // O operație, cu fiecare om care lucrează la ea pe rândul lui (de la ce oră, până la ce
-  // oră) și, dedesubt, „Adaugă" — încă un om pe aceeași operație.
+  // oră) și, dedesubt, oamenii încă liberi de bifat: unul sau mai mulți încep deodată,
+  // și se mai pot adăuga oricând.
   const Rand = ({ operatie, componenta }: { operatie: Operatie; componenta: string | null }) => {
     const pe = f.operatii.filter((x) => x.operatie === operatie && x.componenta_id === componenta)
       .sort((a, b) => a.inceput_la.localeCompare(b.inceput_la));
@@ -126,8 +134,12 @@ export default async function FisaTaierePagina({
             <form action={incepeOp} className="in-rand"><fieldset disabled={!lucreaza} className="fara-chenar">
               <input type="hidden" name="operatie" value={operatie} />
               <input type="hidden" name="componenta" value={componenta ?? ''} />
-              <Oameni f={{ ...f, oameni: liberi }} ales={liberi.some((x) => x.id === eu) ? eu : ''} />
-              <button className={pe.length ? 'secundar' : ''}>{pe.length ? '+ Încă un om, începe acum' : 'Începe acum'}</button>
+              <span className="oameni-bife">
+                {liberi.map((x) => (
+                  <label key={x.id}><input type="checkbox" name="operator" value={x.id} defaultChecked={!pe.length && x.id === eu} /> {x.nume}</label>
+                ))}
+              </span>
+              <button className={pe.length ? 'secundar' : ''}>{pe.length ? '+ Adaugă bifații, încep acum' : 'Începe acum cu bifații'}</button>
             </fieldset></form>
           )}
         </td>

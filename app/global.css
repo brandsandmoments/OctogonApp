@@ -245,3 +245,8 @@ th.nr-auto, td.nr-auto { text-align: right; font-variant-numeric: tabular-nums; 
   main table.tabel-auto td { overflow-wrap: anywhere; }
 }
 .om-operatie { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; margin-bottom: .35rem; }
+.oameni-bife { display: inline-flex; flex-wrap: wrap; gap: .3rem; margin-right: .4rem; }
+.oameni-bife label { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .55rem; border: 1px solid var(--linie);
+  border-radius: 1rem; background: var(--card); font-size: .85rem; cursor: pointer; white-space: nowrap; }
+.oameni-bife label:has(input:checked) { border-color: var(--text); background: var(--bej); font-weight: 600; }
+.oameni-bife input { margin: 0; }
