@@ -576,33 +576,105 @@ export type CroitTaiere = {
  * aceea (un PSF și un PSC pe Negru), după bucățile croite de fiecare.
  */
 export async function inregistreazaCroitTaiere(d: CroitTaiere): Promise<string | null> {
-  return cuOprire(() => caFirma(firmaCurenta(), async (c) => {
-    const { rows: deschise } = await c.query<{ id: string; cod: string; produs_id: string }>(
-      `SELECT lc.id, cm.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot AS cod, cl.produs_id
-         FROM lot_croit lc
-         JOIN planificare pl   ON pl.id = lc.planificare_id
-         JOIN comanda_linie cl ON cl.id = pl.linie_id
-         JOIN comanda cm       ON cm.id = cl.comanda_id
-        WHERE lc.taiere_id = $1 AND lc.croit_la IS NULL AND pl.stadiu <> 'anulat'
-        FOR UPDATE OF lc`, [d.taiereId]);
-    if (deschise.length === 0) return 'Nu mai e nimic de croit în taierea asta.';
+  return cuOprire(() => caFirma(firmaCurenta(), (c) => croiesteLoturiDeschise(c, d)));
+}
 
-    const bucati = (lot: string) => [...(d.croit.get(lot)?.values() ?? [])].reduce((s, q) => s + Math.max(0, q), 0);
-    const { rows: masurat } = await c.query<{ produs_id: string; material_id: string; metri: string }>(
-      `SELECT produs_id, material_id, sum(metri)::text AS metri FROM taiere_material
-        WHERE taiere_id = $1 AND metri IS NOT NULL GROUP BY produs_id, material_id`, [d.taiereId]);
+/** Croitul loturilor încă deschise ale taierii, în tranzacția primită (vezi inregistreazaLot). */
+async function croiesteLoturiDeschise(c: PoolClient, d: CroitTaiere): Promise<string | null> {
+  const { rows: deschise } = await c.query<{ id: string; cod: string; produs_id: string }>(
+    `SELECT lc.id, cm.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot AS cod, cl.produs_id
+       FROM lot_croit lc
+       JOIN planificare pl   ON pl.id = lc.planificare_id
+       JOIN comanda_linie cl ON cl.id = pl.linie_id
+       JOIN comanda cm       ON cm.id = cl.comanda_id
+      WHERE lc.taiere_id = $1 AND lc.croit_la IS NULL AND pl.stadiu <> 'anulat'
+      FOR UPDATE OF lc`, [d.taiereId]);
+  if (deschise.length === 0) return 'Nu mai e nimic de croit în taierea asta.';
 
-    for (const lot of deschise) {
-      const consum = new Map<string, number>();
-      const total = deschise.filter((l) => l.produs_id === lot.produs_id).reduce((s, l) => s + bucati(l.id), 0);
-      for (const m of masurat.filter((x) => x.produs_id === lot.produs_id)) {
-        if (total > 0) consum.set(m.material_id, Number((Number(m.metri) * bucati(lot.id) / total).toFixed(3)));
-      }
-      await inregistreazaLot(c, {
-        lotId: lot.id, croit: d.croit.get(lot.id) ?? new Map(), motivId: d.motivId, consumMasurat: consum,
-        incheie: d.incheie, motivIncheiereId: d.motivIncheiereId, observatiiIncheiere: d.observatiiIncheiere,
-      }, lot.cod);
+  const bucati = (lot: string) => [...(d.croit.get(lot)?.values() ?? [])].reduce((s, q) => s + Math.max(0, q), 0);
+  const { rows: masurat } = await c.query<{ produs_id: string; material_id: string; metri: string }>(
+    `SELECT produs_id, material_id, sum(metri)::text AS metri FROM taiere_material
+      WHERE taiere_id = $1 AND metri IS NOT NULL GROUP BY produs_id, material_id`, [d.taiereId]);
+
+  for (const lot of deschise) {
+    const consum = new Map<string, number>();
+    const total = deschise.filter((l) => l.produs_id === lot.produs_id).reduce((s, l) => s + bucati(l.id), 0);
+    for (const m of masurat.filter((x) => x.produs_id === lot.produs_id)) {
+      if (total > 0) consum.set(m.material_id, Number((Number(m.metri) * bucati(lot.id) / total).toFixed(3)));
     }
+    await inregistreazaLot(c, {
+      lotId: lot.id, croit: d.croit.get(lot.id) ?? new Map(), motivId: d.motivId, consumMasurat: consum,
+      incheie: d.incheie, motivIncheiereId: d.motivIncheiereId, observatiiIncheiere: d.observatiiIncheiere,
+    }, lot.cod);
+  }
+  return null;
+}
+
+/**
+ * Taierea dintr-o singură salvare: ce se taie acum din fiecare comandă (pe mărimi) și
+ * cine a întins, tăiat, separat, termocolat. Ce se taie devine cantitatea taierii și
+ * se înregistrează drept croit; ce nu se taie acum rămâne în „rămas de croit", pentru
+ * altă taiere — fără motiv, pentru că e o împărțire, nu o lipsă. O comandă cu 0 iese
+ * din taiere. Oamenii se trec pe operații (ora de acum), cei deja trecuți rămân.
+ */
+export async function salveazaTaierea(d: {
+  taiereId: string;
+  cantitati: Map<string, Map<string, number>>;   // lot → mărime → bucăți tăiate acum
+  oameni: Map<Operatie, string[]>;               // operație → oamenii din producție
+}): Promise<string | null> {
+  if (!(d.oameni.get('intins')?.length)) return 'Alege cine a întins.';
+  if (!(d.oameni.get('taiat')?.length)) return 'Alege cine a tăiat.';
+  return cuOprire(() => caFirma(firmaCurenta(), async (c) => {
+    await c.query(`SELECT 1 FROM taiere WHERE id = $1 FOR UPDATE`, [d.taiereId]);
+    const { rows: loturi } = await c.query<{ id: string }>(
+      `SELECT id FROM lot_croit WHERE taiere_id = $1 AND croit_la IS NULL FOR UPDATE`, [d.taiereId]);
+    if (loturi.length === 0) opreste('Taierea e deja croită.');
+    for (const l of loturi) {
+      const noi = d.cantitati.get(l.id) ?? new Map<string, number>();
+      const { rows: limite } = await c.query<{ marime_id: string; marime: string; maxim: number }>(
+        `SELECT pc.marime_id, m.cod AS marime,
+                greatest(0, coalesce(r.rest, 0) - coalesce((SELECT sum(x.cantitate) FROM lot_croit o JOIN lot_croit_cantitate x ON x.lot_id = o.id
+                                    WHERE o.planificare_id = lc.planificare_id AND o.id <> lc.id AND o.croit_la IS NULL
+                                      AND x.marime_id = pc.marime_id), 0))::int AS maxim
+           FROM lot_croit lc
+           JOIN planificare_cantitate pc ON pc.planificare_id = lc.planificare_id
+           JOIN marime m ON m.id = pc.marime_id
+           LEFT JOIN planificare_rest_de_croit r ON r.planificare_id = lc.planificare_id AND r.marime_id = pc.marime_id
+          WHERE lc.id = $1`, [l.id]);
+      for (const lim of limite) {
+        const q = noi.get(lim.marime_id) ?? 0;
+        if (!Number.isInteger(q) || q < 0) opreste(`Cantitate nevalidă la ${lim.marime}.`);
+        if (q > lim.maxim) opreste(`La ${lim.marime} au rămas de croit doar ${lim.maxim}.`);
+        if (q === 0) await c.query(`DELETE FROM lot_croit_cantitate WHERE lot_id = $1 AND marime_id = $2`, [l.id, lim.marime_id]);
+        else await c.query(
+          `INSERT INTO lot_croit_cantitate (firma_id, lot_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)
+           ON CONFLICT (lot_id, marime_id) DO UPDATE SET cantitate = EXCLUDED.cantitate`, [l.id, lim.marime_id, q]);
+      }
+      await c.query(`DELETE FROM lot_croit WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM lot_croit_cantitate WHERE lot_id = $1)`, [l.id]);
+    }
+    const { rows: ramase } = await c.query<{ id: string }>(`SELECT id FROM lot_croit WHERE taiere_id = $1 AND croit_la IS NULL`, [d.taiereId]);
+    if (ramase.length === 0) opreste('Scrie ce se taie acum (cel puțin o bucată).');
+
+    for (const [operatie, cine] of d.oameni) {
+      for (const om of new Set(cine.filter(Boolean))) {
+        await c.query(
+          `INSERT INTO taiere_operatie (firma_id, taiere_id, componenta_id, operatie, angajat_id, inceput_la, terminat_la, fata_verificata)
+           VALUES (firma_curenta(), $1, NULL, $2, $3, now(), now(), $4)
+           ON CONFLICT ON CONSTRAINT taiere_operatie_un_om_pe_operatie DO NOTHING`, [d.taiereId, operatie, om, operatie === 'intins']);
+      }
+    }
+
+    // Ce s-a tăiat e exact cantitatea taierii: croitul se înregistrează fără motiv.
+    const croit = new Map<string, Map<string, number>>();
+    const { rows: cant } = await c.query<{ lot_id: string; marime_id: string; cantitate: number }>(
+      `SELECT lq.lot_id, lq.marime_id, lq.cantitate FROM lot_croit_cantitate lq JOIN lot_croit lc ON lc.id = lq.lot_id
+        WHERE lc.taiere_id = $1 AND lc.croit_la IS NULL`, [d.taiereId]);
+    for (const x of cant) croit.set(x.lot_id, (croit.get(x.lot_id) ?? new Map()).set(x.marime_id, x.cantitate));
+    const e = await croiesteLoturiDeschise(c, {
+      taiereId: d.taiereId, croit, motivId: null, incheie: false, motivIncheiereId: null, observatiiIncheiere: '',
+    });
+    if (e) opreste(e);
+    await c.query(`UPDATE taiere SET cod = coalesce(cod_taiere(id), cod) WHERE id = $1`, [d.taiereId]);
     return null;
   }));
 }

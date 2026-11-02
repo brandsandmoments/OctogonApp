@@ -2,7 +2,7 @@ import Link from 'next/link';
 import AlegeOameni from './AlegeOameni';
 import { notFound, redirect } from 'next/navigation';
 import {
-  corecteaza, fisaTaiere, incepe, inregistreazaCroitTaiere, OPERATII, schimbaCantitati, scoateDinTaiere, scrieMetri, termina,
+  corecteaza, fisaTaiere, incepe, OPERATII, salveazaTaierea, scoateDinTaiere, scrieMetri, termina,
   type FisaTaiere, type Operatie, type OperatieScrisa,
 } from '../../../lib/croitTaiere';
 import { cantitate, numarDinFormular } from '../../../lib/format';
@@ -12,6 +12,8 @@ import { poate } from '../../../lib/acces';
 import '../../../formulare.css';
 
 export const dynamic = 'force-dynamic';
+
+const OPERATII_TAIERE: Operatie[] = ['intins', 'taiat', 'separat', 'termocolat'];
 
 const inapoi = (id: string, e?: string | null): never =>
   redirect(e ? `/croit/taiere/${id}?eroare=${encodeURIComponent(e)}` : `/croit/taiere/${id}`);
@@ -77,34 +79,18 @@ export default async function FisaTaierePagina({
       String(date.get('metri') ?? '').trim() ? numarDinFormular(date.get('metri')) ?? -1 : null,
       String(date.get('defecte') ?? '')));
   }
-  async function croieste(date: FormData) {
+  // Toată taierea dintr-o salvare: ce se taie acum (pe mărimi) și cine a lucrat la fiecare operație.
+  async function salveaza(date: FormData) {
     'use server';
     await cere('croit', 'modifica');
-    const croit = new Map<string, Map<string, number>>();
-    for (const [k, v] of date.entries()) {
-      if (!k.startsWith('q:')) continue;
-      const [, lot, marime] = k.split(':');
-      croit.set(lot, (croit.get(lot) ?? new Map()).set(marime, numarDinFormular(v) ?? -1));
-    }
-    inapoi(id, await inregistreazaCroitTaiere({
-      taiereId: id, croit, motivId: String(date.get('motiv') ?? '') || null,
-      incheie: false, motivIncheiereId: null, observatiiIncheiere: '',
-    }));
-  }
-  // Înainte să înceapă: câte bucăți din fiecare comandă și mărime intră în taierea asta.
-  async function cantitati(date: FormData) {
-    'use server';
-    await cere('croit', 'modifica');
-    const noi = new Map<string, Map<string, number>>();
+    const cantitati = new Map<string, Map<string, number>>();
     for (const [k, v] of date.entries()) {
       if (!k.startsWith('t:')) continue;
       const [, lot, marime] = k.split(':');
-      noi.set(lot, (noi.get(lot) ?? new Map()).set(marime, String(v).trim() === '' ? 0 : numarDinFormular(v) ?? -1));
+      cantitati.set(lot, (cantitati.get(lot) ?? new Map()).set(marime, String(v).trim() === '' ? 0 : numarDinFormular(v) ?? -1));
     }
-    const r = await schimbaCantitati(id, noi);
-    if (typeof r === 'string') return inapoi(id, r);
-    if (r.stearsa) redirect('/croit?vedere=ramas');
-    inapoi(id, null);
+    const oameni = new Map(OPERATII_TAIERE.map((op) => [op, date.getAll(`om:${op}`).map(String).filter(Boolean)] as [Operatie, string[]]));
+    inapoi(id, await salveazaTaierea({ taiereId: id, cantitati, oameni }));
   }
   async function scoate(date: FormData) {
     'use server';
@@ -171,72 +157,55 @@ export default async function FisaTaierePagina({
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
 
-      {f.componente.length === 0 && (
-        <section>
-          <h2>Întins, tăiat, separat, termocolat <span className="slab">· pe toată taierea (modelul n-are încă materiale în rețetă)</span></h2>
-          <table><tbody>{(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => <Rand key={op} operatie={op} componenta={null} />)}</tbody></table>
-        </section>
-      )}
-      {f.componente.map((c) => {
-        const mat = f.culori.filter((m) => m.componenta_id === c.id);
-        return (
-          <section key={c.id}>
-            <h2>{c.nume}{c.principal && <span className="slab"> · material de bază</span>}</h2>
-            <table>
-              <tbody>
-                {(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => <Rand key={op} operatie={op} componenta={c.id} />)}
-              </tbody>
-            </table>
-            {mat.length > 0 && (
-              <table>
-                <thead><tr><th>Culoare · material</th><th className="nr">Teoretic</th><th>Metri folosiți</th><th>Defecte de țesătură</th><th /></tr></thead>
-                <tbody>
-                  {mat.map((m) => (
-                    <tr key={m.produs_id}>
-                      <td><strong>{m.culoare}</strong> · <Link href={`/stoc/${m.material_id}`}>{m.material}</Link></td>
-                      <td className="nr">{cantitate(m.teoretic)} <span className="slab">{m.unitate}</span></td>
-                      <td colSpan={3}>
-                        <form action={material} className="in-rand"><fieldset disabled={!lucreaza || !deschise.length} className="fara-chenar">
-                          <input type="hidden" name="componenta" value={c.id} />
-                          <input type="hidden" name="produs" value={m.produs_id} />
-                          <input name="metri" defaultValue={m.metri ? cantitate(m.metri) : ''} inputMode="decimal" className="bucati"
-                                 aria-label={`Metri ${m.culoare}`} />
-                          <input name="defecte" defaultValue={m.defecte ?? ''} placeholder="fără defecte" aria-label={`Defecte ${m.culoare}`} />
-                          <button>Salvează</button>
-                        </fieldset></form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
-        );
-      })}
+      {deschise.length > 0 ? (
+        <>
+          {f.componente.length > 0 && f.culori.length > 0 && (
+            <details>
+              <summary className="slab">metri de material pe culori (opțional, înainte de salvare)</summary>
+              {f.componente.map((c) => {
+                const mat = f.culori.filter((m) => m.componenta_id === c.id);
+                return mat.length === 0 ? null : (
+                  <table key={c.id}>
+                    <thead><tr><th>{c.nume} · culoare</th><th className="nr">Teoretic</th><th>Metri folosiți · defecte</th></tr></thead>
+                    <tbody>
+                      {mat.map((m) => (
+                        <tr key={m.produs_id}>
+                          <td><strong>{m.culoare}</strong> · <Link href={`/stoc/${m.material_id}`}>{m.material}</Link></td>
+                          <td className="nr">{cantitate(m.teoretic)} <span className="slab">{m.unitate}</span></td>
+                          <td>
+                            <form action={material} className="in-rand"><fieldset disabled={!lucreaza} className="fara-chenar">
+                              <input type="hidden" name="componenta" value={c.id} />
+                              <input type="hidden" name="produs" value={m.produs_id} />
+                              <input name="metri" defaultValue={m.metri ? cantitate(m.metri) : ''} inputMode="decimal" className="bucati"
+                                     aria-label={`Metri ${m.culoare}`} />
+                              <input name="defecte" defaultValue={m.defecte ?? ''} placeholder="fără defecte" aria-label={`Defecte ${m.culoare}`} />
+                              <button className="secundar">Salvează</button>
+                            </fieldset></form>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })}
+            </details>
+          )}
 
-      <h2>După tăiere</h2>
-      <table><tbody><Rand operatie="imperecheat" componenta={null} /></tbody></table>
-
-      {neinceputa && sef && deschise.length > 0 && (
-        <section className="ce-intra">
-          <h2>Ce intră în taierea asta <span className="slab">· se poate schimba până începe întinsul</span></h2>
-          <p className="slab">
-            Taie doar o parte: scade bucățile pe mărimi (sau pune 0) și salvează — ce scoți se întoarce în
-            <Link href="/croit?vedere=ramas"> rămas de croit</Link>, de unde intră în altă taiere.
-          </p>
-          <form action={cantitati}><fieldset className="fara-chenar">
+          <form action={salveaza} className="fisa-taiere"><fieldset disabled={!sef} className="fara-chenar">
+            <h2>1 · Ce se taie acum</h2>
+            <p className="slab">Pe fiecare mărime, câte bucăți tai acum. Ce nu tai rămâne în rămas de croit, pentru altă taiere.</p>
             <table>
               <tbody>
                 {deschise.map((l) => (
                   <tr key={l.id}>
-                    <td>{l.cod} <span className="slab">{l.produs}</span></td>
+                    <td><strong>{l.produs}</strong> <span className="slab">{l.cod}</span></td>
                     <td>
                       <span className="marimi-croit">
                         {l.marimi.map((x) => (
                           <label key={x.marime_id}>
                             <span className="slab">{x.marime} · din {x.maxim}</span>
                             <input name={`t:${l.id}:${x.marime_id}`} defaultValue={x.cerut} inputMode="numeric" className="bucati"
-                                   aria-label={`${l.cod} ${x.marime}, cel mult ${x.maxim}`} />
+                                   aria-label={`${l.produs} ${x.marime}, cel mult ${x.maxim}`} />
                           </label>
                         ))}
                       </span>
@@ -245,56 +214,77 @@ export default async function FisaTaierePagina({
                 ))}
               </tbody>
             </table>
-            <button>Salvează ce intră în taiere</button>
-          </fieldset></form>
-          <details>
-            <summary className="slab">scoate o comandă întreagă din taiere</summary>
+
+            <h2>2 · Cine a lucrat</h2>
             <table>
               <tbody>
-                {deschise.map((l) => (
-                  <tr key={l.id}>
-                    <td>{l.cod} <span className="slab">{l.produs}</span></td>
-                    <td>
-                      <form action={scoate} className="in-rand"><fieldset className="fara-chenar">
-                        <input type="hidden" name="lot" value={l.id} />
-                        <button>Scoate — se întoarce în rămas de croit</button>
-                      </fieldset></form>
-                    </td>
-                  </tr>
-                ))}
+                {OPERATII_TAIERE.map((op) => {
+                  const deja = f.operatii.filter((o) => o.operatie === op);
+                  return (
+                    <tr key={op}>
+                      <td><strong>{OPERATII[op]}</strong>{op === 'termocolat' && <span className="slab"> · dacă e cazul</span>}
+                        {deja.length > 0 && <div className="slab">deja: {deja.map((o) => o.operator).join(', ')}</div>}</td>
+                      <td>
+                        <AlegeOameni nume={`om:${op}`} croit={f.oameni} altii={f.altii} dezactivat={!sef}
+                          ales={(op === 'intins' || op === 'taiat') && f.oameni.some((x) => x.id === eu) ? eu : ''}
+                          obligatoriu={(op === 'intins' || op === 'taiat') && deja.length === 0} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </details>
-        </section>
-      )}
+            <div className="actiuni"><button className="principal">Salvează taierea</button></div>
+            <p className="slab">La salvare: bucățile scrise trec drept croite (și scad materialul din stoc), oamenii se trec pe operații.</p>
+          </fieldset></form>
 
-      <h2>Comenzile din taiere</h2>
-      {deschise.length > 0 ? (
-        <form action={croieste}><fieldset disabled={!sef} className="fara-chenar">
-          <p className="lipsa">
-            Scrie, pe fiecare mărime, câte bucăți s-au croit efectiv (căsuțele pornesc de la cât s-a cerut). Apasă
-            „Înregistrează croitul" doar după tăiere: bucățile scrise trec drept croite, iar ce lipsește rămâne de croit.
-          </p>
-          <ComenziInTaiere f={f} editabil />
           {neinceputa && sef && (
-            <p className="slab">
-              Taierea n-a început: ce intră în ea se schimbă mai sus; se mai pot adăuga comenzi din <Link href="/croit?vedere=ramas">rămas de croit</Link>.
-            </p>
+            <details>
+              <summary className="slab">scoate o comandă întreagă din taiere</summary>
+              <table>
+                <tbody>
+                  {deschise.map((l) => (
+                    <tr key={l.id}>
+                      <td>{l.cod} <span className="slab">{l.produs}</span></td>
+                      <td>
+                        <form action={scoate} className="in-rand"><fieldset className="fara-chenar">
+                          <input type="hidden" name="lot" value={l.id} />
+                          <button>Scoate — se întoarce în rămas de croit</button>
+                        </fieldset></form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
           )}
-          <div className="antet-comanda">
-            <label>
-              <span>Motiv, dacă diferă de cerut</span>
-              <Motive motive={motive} nume="motiv" />
-            </label>
-            <p className="slab lat">
-              Metrii scriși pe fiecare culoare scad din stoc, împărțiți pe comenzile culorii după bucățile croite; unde nu
-              s-au scris, scade consumul teoretic. Ce iese mai puțin decât s-a cerut se întoarce în „rămas de croit".
-            </p>
-            <div className="actiuni"><button className="principal">Înregistrează croitul taierii</button></div>
-          </div>
-        </fieldset></form>
+        </>
       ) : (
         <>
+          <h2>Cine a lucrat</h2>
+          <table>
+            <tbody>
+              {OPERATII_TAIERE.map((op) => {
+                const pe = f.operatii.filter((o) => o.operatie === op);
+                return (
+                  <tr key={op}>
+                    <td><strong>{OPERATII[op]}</strong></td>
+                    <td>
+                      {pe.length === 0 ? <span className="slab">—</span> : pe.map((o) => (
+                        <div key={o.id} className="om-operatie">
+                          <span><strong>{o.operator}</strong>{o.terminat_la && <span className="slab"> · {ora(o.terminat_la)}</span>}</span>
+                          {sef && <Corectura o={o} f={f} actiune={corecteazaOp} />}
+                        </div>
+                      ))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <h2>După tăiere</h2>
+          <table><tbody><Rand operatie="imperecheat" componenta={null} /></tbody></table>
+          <h2>Ce s-a croit</h2>
           <ComenziInTaiere f={f} />
           {f.rest_deschis > 0 && (
             <p className="slab">Au rămas {f.rest_deschis} buc necroite din comenzile taierii: sunt în <Link href="/croit?vedere=ramas">rămas de croit</Link>.</p>

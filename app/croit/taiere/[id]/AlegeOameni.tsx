@@ -9,7 +9,9 @@ type Om = { id: string; nume: string };
  * încă unul — câți e nevoie. Oamenii din producție: întâi cei de la croit, apoi toți
  * ceilalți. Fiecare listă trimite un `operator`; cel de pe server îi pornește pe toți.
  */
-export default function AlegeOameni({ croit, altii, ales, dezactivat }: { croit: Om[]; altii: Om[]; ales: string; dezactivat: boolean }) {
+export default function AlegeOameni({ croit, altii, ales, dezactivat, nume = 'operator', obligatoriu = true }: {
+  croit: Om[]; altii: Om[]; ales: string; dezactivat: boolean; nume?: string; obligatoriu?: boolean;
+}) {
   const [liste, setListe] = useState<string[]>([ales]);
   const optiuni = (
     <>
@@ -22,7 +24,7 @@ export default function AlegeOameni({ croit, altii, ales, dezactivat }: { croit:
     <span className="alege-oameni">
       {liste.map((v, i) => (
         <span key={i} className="in-rand">
-          <select name="operator" value={v} required={i === 0} disabled={dezactivat} aria-label="Cine"
+          <select name={nume} value={v} required={obligatoriu && i === 0} disabled={dezactivat} aria-label="Cine"
                   onChange={(e) => setListe(liste.map((x, j) => (j === i ? e.target.value : x)))}>
             {optiuni}
           </select>
