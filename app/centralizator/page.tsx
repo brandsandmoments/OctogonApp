@@ -17,7 +17,7 @@ type Cautare = { tip?: string; brand?: string; cauta?: string; toate?: string; s
  * cerut → planificat → croit → bandă → intrat. Filtrele stau în adresă, ca un link
  * trimis pe WhatsApp să arate exact ce vede cel care l-a trimis.
  *
- * Filele sunt stadiile: necroite, croite, în lucru, gata. Necroitele se grupează pe
+ * Filele sunt stadiile: rămas de croit, croit, în lucru, în depozit. Rămasele se grupează pe
  * model, pentru că la croit mai multe PSF și PSC pe același model se pot tăia
  * împreună.
  */

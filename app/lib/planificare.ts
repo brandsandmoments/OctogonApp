@@ -68,7 +68,7 @@ export async function deplanificat(cauta?: string): Promise<LinieDePlanificat[]>
  * așa trebuie cât timp stocul de ață și etichete nu e încă ținut în aplicație:
  * altfel nicio planificare n-ar putea pleca la croit.
  */
-const ACOPERIRE = `
+export const ACOPERIRE = `
   SELECT r.planificare_id, r.material_id, r.rezervat,
          s.stoc,
          EXISTS (SELECT 1 FROM produs_material pm

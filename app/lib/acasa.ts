@@ -3,8 +3,9 @@ import { deAlimentat, transe } from './banda';
 import { ramasDeCroit, taieriLaCroit } from './croitTaiere';
 import { comenziDepozit } from './depozit';
 import { numarePeSectiuni } from './dezvoltare';
-import { zilePanaLa } from './format';
-import { deplanificat, planificariActive } from './planificare';
+import { azi, zilePanaLa } from './format';
+import { luni } from './perioade';
+import { comenziInPlan } from './productie';
 import { comenziMagazine } from './magazine';
 import { alerte, produseMagazine } from './produse';
 import { psfDeAprobat } from './aprobare';
@@ -64,23 +65,24 @@ async function croit(): Promise<Grupa> {
 }
 
 async function planificare(): Promise<Grupa> {
-  const [deplan, active] = await Promise.all([deplanificat(), planificariActive()]);
-  const linii = deplan.filter((l) => l.rest > 0);
-  const deTrimis = active.filter((p) => ['gata_de_lansat', 'blocat_materiale', 'fara_cantitate'].includes(p.stadiu));
-  const bucati = linii.reduce((s, l) => s + l.rest, 0);
+  const curenta = luni(azi());
+  const comenzi = await comenziInPlan(curenta);
+  const deProgramat = comenzi.filter((c) => !c.saptamana && c.stadiu !== 'gata');
+  const ramase = comenzi.filter((c) => c.saptamana && c.saptamana < curenta && c.stadiu !== 'gata');
+  const cate = (n: number) => (n === 1 ? 'comandă' : 'comenzi');
   return {
-    nume: 'Planificare',
+    nume: 'Producție',
     carduri: [
       {
-        titlu: 'De planificat', numar: bucati, unitate: buc(bucati),
-        detaliu: `${linii.length} ${linii.length === 1 ? 'linie' : 'linii'} de comandă`,
-        href: '/planificare', actiune: 'Planifică',
-        ton: linii.length === 0 ? 'verde' : linii.some((l) => intarziat(zilePanaLa(l.data_ceruta))) ? 'rosu' : 'neutru',
+        titlu: 'De programat', numar: deProgramat.length, unitate: cate(deProgramat.length),
+        detaliu: 'PSF și PSC lansate, fără săptămână de lucru',
+        href: '/productie', actiune: 'Programează',
+        ton: deProgramat.length === 0 ? 'verde' : deProgramat.some((c) => intarziat(zilePanaLa(c.data_ceruta))) ? 'rosu' : 'neutru',
       },
       {
-        titlu: 'Materiale de bifat', numar: deTrimis.length, unitate: deTrimis.length === 1 ? 'planificare' : 'planificări',
-        detaliu: 'pleacă la croit doar cu toate materialele bifate',
-        href: '/planificare#de-trimis', actiune: 'Bifează', ton: deTrimis.length ? 'galben' : 'verde',
+        titlu: 'Rămase din săptămânile trecute', numar: ramase.length, unitate: cate(ramase.length),
+        detaliu: 'programate și încă neterminate',
+        href: '/productie', actiune: 'Vezi săptămâna', ton: ramase.length ? 'galben' : 'verde',
       },
     ],
   };
@@ -96,7 +98,7 @@ async function banda(): Promise<Grupa> {
       {
         titlu: 'De dat pe bandă', numar: bucati, unitate: buc(bucati),
         detaliu: `${loturi.length} ${loturi.length === 1 ? 'lot croit' : 'loturi croite'}`,
-        href: '/banda', actiune: 'Alimentează', ton: loturi.length ? 'neutru' : 'verde',
+        href: '/productie', actiune: 'Intră în lucru', ton: loturi.length ? 'neutru' : 'verde',
       },
       {
         titlu: 'Pe bandă, peste termen', numar: intarziate.length, unitate: intarziate.length === 1 ? 'tranșă' : 'tranșe',

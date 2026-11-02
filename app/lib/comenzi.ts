@@ -135,6 +135,8 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
           );
         }
       }
+      // Lansată, pleacă direct la croit: nu mai trece prin planificare.
+      if (cmd.lanseaza && !cmd.deAprobat) await c.query(`SELECT planifica_automat($1)`, [id]);
       return { ok: true as const, numar, deAprobat: Boolean(cmd.lanseaza && cmd.deAprobat) };
     });
   } catch (e) {

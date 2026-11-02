@@ -27,14 +27,15 @@ export type Filtre = { tip?: string; brand?: string; cauta?: string; toate?: boo
 
 /**
  * Stadiul unei linii de comandă (un produs, toate mărimile), după cel mai
- * departe pas atins: gata când a intrat tot în depozit sau linia s-a închis; în
- * lucru când ceva a intrat pe bandă; croită când s-a croit ceva; altfel necroită.
+ * departe pas atins: în depozit când a intrat tot sau linia s-a închis; în lucru
+ * când ceva a intrat pe bandă; croit când s-a croit ceva; altfel rămas de croit —
+ * o comandă lansată ajunge aici direct, fără planificare.
  */
 export const STADII_LINIE = {
-  necroita: 'Necroite',
-  croita: 'Croite',
+  necroita: 'Rămas de croit',
+  croita: 'Croit',
   in_lucru: 'În lucru',
-  gata: 'Gata',
+  gata: 'În depozit',
 } as const;
 export type StadiuLinie = keyof typeof STADII_LINIE;
 

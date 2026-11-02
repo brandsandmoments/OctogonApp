@@ -2,7 +2,7 @@ import type { PoolClient } from 'pg';
 import { caFirma } from './db';
 import { inregistreazaLot, Refuz } from './croit';
 import { motivLiber } from './motive';
-import { incheiePlanificare } from './planificare';
+import { ACOPERIRE, incheiePlanificare } from './planificare';
 import { firmaCurenta, interogare } from './sesiune';
 
 /**
@@ -47,27 +47,32 @@ export type RamasDeCroit = {
   model: string;
   fara_model: boolean;        // fără model nu se poate tăia cu alte culori
   ordine: number | null;
+  saptamana: string | null;   // lunea săptămânii pe care e programată comanda în Producție
+  stofa_lipsa: boolean;       // stocul de stofă principală nu ajunge (în ordinea priorității)
   in_taieri: number;          // bucăți puse deja în taieri încă necroite
   marimi: { marime_id: string; marime: string; planificat: number; croit: number; in_taieri: number; disponibil: number }[];
   disponibil: number;
 };
 
 /**
- * Ce a trimis planificarea la croit și încă n-a intrat în nicio taiere: pe mărimi,
+ * Ce e la croit (o comandă lansată ajunge aici singură) și încă n-a intrat în nicio taiere: pe mărimi,
  * planificat minus croit minus ce stă deja în taieri necroite. Un PSF tăiat
  * parțial rămâne aici cu restul, până se croiește sau până îl închide croitul.
- * Ordinea e cea pusă de planificare.
+ * Întâi ce e programat mai devreme în Producție, apoi ordinea de croit.
  */
 export async function ramasDeCroit(planificari?: string[]): Promise<RamasDeCroit[]> {
   const randuri = await interogare<Omit<RamasDeCroit, 'marimi' | 'disponibil' | 'in_taieri'> & RamasDeCroit['marimi'][number]>(
     `WITH deschis AS (
          SELECT lc.planificare_id, lq.marime_id, sum(lq.cantitate)::int AS q
            FROM lot_croit lc JOIN lot_croit_cantitate lq ON lq.lot_id = lc.id
-          WHERE lc.croit_la IS NULL GROUP BY lc.planificare_id, lq.marime_id)
+          WHERE lc.croit_la IS NULL GROUP BY lc.planificare_id, lq.marime_id),
+     lipsa AS (
+         SELECT DISTINCT a.planificare_id FROM (${ACOPERIRE}) a WHERE a.principal AND a.cumulat > a.stoc)
      SELECT r.planificare_id, c.numar || '/P' || pl.numar_transa AS cod, c.numar AS comanda, c.tip::text AS tip,
             c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta, p.denumire AS produs,
             coalesce(p.model_id, p.id)::text AS model_cheie, coalesce(mo.denumire, p.denumire) AS model,
             p.model_id IS NULL AS fara_model, pl.ordine_croit AS ordine,
+            to_char(ps.saptamana, 'YYYY-MM-DD') AS saptamana, pl.id IN (SELECT planificare_id FROM lipsa) AS stofa_lipsa,
             r.marime_id, m.cod AS marime, r.planificat, r.croit, coalesce(d.q, 0) AS in_taieri,
             greatest(r.rest - coalesce(d.q, 0), 0)::int AS disponibil
        FROM planificare_rest_de_croit r
@@ -78,9 +83,10 @@ export async function ramasDeCroit(planificari?: string[]): Promise<RamasDeCroit
        LEFT JOIN model mo    ON mo.id = p.model_id
        JOIN marime m         ON m.id = r.marime_id
        LEFT JOIN deschis d   ON d.planificare_id = r.planificare_id AND d.marime_id = r.marime_id
+       LEFT JOIN plan_saptamana ps ON ps.comanda_id = c.id
       WHERE pl.stadiu IN ('lansat_spre_croit', 'in_croit')
         AND ($1::uuid[] IS NULL OR pl.id = ANY ($1::uuid[]))
-      ORDER BY pl.ordine_croit NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, m.ordine`,
+      ORDER BY ps.saptamana NULLS LAST, pl.ordine_croit NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, m.ordine`,
     [planificari ?? null],
   );
   const pe = new Map<string, RamasDeCroit>();
@@ -199,6 +205,8 @@ export async function puneInTaiere(alocari: Alocare[], taiereId?: string): Promi
           [lot, marime, q]);
       }
     }
+    // Numele: comanda cu cele mai multe bucăți din taiere, /T1, /T2 — a câta taiere a ei.
+    await c.query(`UPDATE taiere SET cod = cod_taiere(id) WHERE id = $1`, [id]);
     return { id: id! };
   }));
 }
@@ -218,6 +226,7 @@ export async function scoateDinTaiere(taiereId: string, lotId: string): Promise<
     }
     await c.query(`DELETE FROM lot_croit WHERE id = $1`, [lotId]);
     await c.query(`DELETE FROM taiere WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM lot_croit WHERE taiere_id = $1)`, [taiereId]);
+    await c.query(`UPDATE taiere SET cod = coalesce(cod_taiere(id), cod) WHERE id = $1`, [taiereId]);
     return null;
   }));
 }
