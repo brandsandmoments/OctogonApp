@@ -137,7 +137,12 @@ export default async function FisaTaierePagina({
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
 
-      {f.componente.length === 0 && <p className="slab">Modelul nu are materii prime în rețetă: operațiile se scriu pe material după ce se completează rețeta.</p>}
+      {f.componente.length === 0 && (
+        <section>
+          <h2>Întins și tăiat <span className="slab">· pe toată taierea (modelul n-are încă materiale în rețetă)</span></h2>
+          <table><tbody>{(['intins', 'taiat'] as const).map((op) => <Rand key={op} operatie={op} componenta={null} />)}</tbody></table>
+        </section>
+      )}
       {f.componente.map((c) => {
         const mat = f.culori.filter((m) => m.componenta_id === c.id);
         return (
@@ -202,6 +207,10 @@ export default async function FisaTaierePagina({
       <h2>Comenzile din taiere</h2>
       {deschise.length > 0 ? (
         <form action={croieste}><fieldset disabled={!sef} className="fara-chenar">
+          <p className="lipsa">
+            Scrie, pe fiecare mărime, câte bucăți s-au croit efectiv (căsuțele pornesc de la cât s-a cerut). Apasă
+            „Înregistrează croitul" doar după tăiere: bucățile scrise trec drept croite, iar ce lipsește rămâne de croit.
+          </p>
           <ComenziInTaiere f={f} editabil />
           {neinceputa && sef && (
             <p className="slab">
@@ -275,7 +284,7 @@ function ComenziInTaiere({ f, editabil = false }: { f: FisaTaiere; editabil?: bo
   return (
     <div className="tabel-derulant">
       <table className="grila">
-        <thead><tr><th>Comandă</th><th>Model</th><th>Produs</th><th>Pe mărimi: cerut → croit</th><th className="nr">Total</th></tr></thead>
+        <thead><tr><th>Comandă</th><th>Model</th><th>Produs</th><th>Pe mărimi: cerut → croit</th><th className="nr">Total</th><th className="nr">Rămas de croit</th></tr></thead>
         <tbody>
           {f.loturi.map((l) => (
             <tr key={l.id}>
@@ -291,6 +300,7 @@ function ComenziInTaiere({ f, editabil = false }: { f: FisaTaiere; editabil?: bo
                         ? <input name={`q:${l.id}:${m.marime_id}`} defaultValue={m.cerut} inputMode="numeric" className="bucati"
                                  aria-label={`Croit ${l.cod} ${m.marime}`} />
                         : <strong className={m.croit !== null && m.croit !== m.cerut ? 'lipsa' : ''}>{m.croit ?? '—'}</strong>}
+                      {l.croit_la && m.rest > 0 && <span className="slab">rămas {m.rest}</span>}
                     </label>
                   ))}
                 </span>
@@ -299,6 +309,7 @@ function ComenziInTaiere({ f, editabil = false }: { f: FisaTaiere; editabil?: bo
                 {l.marimi.reduce((s, m) => s + m.cerut, 0)}
                 {l.croit_la && <> → {l.marimi.reduce((s, m) => s + (m.croit ?? 0), 0)}</>}
               </td>
+              <td className="nr">{(() => { const r = l.marimi.reduce((s, m) => s + m.rest, 0); return r ? <strong className="lipsa">{r}</strong> : <span className="slab">—</span>; })()}</td>
             </tr>
           ))}
         </tbody>

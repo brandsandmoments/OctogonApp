@@ -323,7 +323,8 @@ export type LotInTaiere = {
   prioritate: number;
   produs: string;
   croit_la: string | null;
-  marimi: { marime_id: string; marime: string; cerut: number; croit: number | null }[];
+  // cerut în taierea asta, croit în ea, și cât mai e de croit din planificarea lotului (în orice taiere)
+  marimi: { marime_id: string; marime: string; cerut: number; croit: number | null; rest: number }[];
 };
 
 export type FisaTaiere = {
@@ -385,7 +386,9 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
       `SELECT lc.id, c.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot AS cod, c.numar AS comanda,
               c.tip::text AS tip, c.prioritate, p.denumire AS produs,
               to_char(lc.croit_la, 'YYYY-MM-DD HH24:MI') AS croit_la,
-              lq.marime_id, m.cod AS marime, lq.cantitate AS cerut, le.cantitate AS croit
+              lq.marime_id, m.cod AS marime, lq.cantitate AS cerut, le.cantitate AS croit,
+              coalesce((SELECT r.rest FROM planificare_rest_de_croit r
+                         WHERE r.planificare_id = lc.planificare_id AND r.marime_id = lq.marime_id), 0)::int AS rest
          FROM lot_croit lc
          JOIN planificare pl   ON pl.id = lc.planificare_id
          JOIN comanda_linie cl ON cl.id = pl.linie_id
@@ -397,9 +400,9 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
         WHERE lc.taiere_id = $1 AND pl.stadiu <> 'anulat'
         ORDER BY c.prioritate, c.numar, p.denumire, lc.numar_lot, m.ordine`, [id]);
     const loturi = new Map<string, LotInTaiere>();
-    for (const { marime_id, marime, cerut, croit, ...l } of lot) {
+    for (const { marime_id, marime, cerut, croit, rest, ...l } of lot) {
       const x = loturi.get(l.id) ?? { ...l, marimi: [] };
-      x.marimi.push({ marime_id, marime, cerut, croit });
+      x.marimi.push({ marime_id, marime, cerut, croit, rest });
       loturi.set(l.id, x);
     }
     const { rows: oameni } = await c.query<{ id: string; nume: string }>(
