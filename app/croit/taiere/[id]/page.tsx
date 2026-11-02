@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import AlegeOameni from './AlegeOameni';
 import { notFound, redirect } from 'next/navigation';
 import {
   corecteaza, fisaTaiere, incepe, inregistreazaCroitTaiere, OPERATII, scoateDinTaiere, scrieMetri, termina,
@@ -42,7 +43,8 @@ export default async function FisaTaierePagina({
   const deschise = f.loturi.filter((l) => !l.croit_la);
   const neinceputa = f.operatii.length === 0;
   const ultima = f.loturi.length === 1;
-  const eu = f.oameni.some((o) => o.id === u.id) ? u.id : '';
+  // Cel logat, dacă e și în Oameni producție (după nume): pornește bifat la prima operație.
+  const eu = [...f.oameni, ...f.altii].find((o) => o.nume.toLowerCase() === u.nume.toLowerCase())?.id ?? '';
 
   async function incepeOp(date: FormData) {
     'use server';
@@ -98,12 +100,11 @@ export default async function FisaTaierePagina({
   }
 
   // O operație, cu fiecare om care lucrează la ea pe rândul lui (de la ce oră, până la ce
-  // oră) și, dedesubt, oamenii încă liberi de bifat: unul sau mai mulți încep deodată,
-  // și se mai pot adăuga oricând.
+  // oră) și, dedesubt, lista cu „+ Adaugă operator": unul sau mai mulți încep deodată,
+  // și se mai pot adăuga oricând, pe oricine.
   const Rand = ({ operatie, componenta }: { operatie: Operatie; componenta: string | null }) => {
     const pe = f.operatii.filter((x) => x.operatie === operatie && x.componenta_id === componenta)
       .sort((a, b) => a.inceput_la.localeCompare(b.inceput_la));
-    const liberi = f.oameni.filter((x) => !pe.some((o) => o.operator_id === x.id));
     return (
       <tr>
         <td><strong>{OPERATII[operatie]}</strong>{operatie === 'termocolat' && <span className="slab"> · dacă e cazul</span>}
@@ -130,18 +131,14 @@ export default async function FisaTaierePagina({
               {sef && <Corectura o={o} f={f} actiune={corecteazaOp} />}
             </div>
           ))}
-          {liberi.length > 0 && (
-            <form action={incepeOp} className="in-rand"><fieldset disabled={!lucreaza} className="fara-chenar">
-              <input type="hidden" name="operatie" value={operatie} />
-              <input type="hidden" name="componenta" value={componenta ?? ''} />
-              <span className="oameni-bife">
-                {liberi.map((x) => (
-                  <label key={x.id}><input type="checkbox" name="operator" value={x.id} defaultChecked={!pe.length && x.id === eu} /> {x.nume}</label>
-                ))}
-              </span>
-              <button className={pe.length ? 'secundar' : ''}>{pe.length ? '+ Adaugă bifații, încep acum' : 'Începe acum cu bifații'}</button>
-            </fieldset></form>
-          )}
+          <form action={incepeOp} className="in-rand"><fieldset disabled={!lucreaza} className="fara-chenar">
+            <input type="hidden" name="operatie" value={operatie} />
+            <input type="hidden" name="componenta" value={componenta ?? ''} />
+            <AlegeOameni croit={f.oameni.filter((x) => !pe.some((o) => o.operator_id === x.id))}
+              altii={f.altii.filter((x) => !pe.some((o) => o.operator_id === x.id))}
+              ales={!pe.length && f.oameni.some((x) => x.id === eu) ? eu : ''} dezactivat={!lucreaza} />
+            <button className={pe.length ? 'secundar' : ''}>{pe.length ? 'Pornește-i și pe ei' : 'Începe acum'}</button>
+          </fieldset></form>
         </td>
       </tr>
     );
@@ -267,7 +264,8 @@ function Oameni({ f, ales, nume = 'operator' }: { f: FisaTaiere; ales: string; n
   return (
     <select name={nume} defaultValue={ales} required aria-label="Cine">
       <option value="">cine?</option>
-      {f.oameni.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}
+      <optgroup label="Croit">{f.oameni.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>
+      <optgroup label="Alți oameni din producție">{f.altii.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>
     </select>
   );
 }

@@ -304,7 +304,7 @@ export type OperatieScrisa = {
   id: string;
   componenta_id: string | null;
   operatie: Operatie;
-  operator_id: string;
+  operator_id: string;   // omul din producție (sau, la operațiile vechi, contul din aplicație)
   operator: string;
   inceput_la: string;      // YYYY-MM-DDTHH:MI, pentru datetime-local
   terminat_la: string | null;
@@ -343,7 +343,8 @@ export type FisaTaiere = {
   operatii: OperatieScrisa[];
   culori: CuloareInTaiere[];
   loturi: LotInTaiere[];
-  oameni: { id: string; nume: string }[];
+  oameni: { id: string; nume: string }[];   // oamenii din producție de la croit
+  altii: { id: string; nume: string }[];    // restul oamenilor din producție, ca să poată fi adăugat oricine
   rest_deschis: number;    // bucăți necroite din comenzile încă deschise ale taierii
 };
 
@@ -365,11 +366,12 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
       `SELECT id, nume, principal FROM model_componenta
         WHERE model_id = $1 AND tip = 'materie_prima' ORDER BY principal DESC, nume`, [taiere.model_id]);
     const { rows: operatii } = await c.query<OperatieScrisa>(
-      `SELECT o.id, o.componenta_id, o.operatie::text AS operatie, o.operator_id, u.nume AS operator,
+      `SELECT o.id, o.componenta_id, o.operatie::text AS operatie, coalesce(o.angajat_id, o.operator_id) AS operator_id,
+              coalesce(a.nume, u.nume) AS operator,
               to_char(o.inceput_la AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD"T"HH24:MI') AS inceput_la,
               to_char(o.terminat_la AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD"T"HH24:MI') AS terminat_la,
               o.fata_verificata, o.observatii
-         FROM taiere_operatie o JOIN utilizator u ON u.id = o.operator_id
+         FROM taiere_operatie o LEFT JOIN angajat a ON a.id = o.angajat_id LEFT JOIN utilizator u ON u.id = o.operator_id
         WHERE o.taiere_id = $1`, [id]);
     // Pe fiecare componentă care se croiește, câte un rând pe culoare (produs), cu materialul ei.
     const { rows: culori } = await c.query<CuloareInTaiere>(
@@ -415,16 +417,19 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
       x.marimi.push({ marime_id, marime, cerut, croit, rest });
       loturi.set(l.id, x);
     }
-    const { rows: oameni } = await c.query<{ id: string; nume: string }>(
-      `SELECT id, nume FROM utilizator
-        WHERE activ AND roluri && ARRAY['croit', 'operator_croit']::rol[] ORDER BY nume`);
+    // Oamenii din producție: întâi cei de la croit (tăietor, ajutor, șefă), apoi toți ceilalți.
+    const { rows: toti } = await c.query<{ id: string; nume: string; croit: boolean }>(
+      `SELECT id, nume, functii && ARRAY['taietor', 'croit_auxiliar', 'sef_croit'] AS croit
+         FROM angajat WHERE activ ORDER BY nume`);
+    const oameni = toti.filter((x) => x.croit).map(({ id, nume }) => ({ id, nume }));
+    const altii = toti.filter((x) => !x.croit).map(({ id, nume }) => ({ id, nume }));
     const { rows: [{ rest }] } = await c.query<{ rest: number }>(
       `SELECT coalesce(sum(r.rest), 0)::int AS rest FROM planificare_rest_de_croit r
          JOIN planificare pl ON pl.id = r.planificare_id
         WHERE pl.stadiu NOT IN ('anulat', 'incheiat')
           AND pl.id IN (SELECT planificare_id FROM lot_croit WHERE taiere_id = $1)`, [id]);
     const { model_id: _, ...t } = taiere;
-    return { taiere: t, componente, operatii, culori, loturi: [...loturi.values()], oameni, rest_deschis: rest };
+    return { taiere: t, componente, operatii, culori, loturi: [...loturi.values()], oameni, altii, rest_deschis: rest };
   });
 }
 
@@ -435,7 +440,7 @@ export async function incepe(taiereId: string, componentaId: string | null, oper
   if (!operatorId) return 'Alege cine lucrează.';
   try {
     await interogare(
-      `INSERT INTO taiere_operatie (firma_id, taiere_id, componenta_id, operatie, operator_id, inceput_la)
+      `INSERT INTO taiere_operatie (firma_id, taiere_id, componenta_id, operatie, angajat_id, inceput_la)
        VALUES (firma_curenta(), $1, $2, $3, $4, now())`,
       [taiereId, operatie === 'imperecheat' ? null : componentaId, operatie, operatorId]);
     return null;
@@ -469,7 +474,7 @@ export async function corecteaza(
   try {
     await interogare(
       `UPDATE taiere_operatie
-          SET operator_id = $2, inceput_la = $3::timestamp AT TIME ZONE 'Europe/Bucharest',
+          SET angajat_id = $2, operator_id = NULL, inceput_la = $3::timestamp AT TIME ZONE 'Europe/Bucharest',
               terminat_la = nullif($4, '')::timestamp AT TIME ZONE 'Europe/Bucharest',
               fata_verificata = $5, observatii = nullif($6, '')
         WHERE id = $1`, [id, operatorId, inceput, terminat, fata, observatii.trim()]);
