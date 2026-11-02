@@ -233,6 +233,52 @@ export async function scoateDinTaiere(taiereId: string, lotId: string): Promise<
 }
 
 /**
+ * Schimbă ce intră într-o taiere încă neîncepută: pe fiecare comandă și mărime, câte
+ * bucăți. Ce se scade se întoarce în „rămas de croit" (pentru altă taiere); se poate
+ * crește până la cât a rămas din comandă și nu stă în alte taieri. O comandă rămasă
+ * fără bucăți iese din taiere; o taiere rămasă goală dispare.
+ */
+export async function schimbaCantitati(taiereId: string, cantitati: Map<string, Map<string, number>>): Promise<{ stearsa: boolean } | string> {
+  return cuOprire(() => caFirma(firmaCurenta(), async (c) => {
+    await c.query(`SELECT 1 FROM taiere WHERE id = $1 FOR UPDATE`, [taiereId]);
+    if ((await c.query(`SELECT 1 FROM taiere_operatie WHERE taiere_id = $1 LIMIT 1`, [taiereId])).rowCount) {
+      opreste('Taierea a început (întins, tăiat): cantitățile nu se mai schimbă. Ce nu se croiește rămâne de croit la înregistrare.');
+    }
+    const { rows: loturi } = await c.query<{ id: string; croit: boolean }>(
+      `SELECT id, croit_la IS NOT NULL AS croit FROM lot_croit WHERE taiere_id = $1 FOR UPDATE`, [taiereId]);
+    if (loturi.some((l) => l.croit)) opreste('Taierea e deja croită.');
+    for (const l of loturi) {
+      const noi = cantitati.get(l.id);
+      if (!noi) continue;
+      const { rows: limite } = await c.query<{ marime_id: string; marime: string; maxim: number }>(
+        `SELECT pc.marime_id, m.cod AS marime,
+                greatest(0, coalesce(r.rest, 0) - coalesce((SELECT sum(x.cantitate) FROM lot_croit o JOIN lot_croit_cantitate x ON x.lot_id = o.id
+                                    WHERE o.planificare_id = lc.planificare_id AND o.id <> lc.id AND o.croit_la IS NULL
+                                      AND x.marime_id = pc.marime_id), 0))::int AS maxim
+           FROM lot_croit lc
+           JOIN planificare_cantitate pc ON pc.planificare_id = lc.planificare_id
+           JOIN marime m ON m.id = pc.marime_id
+           LEFT JOIN planificare_rest_de_croit r ON r.planificare_id = lc.planificare_id AND r.marime_id = pc.marime_id
+          WHERE lc.id = $1`, [l.id]);
+      for (const [marime, q] of noi) {
+        const lim = limite.find((x) => x.marime_id === marime);
+        if (!lim || !Number.isInteger(q) || q < 0) opreste('Cantitate nevalidă.');
+        if (q > lim!.maxim) opreste(`La ${lim!.marime} se pot pune cel mult ${lim!.maxim} (restul e croit sau în alte taieri).`);
+        if (q === 0) await c.query(`DELETE FROM lot_croit_cantitate WHERE lot_id = $1 AND marime_id = $2`, [l.id, marime]);
+        else await c.query(
+          `INSERT INTO lot_croit_cantitate (firma_id, lot_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)
+           ON CONFLICT (lot_id, marime_id) DO UPDATE SET cantitate = EXCLUDED.cantitate`, [l.id, marime, q]);
+      }
+      await c.query(`DELETE FROM lot_croit WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM lot_croit_cantitate WHERE lot_id = $1)`, [l.id]);
+    }
+    const { rowCount } = await c.query(
+      `DELETE FROM taiere WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM lot_croit WHERE taiere_id = $1)`, [taiereId]);
+    if (!rowCount) await c.query(`UPDATE taiere SET cod = coalesce(cod_taiere(id), cod) WHERE id = $1`, [taiereId]);
+    return { stearsa: Boolean(rowCount) };
+  }));
+}
+
+/**
  * Stinge o comandă din „rămas de croit": ce n-a fost croit nu se mai croiește —
  * n-a ajuns materialul, s-a renunțat la o mărime. Doar cu motiv și observații.
  */
@@ -334,7 +380,7 @@ export type LotInTaiere = {
   produs: string;
   croit_la: string | null;
   // cerut în taierea asta, croit în ea, și cât mai e de croit din planificarea lotului (în orice taiere)
-  marimi: { marime_id: string; marime: string; cerut: number; croit: number | null; rest: number }[];
+  marimi: { marime_id: string; marime: string; cerut: number; croit: number | null; rest: number; maxim: number }[];
 };
 
 export type FisaTaiere = {
@@ -400,7 +446,13 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
               to_char(lc.croit_la, 'YYYY-MM-DD HH24:MI') AS croit_la,
               lq.marime_id, m.cod AS marime, lq.cantitate AS cerut, le.cantitate AS croit,
               coalesce((SELECT r.rest FROM planificare_rest_de_croit r
-                         WHERE r.planificare_id = lc.planificare_id AND r.marime_id = lq.marime_id), 0)::int AS rest
+                         WHERE r.planificare_id = lc.planificare_id AND r.marime_id = lq.marime_id), 0)::int AS rest,
+              -- cât poate intra în lotul ăsta: restul comenzii minus ce stă în alte taieri necroite
+              greatest(0, coalesce((SELECT r.rest FROM planificare_rest_de_croit r
+                         WHERE r.planificare_id = lc.planificare_id AND r.marime_id = lq.marime_id), 0)
+                - coalesce((SELECT sum(x.cantitate) FROM lot_croit o JOIN lot_croit_cantitate x ON x.lot_id = o.id
+                             WHERE o.planificare_id = lc.planificare_id AND o.id <> lc.id AND o.croit_la IS NULL
+                               AND x.marime_id = lq.marime_id), 0))::int AS maxim
          FROM lot_croit lc
          JOIN planificare pl   ON pl.id = lc.planificare_id
          JOIN comanda_linie cl ON cl.id = pl.linie_id
@@ -412,9 +464,9 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
         WHERE lc.taiere_id = $1 AND pl.stadiu <> 'anulat'
         ORDER BY c.prioritate, c.numar, p.denumire, lc.numar_lot, m.ordine`, [id]);
     const loturi = new Map<string, LotInTaiere>();
-    for (const { marime_id, marime, cerut, croit, rest, ...l } of lot) {
+    for (const { marime_id, marime, cerut, croit, rest, maxim, ...l } of lot) {
       const x = loturi.get(l.id) ?? { ...l, marimi: [] };
-      x.marimi.push({ marime_id, marime, cerut, croit, rest });
+      x.marimi.push({ marime_id, marime, cerut, croit, rest, maxim });
       loturi.set(l.id, x);
     }
     // Oamenii din producție: întâi cei de la croit (tăietor, ajutor, șefă), apoi toți ceilalți.
