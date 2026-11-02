@@ -33,7 +33,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
         )}
         {u && (
           <Navigare
-            sectiuni={meniulLui(u).map((s) => ({ nume: s.nume, si: s.si, ecrane: s.ecrane.map(({ href, nume }) => ({ href, nume })) }))}
+            sectiuni={meniulLui(u).map((s) => ({ nume: s.nume, si: s.si, ecrane: s.ecrane.map(({ href, nume, alte }) => ({ href, nume, alte })) }))}
           />
         )}
         {children}

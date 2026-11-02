@@ -54,7 +54,7 @@ export function poate(c: Cine, zona: Zona, nivel: Nivel = 'vede'): boolean {
   return are === 'modifica' || (are === 'vede' && nivel === 'vede');
 }
 
-export type Ecran = { href: string; nume: string; ce: string; zona: Zona | Zona[]; nivel?: Nivel };
+export type Ecran = { href: string; nume: string; ce: string; zona: Zona | Zona[]; nivel?: Nivel; alte?: string[] };
 
 /**
  * Meniul, pe secțiuni — drumul unei comenzi: KAM-ul o dă (Comenzi), producția o
@@ -79,11 +79,11 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     ecrane: [
       { href: '/centralizator', nume: 'Centralizator', ce: 'toate comenzile și stadiul lor: rămas de croit, croit, în lucru, în depozit', zona: 'centralizator' },
       { href: '/croit', nume: 'Croit', ce: 'ce e de croit, ce s-a croit, ce a rămas', zona: 'croit' },
-      { href: '/productie', nume: 'Producție', ce: 'planul pe săptămâni: ce se lucrează, intrarea în lucru și cine lucrează', zona: ['planificare', 'banda'] },
+      { href: '/productie', nume: 'Producție', ce: 'planul pe săptămâni, ce se dă pe bandă, ce e pe bandă și cine lucrează, ce s-a terminat', zona: ['planificare', 'banda'], alte: ['/banda'] },
       { href: '/calculator', nume: 'Calculator timp', ce: 'cât durează un lot: din minutele pe bucată și câți operatori, zile lucrătoare și ziua de gata', zona: ['comenzi', 'planificare', 'banda', 'centralizator', 'kam', 'croit'] },
       { href: '/banda/oameni', nume: 'Oameni producție', ce: 'personalul pe funcții: operatori, alimentator, control, călcat, CTC, croit', zona: 'banda' },
     ],
-    si: ['/necesar', '/planificare', '/banda'],
+    si: ['/necesar', '/planificare'],
   },
   {
     nume: 'Depozit produse finite',

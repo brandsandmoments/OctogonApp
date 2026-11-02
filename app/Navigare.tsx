@@ -3,18 +3,22 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-type Sectiune = { nume: string; ecrane: { href: string; nume: string }[]; si?: string[] };
+type Ecran = { href: string; nume: string; alte?: string[] };
+type Sectiune = { nume: string; ecrane: Ecran[]; si?: string[] };
 
 const sub = (cale: string, href: string) => cale === href || cale.startsWith(href + '/');
+/** Cât de bine se potrivește fila: lungimea celei mai lungi adrese ale ei (a ei sau din `alte`); 0 = deloc. */
+const potrivire = (cale: string, e: Ecran) => Math.max(0, ...[e.href, ...(e.alte ?? [])].filter((h) => sub(cale, h)).map((h) => h.length));
 
 /**
  * Bara de secțiuni și, sub ea, filele secțiunii deschise. Fila e cea mai lungă
- * adresă care se potrivește: „/comenzi/noua" nu aprinde și „PSF și PSC".
+ * adresă care se potrivește: „/comenzi/noua" nu aprinde și „PSF și PSC". `alte`
+ * sunt adresele care aprind fila fără să fie a ei (banda, la Producție).
  */
 export default function Navigare({ sectiuni }: { sectiuni: Sectiune[] }) {
   const cale = usePathname();
-  const activa = sectiuni.find((s) => s.ecrane.some((e) => sub(cale, e.href)) || s.si?.some((h) => sub(cale, h)));
-  const fila = activa?.ecrane.filter((e) => sub(cale, e.href)).sort((a, b) => b.href.length - a.href.length)[0];
+  const activa = sectiuni.find((s) => s.ecrane.some((e) => potrivire(cale, e) > 0) || s.si?.some((h) => sub(cale, h)));
+  const fila = activa?.ecrane.filter((e) => potrivire(cale, e) > 0).sort((a, b) => potrivire(cale, b) - potrivire(cale, a))[0];
   return (
     <nav className="navigare">
       <div className="sectiuni">

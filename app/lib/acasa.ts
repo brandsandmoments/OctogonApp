@@ -98,12 +98,12 @@ async function banda(): Promise<Grupa> {
       {
         titlu: 'De dat pe bandă', numar: bucati, unitate: buc(bucati),
         detaliu: `${loturi.length} ${loturi.length === 1 ? 'lot croit' : 'loturi croite'}`,
-        href: '/productie', actiune: 'Intră în lucru', ton: loturi.length ? 'neutru' : 'verde',
+        href: '/banda', actiune: 'Dă pe bandă', ton: loturi.length ? 'neutru' : 'verde',
       },
       {
         titlu: 'Pe bandă, peste termen', numar: intarziate.length, unitate: intarziate.length === 1 ? 'tranșă' : 'tranșe',
         detaliu: `din ${pe.length} pe bandă acum`,
-        href: '/banda?vedere=pe_banda', actiune: 'Vezi banda', ton: intarziate.length ? 'rosu' : 'verde',
+        href: '/banda', actiune: 'Vezi banda', ton: intarziate.length ? 'rosu' : 'verde',
       },
     ],
   };

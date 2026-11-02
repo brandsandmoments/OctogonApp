@@ -2,6 +2,8 @@ import { caFirma } from './db';
 import { firmaCurenta, interogare } from './sesiune';
 import { stadiulLiniei, type StadiuLinie } from './centralizator';
 import { factorLot } from './timp';
+import { luni } from './perioade';
+import { rangMarime } from './format';
 
 /**
  * Planul de producție pe săptămâni (0040). Un PSF sau PSC lansat pleacă singur la
@@ -29,9 +31,14 @@ export type ComandaInPlan = {
   intrat: number;
   ore_om: number | null;        // pe toată comanda, din minutele pe bucată ale modelelor
   stadiu: StadiuLinie;
+  linii: LinieInPlan[];         // pe culori (produse) și mărimi, pentru desfacerea comenzii
 };
 
-type Rand = Omit<ComandaInPlan, 'stadiu' | 'cerut' | 'rest_de_croit' | 'croit' | 'banda' | 'intrat' | 'ore_om'> & {
+export type MarimeInPlan = { marime: string; cerut: number; croit: number; banda: number; intrat: number; rest: number };
+export type LinieInPlan = { produs: string; cod_sku: string; marimi: MarimeInPlan[] };
+
+type Rand = Omit<ComandaInPlan, 'stadiu' | 'cerut' | 'rest_de_croit' | 'croit' | 'banda' | 'intrat' | 'ore_om' | 'linii'> & {
+  produs: string; cod_sku: string; marime: string;
   linie_id: string; cerut: number; croit: number; banda: number; intrat: number; inchisa: boolean; rest: number;
   timp_min_buc: number | null; cerut_linie: number;
 };
@@ -60,7 +67,7 @@ export async function comenziInPlan(saptamani: string[]): Promise<ComandaInPlan[
      SELECT c.id AS comanda_id, c.numar, c.tip::text AS tip, b.nume AS brand, k.nume AS kam, c.prioritate, c.stare::text AS stare,
             to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta, coalesce(mo.denumire, p.denumire) AS model,
             to_char(ps.saptamana, 'YYYY-MM-DD') AS saptamana,
-            cl.id AS linie_id, cc.cantitate AS cerut, coalesce(cr.q, 0) AS croit, coalesce(bd.q, 0) AS banda,
+            cl.id AS linie_id, p.denumire AS produs, p.cod_sku, m.cod AS marime, cc.cantitate AS cerut, coalesce(cr.q, 0) AS croit, coalesce(bd.q, 0) AS banda,
             coalesce(i.q, 0) AS intrat, coalesce(i.inchisa, false) AS inchisa, coalesce(rs.q, 0) AS rest,
             mo.timp_min_buc::float AS timp_min_buc,
             sum(cc.cantitate) OVER (PARTITION BY cl.id)::int AS cerut_linie
@@ -72,19 +79,20 @@ export async function comenziInPlan(saptamani: string[]): Promise<ComandaInPlan[
        JOIN produs p             ON p.id = cl.produs_id
        LEFT JOIN model mo        ON mo.id = p.model_id
        JOIN comanda_cantitate cc ON cc.linie_id = cl.id
+       JOIN marime m             ON m.id = cc.marime_id
        LEFT JOIN croit cr  ON cr.linie_id = cl.id AND cr.marime_id = cc.marime_id
        LEFT JOIN banda bd  ON bd.linie_id = cl.id AND bd.marime_id = cc.marime_id
        LEFT JOIN intrat i  ON i.linie_id = cl.id AND i.marime_id = cc.marime_id
        LEFT JOIN rest rs   ON rs.linie_id = cl.id AND rs.marime_id = cc.marime_id
       WHERE c.stare IN ('lansata', 'in_productie') OR ps.saptamana = ANY ($1::date[])
-      ORDER BY c.prioritate, c.numar`, [saptamani]);
+      ORDER BY c.prioritate, c.numar, p.denumire, m.ordine`, [saptamani]);
 
   const pe = new Map<string, { c: ComandaInPlan; linii: Map<string, Rand[]> }>();
   for (const r of randuri) {
     const x = pe.get(r.comanda_id) ?? {
       c: { comanda_id: r.comanda_id, numar: r.numar, tip: r.tip, brand: r.brand, kam: r.kam, prioritate: r.prioritate,
            stare: r.stare, data_ceruta: r.data_ceruta, model: r.model, saptamana: r.saptamana,
-           cerut: 0, rest_de_croit: 0, croit: 0, banda: 0, intrat: 0, ore_om: null, stadiu: 'necroita' as StadiuLinie },
+           cerut: 0, rest_de_croit: 0, croit: 0, banda: 0, intrat: 0, ore_om: null, stadiu: 'necroita' as StadiuLinie, linii: [] as LinieInPlan[] },
       linii: new Map<string, Rand[]>(),
     };
     if (r.data_ceruta < x.c.data_ceruta) x.c.data_ceruta = r.data_ceruta;
@@ -100,14 +108,21 @@ export async function comenziInPlan(saptamani: string[]): Promise<ComandaInPlan[
     const cuTimp = [...linii.values()].filter((m) => m[0].timp_min_buc);
     const ore_om = cuTimp.length === 0 ? null
       : cuTimp.reduce((s, m) => s + (m[0].cerut_linie * m[0].timp_min_buc! / 60) * factorLot(m[0].cerut_linie), 0);
-    return { ...c, ore_om, stadiu: ORDINE[Math.min(...stadii.map((s) => ORDINE.indexOf(s)))] };
+    // Culorile în ordinea numelui, mărimile de la cea mai mică la cea mai mare.
+    const peCulori: LinieInPlan[] = [...linii.values()].map((m) => ({
+      produs: m[0].produs, cod_sku: m[0].cod_sku,
+      marimi: m.map((x) => ({ marime: x.marime, cerut: x.cerut, croit: x.croit, banda: x.banda, intrat: x.intrat, rest: x.rest }))
+        .sort((a, b) => rangMarime(a.marime) - rangMarime(b.marime)),
+    })).sort((a, b) => a.produs.localeCompare(b.produs, 'ro'));
+    return { ...c, ore_om, linii: peCulori, stadiu: ORDINE[Math.min(...stadii.map((s) => ORDINE.indexOf(s)))] };
   }).sort((a, b) => a.prioritate - b.prioritate || a.data_ceruta.localeCompare(b.data_ceruta) || a.numar.localeCompare(b.numar));
 }
 
-/** Pune comenzile pe săptămâna care începe lunea dată (le mută, dacă erau pe alta). */
-export async function programeaza(comenzi: string[], saptamana: string): Promise<string | null> {
+/** Pune comenzile pe săptămâna zilei alese din calendar — oricare zi, oricât de departe (le mută, dacă erau pe alta). */
+export async function programeaza(comenzi: string[], zi: string): Promise<string | null> {
   if (comenzi.length === 0) return 'Bifează cel puțin o comandă.';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(saptamana) || new Date(`${saptamana}T12:00:00Z`).getUTCDay() !== 1) return 'Alege săptămâna.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(zi)) return 'Alege din calendar o zi din săptămâna în care se lucrează.';
+  const saptamana = luni(zi);
   await caFirma(firmaCurenta(), async (c) => {
     await c.query(
       `INSERT INTO plan_saptamana (firma_id, comanda_id, saptamana)

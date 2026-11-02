@@ -52,7 +52,7 @@ export default async function TransaPagina({
 
   return (
     <main className="formular">
-      <p className="slab"><Link href="/banda?vedere=pe_banda">← Bandă</Link></p>
+      <p className="slab"><Link href="/banda">← Bandă</Link></p>
       <h1>{t.cod}</h1>
       <p className="sumar">
         {t.produs} · {t.cod_sku} · P{t.prioritate} · cerut în depozit {t.data_ceruta} · alimentat {t.alimentat_la}

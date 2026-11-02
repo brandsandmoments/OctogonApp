@@ -18,6 +18,7 @@ export type LotDeAlimentat = {
   data_ceruta: string;
   produs: string;
   croit_la: string;
+  saptamana: string | null;   // săptămâna din planul de producție
   croit: number;
   alimentat: number;
   rest: number;
@@ -34,6 +35,7 @@ export async function deAlimentat(): Promise<LotDeAlimentat[]> {
     `SELECT ra.lot_id, c.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot AS cod,
             c.numar AS comanda, c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
             p.denumire AS produs, to_char(lc.croit_la, 'YYYY-MM-DD') AS croit_la,
+            to_char(ps.saptamana, 'YYYY-MM-DD') AS saptamana,
             m.cod AS marime, ra.croit AS croit_m, ra.alimentat AS alimentat_m, ra.rest AS rest_m
        FROM lot_rest_de_alimentat ra
        JOIN lot_croit lc     ON lc.id = ra.lot_id
@@ -42,8 +44,9 @@ export async function deAlimentat(): Promise<LotDeAlimentat[]> {
        JOIN comanda c        ON c.id = cl.comanda_id
        JOIN produs p         ON p.id = cl.produs_id
        JOIN marime m         ON m.id = ra.marime_id
+       LEFT JOIN plan_saptamana ps ON ps.comanda_id = c.id
       WHERE ra.lot_id IN (SELECT lot_id FROM lot_rest_de_alimentat GROUP BY lot_id HAVING sum(rest) > 0)
-      ORDER BY c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, lc.numar_lot, m.ordine`,
+      ORDER BY ps.saptamana NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, lc.numar_lot, m.ordine`,
   );
   const pe = new Map<string, LotDeAlimentat>();
   for (const { marime, croit_m, alimentat_m, rest_m, ...r } of randuri) {

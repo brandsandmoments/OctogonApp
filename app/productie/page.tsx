@@ -7,9 +7,12 @@ import { azi } from '../lib/format';
 import { adaugaZile, luni } from '../lib/perioade';
 import { deAlimentat, transe, type LotDeAlimentat, type Transa } from '../lib/banda';
 import { STADII_LINIE } from '../lib/centralizator';
-import { comenziInPlan, oameniPeTranse, programeaza, scoateDinPlan, type ComandaInPlan } from '../lib/productie';
+import { comenziInPlan, oameniPeTranse, programeaza, scoateDinPlan, type ComandaInPlan, type LinieInPlan } from '../lib/productie';
 import { parametriTimp } from '../lib/parametriTimp';
 import './productie.css';
+import FileProductie from './FileProductie';
+import RandCascada from './RandCascada';
+import { rangMarime } from '../lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,7 +79,6 @@ export default async function Productie({ searchParams }: { searchParams: Promis
   const deLucru = inPerioada.filter((c) => c.stadiu !== 'gata');
   const faraTimp = deLucru.filter((c) => c.ore_om === null).length;
   const suma = (lista: ComandaInPlan[], k: 'cerut' | 'rest_de_croit' | 'intrat') => lista.reduce((s, c) => s + c[k], 0);
-  const saptamaniDeAles = [...new Set([...saptamani, ...[0, 1, 2, 3, 4].map((i) => adaugaZile(curenta, i * 7))])].sort();
   const adresa = (a: string, b: string, fz: Faza | null = faza) =>
     (a === b ? `/productie?sapt=${a}` : `/productie?de=${a}&pana=${b}`) + (fz ? `&faza=${fz}` : '');
   const aici = adresa(de, pana);
@@ -104,7 +106,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
     'use server';
     await cere(['planificare', 'banda'], 'modifica');
     const unde = String(date.get('saptamana') ?? '');
-    if (unde === 'scoate') await scoateDinPlan(String(date.get('comanda')));
+    if (date.get('scoate')) await scoateDinPlan(String(date.get('comanda')));
     else {
       const e = await programeaza([String(date.get('comanda'))], unde);
       if (e) redirect(`${aici}&eroare=${encodeURIComponent(e)}`);
@@ -115,6 +117,8 @@ export default async function Productie({ searchParams }: { searchParams: Promis
   return (
     <main className="lat">
       <h1>Producție</h1>
+      <FileProductie activ="plan" />
+      <p className="slab">Pune PSF-urile și PSC-urile pe săptămâna în care se lucrează. Ce s-a croit se dă pe bandă și oamenii se alocă din fila 2 · Bandă.</p>
       <div className="liste-actiuni perioade">
         <span className="filtre">
           <Link href={adresa(adaugaZile(de, -7 * nr), adaugaZile(pana, -7 * nr))} className="buton">← {nr === 1 ? 'săptămâna dinainte' : `${nr} săpt. înainte`}</Link>
@@ -169,22 +173,20 @@ export default async function Productie({ searchParams }: { searchParams: Promis
             )}
             {ore > capacitate && <p className="eroare">{nr > 1 ? numeSaptamana(s) : 'Săptămâna'} are mai mult de lucru decât încape cu {param.operatori} operatori: mută ceva pe altă săptămână sau alocă mai mulți oameni.</p>}
             {lista.length === 0 ? <p className="slab">Nimic programat{nr === 1 && '. Pune comenzi din „De programat", mai jos'}.</p> : (
-              <TabelSaptamana s={s} lista={lista} loturiPe={loturiPe} transePe={transePe} oameni={oameni} m={m} muta={muta}
-                saptamaniDeAles={saptamaniDeAles} curenta={curenta} />
+              <TabelSaptamana s={s} lista={lista} loturiPe={loturiPe} transePe={transePe} oameni={oameni} m={m} muta={muta} />
             )}
           </section>
         );
       })}
 
       <h2>De programat</h2>
-      <p className="slab">PSF-urile și PSC-urile lansate (sunt deja la croit), încă neplanificate. Un clic pe „săpt. asta" sau „săpt. viitoare" pe rând, sau bifează mai multe și alege săptămâna.</p>
+      <p className="slab">PSF-urile și PSC-urile lansate (sunt deja la croit), încă neplanificate. Un clic pe „săpt. asta" sau „săpt. viitoare" pe rând, sau bifează mai multe și alege din calendar orice săptămână.</p>
       {deProgramat.length === 0 ? <p className="slab">Toate comenzile deschise sunt programate.</p> : (
         <form action={pune}>
           <fieldset disabled={!m} className="filtre">
-            <select name="saptamana" defaultValue={de} aria-label="Săptămâna">
-              {saptamaniDeAles.map((s) => <option key={s} value={s}>{numeSaptamana(s)}{s === curenta ? ' · asta' : ''}</option>)}
-            </select>
-            <button>Pune pe săptămână</button>
+            <span className="slab">Bifează comenzile, apoi alege din calendar o zi din săptămâna de lucru:</span>
+            <input type="date" name="saptamana" defaultValue={de} aria-label="O zi din săptămâna de lucru" />
+            <button>Pune pe săptămâna ei</button>
           </fieldset>
           <div className="tabel-derulant">
             <table className="centralizator">
@@ -194,9 +196,9 @@ export default async function Productie({ searchParams }: { searchParams: Promis
               </thead>
               <tbody>
                 {deProgramat.map((c) => (
-                  <tr key={c.comanda_id}>
+                  <RandCascada key={c.comanda_id} coloane={m ? 10 : 9} detalii={<Marimi linii={c.linii} />} celule={<>
                     <td><input type="checkbox" name="comanda" value={c.comanda_id} disabled={!m} aria-label={`Programează ${c.numar}`} /></td>
-                    <td>
+                    <td className="cascada">
                       <Link href={`/necesar/${encodeURIComponent(c.numar)}`}>{c.numar}</Link>{' '}
                       <span className="slab">{c.tip} · {c.brand} · P{c.prioritate}{c.kam && ` · ${c.kam}`}</span>
                     </td>
@@ -215,7 +217,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
                         </span>
                       </td>
                     )}
-                  </tr>
+                  </>} />
                 ))}
               </tbody>
             </table>
@@ -223,7 +225,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
         </form>
       )}
       <p className="slab">
-        Toate tranșele de pe bandă: <Link href="/banda?vedere=pe_banda">în lucru</Link> · <Link href="/banda?vedere=predate">terminate</Link>.
+        Banda: <Link href="/banda">de dat pe bandă și în lucru</Link> · <Link href="/banda?vedere=predate">terminate</Link>.
       </p>
     </main>
   );
@@ -232,9 +234,9 @@ export default async function Productie({ searchParams }: { searchParams: Promis
 /** Orele care mai sunt de lucru pe comandă: cât n-a ajuns încă în depozit. */
 const ramase = (c: ComandaInPlan) => (c.ore_om ?? 0) * Math.max(0, c.cerut - c.intrat) / (c.cerut || 1);
 
-function TabelSaptamana({ s, lista, loturiPe, transePe, oameni, m, muta, saptamaniDeAles, curenta }: {
+function TabelSaptamana({ s, lista, loturiPe, transePe, oameni, m, muta }: {
   s: string; lista: ComandaInPlan[]; loturiPe: Map<string, LotDeAlimentat[]>; transePe: Map<string, Transa[]>;
-  oameni: Map<string, number>; m: boolean; muta: (date: FormData) => Promise<void>; saptamaniDeAles: string[]; curenta: string;
+  oameni: Map<string, number>; m: boolean; muta: (date: FormData) => Promise<void>;
 }) {
   // Pe faze, în ordinea drumului: ce e planificat și n-a intrat, ce a intrat, ce e gata.
   const grupe = (Object.keys(FAZE) as Faza[]).map((k) => ({ k, randuri: lista.filter((c) => fazaComenzii(c) === k) }))
@@ -247,7 +249,7 @@ function TabelSaptamana({ s, lista, loturiPe, transePe, oameni, m, muta, saptama
           <tr>
             <th>Comandă</th><th>Model</th><th>Termen</th><th className="nr">Cerut</th>
             <th className="nr">Rămas de croit</th><th className="nr">Croit, nedat pe bandă</th><th className="nr">În lucru</th>
-            <th className="nr">În depozit</th><th>Stadiu</th><th>Intră în lucru · cine lucrează</th>{m && <th />}
+            <th className="nr">În depozit</th><th>Stadiu</th><th>Pe bandă</th>{m && <th />}
           </tr>
         </thead>
         <tbody>
@@ -257,8 +259,8 @@ function TabelSaptamana({ s, lista, loturiPe, transePe, oameni, m, muta, saptama
               <td colSpan={coloane}>{FAZE[g.k]} · {g.randuri.length} {g.randuri.length === 1 ? 'comandă' : 'comenzi'} · {g.randuri.reduce((t, c) => t + c.cerut, 0)} buc</td>
             </tr>
           {g.randuri.map((c) => (
-            <tr key={c.comanda_id}>
-              <td>
+            <RandCascada key={c.comanda_id} coloane={coloane} detalii={<Marimi linii={c.linii} />} celule={<>
+              <td className="cascada">
                 <Link href={`/necesar/${encodeURIComponent(c.numar)}`}>{c.numar}</Link>{' '}
                 <span className="slab">{c.tip} · {c.brand} · P{c.prioritate}</span>
                 {c.saptamana !== s && c.saptamana && <><br /><span className="insigna galben">rămas din {numeSaptamana(c.saptamana)}</span></>}
@@ -276,15 +278,13 @@ function TabelSaptamana({ s, lista, loturiPe, transePe, oameni, m, muta, saptama
                 <td>
                   <form action={muta} className="muta">
                     <input type="hidden" name="comanda" value={c.comanda_id} />
-                    <select name="saptamana" defaultValue={c.saptamana ?? s} aria-label={`Mută ${c.numar}`}>
-                      {saptamaniDeAles.map((x) => <option key={x} value={x}>{numeSaptamana(x)}{x === curenta ? ' · asta' : ''}</option>)}
-                      <option value="scoate">scoate din plan</option>
-                    </select>
+                    <input type="date" name="saptamana" defaultValue={c.saptamana ?? s} aria-label={`Mută ${c.numar}: o zi din săptămâna nouă`} />
                     <button className="secundar">Mută</button>
+                    <button name="scoate" value="1" className="secundar" title="Scoate din plan: trece înapoi la De programat">Scoate</button>
                   </form>
                 </td>
               )}
-            </tr>
+            </>} />
           ))}
             </Fragment>
           ))}
@@ -295,36 +295,64 @@ function TabelSaptamana({ s, lista, loturiPe, transePe, oameni, m, muta, saptama
 }
 
 /**
- * Ce s-a croit și așteaptă banda (Intră în lucru → tranșa nouă, cu bucățile exacte),
- * apoi tranșele de pe bandă, cu câți oameni sunt alocați — un clic și se alocă.
+ * Legătura cu banda, fără să amestece planul cu alimentarea: câte bucăți croite
+ * așteaptă banda și câte tranșe sunt pe bandă, fiecare cu drumul spre fila ei.
  */
-function InLucru({ c, loturi, transe, oameni, m }: {
+function InLucru({ c, loturi, transe, oameni }: {
   c: ComandaInPlan; loturi: LotDeAlimentat[]; transe: Transa[]; oameni: Map<string, number>; m: boolean;
 }) {
-  const scurt = (cod: string) => cod.slice(c.numar.length + 1);
-  if (loturi.length === 0 && transe.length === 0) {
+  const deDat = loturi.reduce((s, l) => s + l.rest, 0);
+  const faraOameni = transe.filter((t) => !oameni.get(t.id) && ['alimentat', 'în producție'].includes(t.etapa)).length;
+  const cauta = encodeURIComponent(c.numar);
+  if (deDat === 0 && transe.length === 0) {
     return <span className="slab">{c.stadiu === 'gata' ? 'gata' : c.rest_de_croit > 0 ? 'se așteaptă croitul' : '—'}</span>;
   }
   return (
     <>
-      {loturi.map((l) => (
-        <div key={l.lot_id}>
-          {m ? <Link href={`/banda/alimenteaza?lot=${l.lot_id}`}><strong>Intră în lucru</strong></Link> : <strong>De dat pe bandă</strong>}
-          {' '}<span className="slab">{scurt(l.cod)} · {l.rest} buc ({l.marimi.map((x) => `${x.marime} ${x.rest}`).join(', ')})</span>
+      {deDat > 0 && <div><Link href={`/banda?cauta=${cauta}`}><strong>{deDat} buc de dat pe bandă →</strong></Link></div>}
+      {transe.length > 0 && (
+        <div>
+          <Link href={`/banda?cauta=${cauta}`}>{transe.length} {transe.length === 1 ? 'tranșă' : 'tranșe'} pe bandă →</Link>
+          {faraOameni > 0 && <> <span className="insigna galben">{faraOameni} fără oameni</span></>}
         </div>
-      ))}
-      {transe.map((t) => {
-        const n = oameni.get(t.id) ?? 0;
-        return (
-          <div key={t.id}>
-            <Link href={`/banda/${t.id}`}>{scurt(t.cod)}</Link>{' '}
-            <span className="slab">{t.bucati} buc · {t.etapa}{t.eta && ` · gata ≈ ${t.eta.slice(5).split('-').reverse().join('.')}`}</span>{' '}
-            {n > 0 ? <span className="insigna verde">{n} {n === 1 ? 'om' : 'oameni'}</span>
-              : ['alimentat', 'în producție'].includes(t.etapa) && <Link href={`/banda/${t.id}`} className="insigna galben">alocă oamenii</Link>}
-          </div>
-        );
-      })}
+      )}
     </>
+  );
+}
+
+/**
+ * O comandă desfăcută: pe fiecare culoare (produs) și mărime — cerut, croit, pe
+ * bandă, în depozit și ce a rămas de croit. Mărimile de la cea mai mică la cea mai mare.
+ */
+function Marimi({ linii }: { linii: LinieInPlan[] }) {
+  const marimi = [...new Set(linii.flatMap((l) => l.marimi.map((x) => x.marime)))].sort((a, b) => rangMarime(a) - rangMarime(b));
+  const RANDURI: [keyof Omit<LinieInPlan['marimi'][number], 'marime'>, string][] = [
+    ['cerut', 'Cerut'], ['rest', 'Rămas de croit'], ['croit', 'Croit'], ['banda', 'Pe bandă'], ['intrat', 'În depozit'],
+  ];
+  return (
+    <div className="tabel-derulant">
+      <table className="marimi-comanda">
+        <thead>
+          <tr><th>Culoare</th><th />{marimi.map((x) => <th key={x}>{x}</th>)}<th>Total</th></tr>
+        </thead>
+        <tbody>
+          {linii.map((l) => RANDURI.map(([k, nume], i) => {
+            const total = l.marimi.reduce((t, x) => t + x[k], 0);
+            return (
+              <tr key={`${l.cod_sku}${k}`} className={`${k === 'cerut' ? 'cerut' : ''} ${i === 0 ? 'prima-culoare' : ''}`}>
+                {i === 0 && <td className="culoare" rowSpan={RANDURI.length}>{l.produs} <span className="slab">{l.cod_sku}</span></td>}
+                <td className="ce slab">{nume}</td>
+                {marimi.map((x) => {
+                  const v = l.marimi.find((y) => y.marime === x)?.[k];
+                  return <td key={x}>{v ? v : <span className="slab">—</span>}</td>;
+                })}
+                <td className="total">{total || <span className="slab">—</span>}</td>
+              </tr>
+            );
+          }))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

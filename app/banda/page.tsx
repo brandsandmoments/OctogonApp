@@ -2,96 +2,58 @@ import { Termen } from '../Insigne';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import Cauta from '../Cauta';
-import Grupare from '../Grupare';
+import Pliere from '../Pliere';
 import { potriveste } from '../lib/format';
 import { cere, poateModifica } from '../lib/sesiune';
-import { deAlimentat, transe } from '../lib/banda';
+import { transe } from '../lib/banda';
 import { modeleComenzi } from '../lib/modele';
+import { oameniPeTranse } from '../lib/productie';
+import FileProductie from '../productie/FileProductie';
+import BandaPePlan from './BandaPePlan';
+import '../productie/productie.css';
 import { grupareDinAdresa, grupeaza, type TipPerioada } from '../lib/perioade';
 
 export const dynamic = 'force-dynamic';
 
-const VEDERI: [string, string][] = [
-  ['de_alimentat', 'De alimentat'],
-  ['pe_banda', 'În lucru'],
-  ['predate', 'Terminate'],
-];
-
 /**
- * Alimentarea benzii: ce s-a croit și așteaptă banda, ce e pe bandă acum (cu data
- * estimată în depozit și marja față de termen) și ce a ajuns la depozit. Se grupează
- * pe săptămâni, luni, trimestre sau ani: după croire, după alimentare, după predare.
+ * Banda: ce s-a croit și așteaptă banda și ce e pe bandă acum, într-un singur tabel
+ * în ordinea planului (BandaPePlan); separat, ce a ajuns la depozit, grupat pe
+ * săptămâni, luni, trimestre sau ani după predare.
  */
 export default async function Banda({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; cauta?: string }> }) {
   await cere('banda');
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('banda');
-  const { vedere = 'de_alimentat', grupare, cauta } = await searchParams;
+  const { vedere, grupare, cauta } = await searchParams;
+  const predate = vedere === 'predate';
+  // Terminatele, pe săptămâni de la început; se schimbă pe luni sau ani dintr-un clic.
   const g = grupareDinAdresa(grupare, 'saptamana');
+  const PE: [string, string][] = [['saptamana', 'Pe săptămâni'], ['luna', 'Pe luni'], ['an', 'Pe ani'], ['fara', 'Toate, negrupate']];
+  const adresaGrupare = (x: string) => `/banda?vedere=predate&grupare=${x}${cauta ? `&cauta=${encodeURIComponent(cauta)}` : ''}`;
   return (
     <main className="lat">
-      <h1>Bandă</h1>
-      <nav className="file">
-        {VEDERI.map(([v, nume]) => (
-          <Link key={v} href={`/banda?vedere=${v}${grupare ? `&grupare=${grupare}` : ''}`} className={v === vedere ? 'activ' : ''}>{nume}</Link>
-        ))}
-      </nav>
-      <Cauta valoare={cauta} pastreaza={{ vedere, grupare }} placeholder="caută: comandă, produs, lot" />
-      <Grupare ales={g} pastreaza={{ vedere, cauta }} />
-      {vedere === 'de_alimentat' ? <DeAlimentat m={m} g={g} cauta={cauta} /> : <Transe predate={vedere === 'predate'} g={g} cauta={cauta} />}
+      <h1>Producție</h1>
+      <FileProductie activ={predate ? 'predate' : 'banda'} />
+      <p className="slab">
+        {predate ? 'Tranșele ajunse la depozit.'
+          : 'În ordinea planului, săptămână cu săptămână. Clic pe o comandă: loturile croite de dat pe bandă și tranșele de pe bandă, cu oamenii alocați.'}
+      </p>
+      <Cauta valoare={cauta} pastreaza={{ vedere, grupare }} placeholder="caută: comandă, model, produs" />
+      {predate && (
+        <div className="filtre">
+          {PE.map(([k, nume]) => (
+            <Link key={k} href={adresaGrupare(k)} className={`buton ${(g || 'fara') === k ? 'activ-buton' : ''}`}>{nume}</Link>
+          ))}
+          {g && <Pliere semn={JSON.stringify([g, cauta])} />}
+        </div>
+      )}
+      {predate ? <Transe predate g={g} cauta={cauta} /> : <BandaPePlan m={m} cauta={cauta} />}
     </main>
   );
 }
 
-async function DeAlimentat({ m, g, cauta }: { m: boolean; g: TipPerioada | ''; cauta?: string }) {
-  const [toate, modele] = await Promise.all([deAlimentat(), modeleComenzi()]);
-  const lista = toate.filter((l) => potriveste(cauta, l.cod, l.comanda, l.produs));
-  const grupe = g ? grupeaza(lista, (l) => l.croit_la, g) : [{ perioada: null, randuri: lista }];
-  return (
-    <>
-      <p className="sumar">{lista.length} loturi croite · {lista.reduce((s, l) => s + l.rest, 0)} buc de dat pe bandă</p>
-      {lista.length === 0 ? <p className="slab">Nimic croit care să aștepte banda.</p> : (
-        <div className="tabel-derulant">
-          <table className="centralizator">
-            <thead><tr><th>Lot croit</th><th>Model</th><th>Termen</th><th>Produs</th><th>Pe mărimi</th>
-                       <th className="nr">Croit</th><th className="nr">Pe bandă</th><th className="nr">Rest</th><th /></tr></thead>
-            <tbody>
-              {grupe.map((gr) => (
-                <Fragment key={gr.perioada?.de_la ?? 'toate'}>
-                {gr.perioada && (
-                  <tr className="grupa-model">
-                    <td colSpan={5}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} loturi · croite</span></td>
-                    <td className="nr"><strong>{gr.randuri.reduce((s, l) => s + l.croit, 0)}</strong></td>
-                    <td className="nr">{gr.randuri.reduce((s, l) => s + l.alimentat, 0) || '—'}</td>
-                    <td className="nr"><strong>{gr.randuri.reduce((s, l) => s + l.rest, 0)}</strong></td>
-                    <td />
-                  </tr>
-                )}
-                {gr.randuri.map((l) => (
-                <tr key={l.lot_id}>
-                  <td><Link href={`/croit/${l.lot_id}`}>{l.cod}</Link> <span className="slab">P{l.prioritate}</span></td>
-                  <td>{modele.get(l.comanda)}</td>
-                  <td><Termen data={l.data_ceruta} /></td>
-                  <td>{l.produs}</td>
-                  <td>{l.marimi.map((m) => `${m.marime} ${m.rest}`).join(' · ')}</td>
-                  <td className="nr">{l.croit}</td>
-                  <td className="nr">{l.alimentat || '—'}</td>
-                  <td className="nr"><strong>{l.rest}</strong></td>
-                  <td>{m && <Link href={`/banda/alimenteaza?lot=${l.lot_id}`}>Dă pe bandă</Link>}</td>
-                </tr>
-                ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </>
-  );
-}
-
 async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada | ''; cauta?: string }) {
-  const [toate, modele] = await Promise.all([transe(predate), modeleComenzi()]);
+  const [toate, modele, oameni] = await Promise.all([transe(predate), modeleComenzi(), oameniPeTranse()]);
   const lista = toate.filter((t) => potriveste(cauta, t.cod, t.comanda, t.produs, t.responsabil));
   const grupe = g ? grupeaza(lista, (t) => (predate ? t.predat_la : t.alimentat_la), g) : [{ perioada: null, randuri: lista }];
   return (
@@ -101,7 +63,7 @@ async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada 
         <div className="tabel-derulant">
           <table className="centralizator">
             <thead><tr><th>Tranșă</th><th>Model</th><th>Termen</th><th>Produs</th><th className="nr">Buc</th><th>Etapă</th>
-                       <th>{predate ? 'Predat' : 'Estimat în depozit'}</th>{!predate && <th className="nr">Marjă</th>}</tr></thead>
+                       <th>{predate ? 'Predat' : 'Estimat în depozit'}</th>{!predate && <th className="nr">Marjă</th>}{!predate && <th>Cine lucrează</th>}</tr></thead>
             <tbody>
               {grupe.map((gr) => (
                 <Fragment key={gr.perioada?.de_la ?? 'toate'}>
@@ -109,7 +71,7 @@ async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada 
                   <tr className="grupa-model">
                     <td colSpan={4}><strong>{gr.perioada.nume}</strong> <span className="slab">{gr.randuri.length} tranșe · {predate ? 'predate' : 'date pe bandă'}</span></td>
                     <td className="nr"><strong>{gr.randuri.reduce((s, t) => s + t.bucati, 0)}</strong></td>
-                    <td colSpan={predate ? 2 : 3} />
+                    <td colSpan={predate ? 2 : 4} />
                   </tr>
                 )}
                 {gr.randuri.map((t) => (
@@ -124,6 +86,15 @@ async function Transe({ predate, g, cauta }: { predate: boolean; g: TipPerioada 
                   {!predate && (
                     <td className={`nr ${t.marja_zile !== null && t.marja_zile < 0 ? 'lipsa' : ''}`}>
                       {t.marja_zile === null ? '—' : `${t.marja_zile > 0 ? '+' : ''}${t.marja_zile} zile`}
+                    </td>
+                  )}
+                  {!predate && (
+                    <td>
+                      {(oameni.get(t.id) ?? 0) > 0
+                        ? <Link href={`/banda/${t.id}`} className="insigna verde">{oameni.get(t.id)} {oameni.get(t.id) === 1 ? 'om' : 'oameni'}</Link>
+                        : ['alimentat', 'în producție'].includes(t.etapa)
+                          ? <Link href={`/banda/${t.id}`} className="insigna galben">alocă oamenii</Link>
+                          : <span className="slab">—</span>}
                     </td>
                   )}
                 </tr>

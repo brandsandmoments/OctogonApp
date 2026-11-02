@@ -16,5 +16,28 @@ tr.grupa-faza.gata td       { border-left: 4px solid var(--verde); }
 .rapid { display: inline-flex; gap: .3rem; flex-wrap: wrap; }
 .rapid button { font-size: .8rem; padding: .15rem .5rem; }
 .muta { display: inline-flex; gap: .25rem; align-items: center; }
-.muta select, .muta button { font-size: .8rem; padding: .15rem .35rem; }
+.muta input, .muta button { font-size: .8rem; padding: .15rem .35rem; }
 @media screen and (max-width: 700px) { .faza { min-width: 0; flex: 1 1 40%; } }
+tr.rand-cascada { cursor: pointer; }
+tr.rand-cascada:hover td { background: color-mix(in srgb, var(--bej) 60%, transparent); }
+/* Butonul de desfacere: un pătrățel cu chenar, vizibil, înaintea comenzii. */
+tr.rand-cascada td.cascada::before {
+  content: '▸'; display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem;
+  margin-right: .5rem; vertical-align: middle; border: 1.5px solid var(--text); border-radius: .35rem;
+  background: var(--card); color: var(--text); font-size: 1rem; font-weight: 700; line-height: 1; transition: background .15s, color .15s;
+}
+tr.rand-cascada:hover td.cascada::before,
+tr.rand-cascada.deschis td.cascada::before { background: var(--text); color: var(--card); }
+tr.rand-cascada.deschis td.cascada::before { content: '▾'; }
+tr.rand-cascada.deschis td { background: var(--bej); }
+tr.detalii-cascada > td { background: var(--card); padding: .5rem .75rem 1rem 1.5rem; border-left: 4px solid var(--accent-linie); }
+table.marimi-comanda { width: auto; border-collapse: collapse; font-size: .85rem; }
+table.marimi-comanda th, table.marimi-comanda td { padding: .2rem .55rem; border-bottom: 1px solid var(--linie); text-align: right; white-space: nowrap; }
+table.marimi-comanda th:first-child, table.marimi-comanda td.culoare, table.marimi-comanda td.ce { text-align: left; }
+table.marimi-comanda td.culoare { font-weight: 600; vertical-align: top; white-space: normal; max-width: 16rem; }
+table.marimi-comanda tr.cerut td { font-weight: 600; }
+table.marimi-comanda tr.prima-culoare td { border-top: 2px solid var(--accent-linie); }
+table.marimi-comanda td.total { font-weight: 600; }
+.detalii-banda h4 { margin: .4rem 0 .3rem; font-size: .9rem; }
+.detalii-banda h4:not(:first-child) { margin-top: .9rem; }
+.detalii-banda .buton { font-size: .8rem; padding: .15rem .5rem; }
