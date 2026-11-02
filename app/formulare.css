@@ -189,3 +189,12 @@
 .functii-alege label { display: flex; gap: .4rem; align-items: center; font-size: .85rem; }
 .formular .functii-alege input { width: auto; }
 .formular .functii-om button { min-height: 2rem; padding: 0 .6rem; font-size: .8rem; width: auto; }
+
+/* Calculatorul de timp */
+.calculator .lat-2 { grid-column: span 2; }
+.calculator .raspuns-termen { display: flex; align-items: end; }
+.calculator .raspuns-termen p { margin: 0 0 .5rem; }
+@media screen and (max-width: 760px) { .calculator .lat-2 { grid-column: auto; } }
+.estimare-timp { margin: 1.5rem 0; padding: 1rem; border: 1px solid var(--linie); border-radius: .5rem; }
+.estimare-timp h2 { margin-top: 0; }
+.estimare-rezultat { font-size: 1rem; }

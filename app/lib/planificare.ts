@@ -19,6 +19,7 @@ export type LinieDePlanificat = {
   cerut: number;
   planificat: number;
   rest: number;
+  timp_min_buc: number | null;   // minute pe bucată ale modelului (nomenclatorul de timpi)
 };
 
 /**
@@ -37,7 +38,8 @@ export async function deplanificat(cauta?: string): Promise<LinieDePlanificat[]>
             EXISTS (SELECT 1 FROM model_componenta mc WHERE mc.model_id = p.model_id) AS are_reteta,
             sum(cc.cantitate)::int AS cerut,
             sum(least(coalesce(pl.q, 0), cc.cantitate))::int AS planificat,
-            sum(greatest(cc.cantitate - coalesce(pl.q, 0), 0))::int AS rest
+            sum(greatest(cc.cantitate - coalesce(pl.q, 0), 0))::int AS rest,
+            mo.timp_min_buc::float AS timp_min_buc
        FROM comanda_linie cl
        JOIN comanda c            ON c.id = cl.comanda_id
        JOIN produs p             ON p.id = cl.produs_id
@@ -46,7 +48,7 @@ export async function deplanificat(cauta?: string): Promise<LinieDePlanificat[]>
        LEFT JOIN planificat pl   ON pl.linie_id = cl.id AND pl.marime_id = cc.marime_id
       WHERE c.stare IN ('lansata', 'in_productie')
         AND ($1::text IS NULL OR c.numar ILIKE '%' || $1 || '%' OR p.denumire ILIKE '%' || $1 || '%')
-      GROUP BY cl.id, c.numar, c.tip, c.prioritate, cl.data_ceruta, p.id, p.denumire, p.cod_sku, p.model_id, mo.denumire
+      GROUP BY cl.id, c.numar, c.tip, c.prioritate, cl.data_ceruta, p.id, p.denumire, p.cod_sku, p.model_id, mo.denumire, mo.timp_min_buc
      HAVING sum(greatest(cc.cantitate - coalesce(pl.q, 0), 0)) > 0
       ORDER BY coalesce(mo.denumire, p.denumire), c.prioritate, cl.data_ceruta, c.numar, p.denumire`,
     [cauta?.trim() || null],

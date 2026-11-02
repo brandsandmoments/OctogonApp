@@ -2,7 +2,7 @@ import { caFirma } from './db';
 import { firmaCurenta } from './sesiune';
 
 export type Optiune = { id: string; nume: string };
-export type ProdusOptiune = { id: string; nume: string; cod_sku: string; brand_id: string; activ: boolean };
+export type ProdusOptiune = { id: string; nume: string; cod_sku: string; brand_id: string; activ: boolean; timp_min_buc: number | null };
 export type MarimeOptiune = { id: string; cod: string; cod_numeric: string | null };
 
 export type Nomenclatoare = {
@@ -10,6 +10,8 @@ export type Nomenclatoare = {
   produse: ProdusOptiune[];
   marimi: MarimeOptiune[];
   kami: Optiune[];
+  // Pentru estimarea timpului de producție (lib/timp.ts).
+  timp: { orePeZi: number; operatori: number; costMinut: number };
 };
 
 /** Tot ce trebuie formularului de comandă, într-o singură tranzacție. */
@@ -20,12 +22,17 @@ export async function nomenclatoareComanda(): Promise<Nomenclatoare> {
     // Și produsele inactive: „Activ" din catalog înseamnă activ pe site, nu „nu se mai
     // produce" — 73 de produse inactive au comenzi în dashboard. Vin după cele active.
     const produse = await c.query<ProdusOptiune>(
-      `SELECT id, denumire AS nume, cod_sku, brand_id, activ FROM produs ORDER BY NOT activ, denumire`,
+      `SELECT p.id, p.denumire AS nume, p.cod_sku, p.brand_id, p.activ, m.timp_min_buc::float AS timp_min_buc
+         FROM produs p LEFT JOIN model m ON m.id = p.model_id ORDER BY NOT p.activ, p.denumire`,
     );
     const marimi = await c.query<MarimeOptiune>(`SELECT id, cod, cod_numeric FROM marime ORDER BY ordine`);
     const kami = await c.query<Optiune>(
       `SELECT id, nume FROM utilizator WHERE activ AND 'kam' = ANY (roluri) ORDER BY nume`);
-    return { branduri: branduri.rows, produse: produse.rows, marimi: marimi.rows, kami: kami.rows };
+    const { rows: param } = await c.query<{ cheie: string; valoare: number }>(
+      `SELECT cheie, valoare::float AS valoare FROM parametru WHERE cheie IN ('ore_pe_zi', 'operatori_impliciti', 'cost_minut_om')`);
+    const p = (k: string, d: number) => param.find((x) => x.cheie === k)?.valoare ?? d;
+    return { branduri: branduri.rows, produse: produse.rows, marimi: marimi.rows, kami: kami.rows,
+             timp: { orePeZi: p('ore_pe_zi', 8), operatori: p('operatori_impliciti', 6), costMinut: p('cost_minut_om', 0) } };
   });
 }
 

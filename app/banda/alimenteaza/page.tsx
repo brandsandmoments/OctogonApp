@@ -3,6 +3,8 @@ import { cere } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { alimenteaza, lotPentruAlimentare } from '../../lib/banda';
 import { numarDinFormular } from '../../lib/format';
+import { parametriTimp } from '../../lib/parametriTimp';
+import TimpTransa from './TimpTransa';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +18,7 @@ export default async function Alimenteaza({
   await cere('banda', 'modifica');
   const { lot: lotId, eroare } = await searchParams;
   if (!lotId) notFound();
-  const d = await lotPentruAlimentare(lotId);
+  const [d, param] = await Promise.all([lotPentruAlimentare(lotId), parametriTimp()]);
   if (!d) notFound();
   const { lot, marimi } = d;
   const rest = marimi.reduce((s, m) => s + m.rest, 0);
@@ -64,8 +66,8 @@ export default async function Alimenteaza({
 
         <div className="antet-comanda">
           <label className="lat"><span>Operatorii care lucrează la produs</span><input name="responsabil" placeholder="ex. Maria, Elena, Ioana" /></label>
-          <label><span>Număr de operatori</span><input name="persoane" inputMode="numeric" /></label>
-          <label><span>Minute pe bucată</span><input name="timp" inputMode="decimal" defaultValue={lot.timp_min_buc ? Number(lot.timp_min_buc) : ''} /></label>
+          <TimpTransa bucati={rest} minImplicit={lot.timp_min_buc ? Number(lot.timp_min_buc) : null} operatoriImpliciti={param.operatori}
+                      orePeZi={param.orePeZi} termen={lot.data_ceruta} />
           <label className="lat"><span>Observații</span><input name="observatii" /></label>
         </div>
         <p className="slab">

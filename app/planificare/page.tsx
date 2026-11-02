@@ -9,7 +9,9 @@ import {
   type LinieDePlanificat, type PlanificareRezumat,
 } from '../lib/planificare';
 import { STADII } from '../lib/stadii';
-import { cantitate } from '../lib/format';
+import { azi, cantitate } from '../lib/format';
+import { parametriTimp, type ParametriTimp } from '../lib/parametriTimp';
+import { estimeaza, ore } from '../lib/timp';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +33,7 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('planificare');
   const { cauta, eroare } = await searchParams;
-  const [active, deplan] = await Promise.all([planificariActive(), deplanificat(cauta)]);
+  const [active, deplan, paramTimp] = await Promise.all([planificariActive(), deplanificat(cauta), parametriTimp()]);
   const deTrimis = active.filter((p) => ['gata_de_lansat', 'blocat_materiale', 'fara_cantitate'].includes(p.stadiu));
   const laCroit = active.filter((p) => ['lansat_spre_croit', 'in_croit'].includes(p.stadiu));
   const materiale = await materialeDeBifat(deTrimis.map((p) => p.id));
@@ -104,7 +106,8 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
                 <tr className="grupa-model">
                   <td colSpan={7}>
                     <strong>{linii[0].model}</strong>{' '}
-                    <span className="slab">{linii.length} {linii.length === 1 ? 'comandă' : 'comenzi'}</span>
+                    <span className="slab">{linii.length} {linii.length === 1 ? 'comandă' : 'comenzi'}</span>{' '}
+                    <TimpGrupa minBuc={linii[0].timp_min_buc} bucati={linii.reduce((s, l) => s + l.rest, 0)} param={paramTimp} />
                   </td>
                   <td className="nr"><strong>{linii.reduce((s, l) => s + l.rest, 0)}</strong></td>
                   <td />
@@ -248,4 +251,12 @@ function Tabel({ lista, coloana, peModel = false }: {
       </table>
     </div>
   );
+}
+
+/** Cât durează restul unui model, cu operatorii impliciți: ore-om și zile lucrătoare. */
+function TimpGrupa({ minBuc, bucati, param }: { minBuc: number | null; bucati: number; param: ParametriTimp }) {
+  if (!minBuc) return <span className="slab">· fără timp în nomenclator</span>;
+  const e = estimeaza({ minBuc, bucati, operatori: param.operatori, orePeZi: param.orePeZi, start: azi() });
+  return e ? <span className="slab" title={`${minBuc} min/buc; cu ${param.operatori} operatori × ${param.orePeZi} ore pe zi`}>
+    · {ore(e.oreOm)} · ≈ {e.zile} {e.zile === 1 ? 'zi' : 'zile'} cu {param.operatori} operatori</span> : null;
 }

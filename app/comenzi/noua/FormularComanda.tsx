@@ -6,13 +6,14 @@ import type { StocMarime } from '../../lib/acoperire';
 import type { LinieNoua, Nomenclatoare } from '../../lib/comenzi';
 import { salveazaComanda } from './actiuni';
 import CautaProdus from './CautaProdus';
+import EstimareTimp from './EstimareTimp';
 
 // Data locală, nu UTC: după miezul nopții în România, UTC e încă „ieri".
 const azi = () => new Date().toLocaleDateString('sv-SE');
 const linieGoala = (): LinieNoua => ({ produsId: '', dataCeruta: '', vanzareDeLa: '', vanzarePanaLa: '', cantitati: {} });
 
 export default function FormularComanda({
-  branduri, produse, marimi, kami, kamImplicit, tipImplicit, brandImplicit, liniiInitiale, observatiiImplicite,
+  branduri, produse, marimi, kami, timp, kamImplicit, tipImplicit, brandImplicit, liniiInitiale, observatiiImplicite,
 }: Nomenclatoare & {
   kamImplicit: string; tipImplicit: 'PSF' | 'PSC';
   // Precompletat, de ex. din lipsurile unui magazin Shopify: omul vede și schimbă înainte să salveze.
@@ -233,6 +234,10 @@ export default function FormularComanda({
       </button>
 
       <p className="sumar">{linii.filter((l) => l.produsId).length} produse · {total} buc</p>
+      <EstimareTimp linii={linii.filter((l) => l.produsId).map((l) => {
+        const p = produse.find((x) => x.id === l.produsId);
+        return { nume: p?.nume ?? '', minBuc: p?.timp_min_buc ?? null, bucati: totalLinie(l), termen: l.dataCeruta };
+      })} {...timp} />
       {eroare && <p className="eroare">{eroare}</p>}
 
       <div className="actiuni">

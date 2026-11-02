@@ -84,14 +84,15 @@ const ORE_OM = `
 
 /**
  * Data estimată în depozit: zile = ore de lucru / (operatori × ore pe zi), rotunjit
- * în sus; de la intrarea în producție (sau de la alimentare, dacă n-a intrat încă).
+ * în sus, în zile lucrătoare (fără sâmbete și duminici); de la intrarea în producție
+ * (sau de la alimentare, dacă n-a intrat încă). Aceeași regulă ca în lib/timp.ts.
  * Fără operatori sau timp pe bucată nu se estimează nimic — o dată inventată e mai
  * rea decât niciuna.
  */
 const ETA = `
   CASE WHEN ab.persoane IS NOT NULL AND ab.timp_min_buc IS NOT NULL THEN
-    (coalesce(ab.intrat_productie_la, ab.alimentat_la)::date
-      + ceil(${ORE_OM} / (ab.persoane * coalesce((SELECT valoare FROM parametru WHERE cheie = 'ore_pe_zi'), 8)))::int)
+    adauga_zile_lucratoare(coalesce(ab.intrat_productie_la, ab.alimentat_la)::date,
+      greatest(1, ceil(${ORE_OM} / (ab.persoane * coalesce((SELECT valoare FROM parametru WHERE cheie = 'ore_pe_zi'), 8))))::int)
   END`;
 
 const ETAPA = `
