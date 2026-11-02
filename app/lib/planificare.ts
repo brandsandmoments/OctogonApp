@@ -190,7 +190,8 @@ export async function creeazaPlanificare(
 ): Promise<{ id: string } | { eroare: string }> {
   const date = await liniePentruPlanificare(linieId);
   if (!date) return { eroare: 'Linia nu există.' };
-  if (!date.linie.are_reteta) return { eroare: 'Produsul nu are rețetă: nu se poate verifica materialul. Completează întâi rețeta modelului.' };
+  // Fără rețetă se poate planifica și croi: materialul nu se verifică, nu se rezervă și
+  // nu se scade din stoc la croit. Pagina îl avertizează pe om.
   const alese = date.marimi
     .map((m) => ({ ...m, q: cantitati.get(m.marime_id) ?? 0 }))
     .filter((m) => m.q !== 0);
@@ -218,31 +219,19 @@ export async function planificaTot(linii: string[]): Promise<string | null> {
   if (linii.length === 0) return 'Bifează cel puțin o comandă.';
   return caFirma(firmaCurenta(), async (c) => {
     for (const linieId of linii) {
-      const { rows } = await c.query<{ marime_id: string; q: number; are_reteta: boolean; cod: string }>(
-        `SELECT cc.marime_id, greatest(cc.cantitate - coalesce(pp.cantitate, 0), 0)::int AS q,
-                EXISTS (SELECT 1 FROM model_componenta mc WHERE mc.model_id = p.model_id) AS are_reteta,
-                c.numar || ' · ' || p.denumire AS cod
+      const { rows } = await c.query<{ marime_id: string; q: number }>(
+        `SELECT cc.marime_id, greatest(cc.cantitate - coalesce(pp.cantitate, 0), 0)::int AS q
            FROM comanda_cantitate cc
-           JOIN comanda_linie cl ON cl.id = cc.linie_id
-           JOIN comanda c        ON c.id = cl.comanda_id
-           JOIN produs p         ON p.id = cl.produs_id
            LEFT JOIN planificat_pe_pozitie pp ON pp.linie_id = cc.linie_id AND pp.marime_id = cc.marime_id
           WHERE cc.linie_id = $1`, [linieId]);
-      if (rows.length && !rows[0].are_reteta) throw new Refuzat(`${rows[0].cod}: produsul nu are rețetă.`);
       const alese = rows.filter((m) => m.q > 0);
       if (alese.length === 0) continue;
       const id = await insereazaPlanificare(c, linieId, alese, '');
       await actualizeazaStadiuMateriale(c, id);
     }
     return null;
-  }).catch((e) => {
-    if (e instanceof Refuzat) return e.message;
-    throw e;
   });
 }
-
-/** Aruncat ca tranzacția să se anuleze: toate liniile alese sau niciuna. */
-class Refuzat extends Error {}
 
 /** Scrie planificarea și cantitățile ei; cine cheamă a verificat deja cantitățile. */
 export async function insereazaPlanificare(

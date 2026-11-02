@@ -39,7 +39,8 @@ export default async function PlanificareNoua({
       <p className="slab"><Link href="/planificare">← Planificare</Link></p>
       <h1>Planifică {linie.produs}</h1>
       <p className="sumar">{linie.comanda} · {linie.tip} · P{linie.prioritate} · cerut în depozit {linie.data_ceruta} · {linie.cod_sku}</p>
-      {!linie.are_reteta && <p className="eroare">Produsul nu are rețetă: completează întâi rețeta modelului.</p>}
+      {!linie.are_reteta && <p className="lipsa">Produsul nu are rețetă: se poate planifica și da la croit, dar materialul nu se verifică,
+        nu se rezervă și nu se scade din stoc la croit. Completează rețeta modelului când poți.</p>}
 
       <form action={salveaza}>
         <div className="tabel-derulant">

@@ -115,10 +115,8 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
                 {linii.map((l) => (
                   <tr key={l.linie_id}>
                     <td>
-                      {l.are_reteta && (
-                        <input type="checkbox" name="linie" value={l.linie_id} form="planifica" disabled={!m}
-                               aria-label={`${l.comanda} ${l.produs}`} />
-                      )}
+                      <input type="checkbox" name="linie" value={l.linie_id} form="planifica" disabled={!m}
+                             aria-label={`${l.comanda} ${l.produs}`} />
                     </td>
                     <td>{l.comanda} <span className="slab">{l.tip} · P{l.prioritate}</span></td>
                     <td>{l.model}</td>
@@ -127,8 +125,8 @@ export default async function Planificare({ searchParams }: { searchParams: Prom
                     <td className="nr">{l.cerut}</td>
                     <td className="nr">{l.planificat || '—'}</td>
                     <td className="nr">{l.rest}</td>
-                    <td>{!l.are_reteta ? <span className="lipsa">fără rețetă</span>
-                      : m && <Link href={`/planificare/nou?linie=${l.linie_id}`}>alte cantități</Link>}</td>
+                    <td>{!l.are_reteta && <span className="insigna galben" title="se poate planifica și croi; materialul nu se verifică și nu se scade din stoc">fără rețetă</span>}{' '}
+                      {m && <Link href={`/planificare/nou?linie=${l.linie_id}`}>alte cantități</Link>}</td>
                   </tr>
                 ))}
               </Fragment>
