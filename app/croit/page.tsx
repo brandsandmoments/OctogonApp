@@ -116,8 +116,10 @@ async function Taieri({ vedere, grupare, cauta }: { vedere: VedereCroit; grupare
 
 async function Ramas({ cauta }: { cauta?: string }) {
   const m = await poateModifica('croit');
-  const [toate, motive, deschise] = await Promise.all([ramasDeCroit(), motiveCroit(), taieriDeschiseToate()]);
+  const [toate, motive, deschise, inTaieri] = await Promise.all([ramasDeCroit(), motiveCroit(), taieriDeschiseToate(), taieriLaCroit('taieri')]);
   const lista = toate.filter((r) => potriveste(cauta, r.cod, r.comanda, r.produs, r.model));
+  // Ce e pus deja într-o taiere, dar încă necroit: tot de croit, doar că se croiește din taierea lui.
+  const puse = inTaieri.filter((t) => potriveste(cauta, t.cod, t.comenzi, t.model));
   const peModel = new Map<string, RamasDeCroit[]>();
   for (const r of lista) peModel.set(r.model_cheie, [...(peModel.get(r.model_cheie) ?? []), r]);
 
@@ -150,8 +152,34 @@ async function Ramas({ cauta }: { cauta?: string }) {
   return (
     <>
       <p className="sumar">
-        {lista.reduce((s, r) => s + r.disponibil, 0)} buc rămase de croit · {lista.length} comenzi · {peModel.size} modele
+        {lista.reduce((s, r) => s + r.disponibil, 0)} buc de pus în taieri · {lista.length} comenzi · {peModel.size} modele
+        {puse.length > 0 && <> · <strong>{puse.reduce((s, t) => s + t.cerut - t.croit, 0)} buc în {puse.length} {puse.length === 1 ? 'taiere începută' : 'taieri începute'}, încă necroite</strong></>}
       </p>
+      {puse.length > 0 && (
+        <section>
+          <h2>În taieri, încă necroite</h2>
+          <p className="slab">Sunt puse deja într-o taiere: se croiesc de acolo (întins, tăiat, apoi „Înregistrează croitul").</p>
+          <div className="tabel-derulant">
+            <table className="centralizator">
+              <thead><tr><th>Taiere</th><th>Model</th><th>Comenzi</th><th>Făcută</th><th className="nr">Buc</th><th>Întins · tăiat</th><th /></tr></thead>
+              <tbody>
+                {puse.map((t) => (
+                  <tr key={t.id}>
+                    <td><Link href={`/croit/taiere/${t.id}`}>{t.cod}</Link></td>
+                    <td>{t.model}</td>
+                    <td>{t.comenzi}</td>
+                    <td className="slab">{t.facuta_la}</td>
+                    <td className="nr"><strong>{t.cerut - t.croit}</strong></td>
+                    <td className="slab">{t.intinse ? 'întins' : 'neîntins'} · {t.taiate ? 'tăiat' : 'netăiat'}</td>
+                    <td><Link href={`/croit/taiere/${t.id}`} className="buton">Deschide taierea</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <h2>De pus în taieri</h2>
+        </section>
+      )}
       <p className="filtre"><Pliere semn="ramas" /></p>
       <datalist id="motive-croit">{motive.map((x) => <option key={x.id} value={x.nume} />)}</datalist>
       <p className="slab">
@@ -159,7 +187,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
         a rămas din comandă. Poți pune în aceeași taiere mai multe comenzi de pe același model (PSF cu PSF, PSF cu PSC).
         Ce nu scrii rămâne aici.
       </p>
-      {lista.length === 0 ? <p className="slab">Nu a rămas nimic de croit.</p> : (
+      {lista.length === 0 ? <p className="slab">{puse.length ? 'Tot ce e de croit e pus deja în taieri (mai sus).' : 'Nu a rămas nimic de croit.'}</p> : (
         <div className="tabel-derulant">
           <table className="centralizator">
             <thead><tr><th>Comandă</th><th>Model</th><th>Termen</th><th>Produs</th><th>Rămas pe mărimi → tai acum</th><th className="nr">Rest</th><th /></tr></thead>
