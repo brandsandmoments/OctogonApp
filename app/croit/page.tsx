@@ -57,21 +57,29 @@ export default async function Croit({ searchParams }: { searchParams: Promise<{ 
       )}
       {vedere === 'croite' && (pe === 'comenzi' || pe === 'modele') ? <CroitePe pe={pe} cauta={cauta} /> : vedere === 'ramas' ? <Ramas cauta={cauta} /> : (
         <>
-          <Grupare ales={g} pastreaza={{ vedere, cauta }} />
-          <Taieri vedere={vedere as VedereCroit} grupare={g} cauta={cauta} />
+          {/* La Croite, taierile stau sub PSF-ul sau PSC-ul din care au venit (/T1, /T2…). */}
+          {vedere === 'croite' ? <p className="filtre"><Pliere semn={`croite-${cauta ?? ''}`} /></p> : <Grupare ales={g} pastreaza={{ vedere, cauta }} />}
+          <Taieri vedere={vedere as VedereCroit} grupare={g} cauta={cauta} peComanda={vedere === 'croite'} />
         </>
       )}
     </main>
   );
 }
 
-async function Taieri({ vedere, grupare, cauta }: { vedere: VedereCroit; grupare: TipPerioada | ''; cauta?: string }) {
+async function Taieri({ vedere, grupare, cauta, peComanda = false }: { vedere: VedereCroit; grupare: TipPerioada | ''; cauta?: string; peComanda?: boolean }) {
   const lista = (await taieriLaCroit(vedere)).filter((t) => potriveste(cauta, t.cod, t.model, t.comenzi));
   const deCroit = lista.filter((t) => t.loturi_deschise > 0);
   const zi = (t: TaiereLaCroit) => t.croit_la ?? t.facuta_la;
-  const grupa = (t: TaiereLaCroit) => (grupare ? perioada(grupare, zi(t)).nume : '');
-  // Grupate, cele mai noi sus; altfel ordinea cozii.
-  if (grupare) lista.sort((a, b) => zi(b).localeCompare(zi(a)));
+  // Comanda din care vine taierea: numele ei fără /T (psc-ms-26-noi-1/T2 → psc-ms-26-noi-1).
+  const comanda = (t: TaiereLaCroit) => t.cod.replace(/\/T\d+$/, '');
+  const grupa = (t: TaiereLaCroit) => (peComanda ? comanda(t) : grupare ? perioada(grupare, zi(t)).nume : '');
+  if (peComanda) {
+    // Comenzile cu taierea cea mai nouă sus; în comandă, T1, T2… în ordine.
+    const ultima = new Map<string, string>();
+    for (const t of lista) if (zi(t) > (ultima.get(comanda(t)) ?? '')) ultima.set(comanda(t), zi(t));
+    const nr = (t: TaiereLaCroit) => Number(t.cod.match(/\/T(\d+)$/)?.[1] ?? 0);
+    lista.sort((a, b) => ultima.get(comanda(b))!.localeCompare(ultima.get(comanda(a))!) || comanda(a).localeCompare(comanda(b)) || nr(a) - nr(b));
+  } else if (grupare) lista.sort((a, b) => zi(b).localeCompare(zi(a)));  // grupate, cele mai noi sus; altfel ordinea cozii
   return (
     <>
       <p className="sumar">
@@ -87,13 +95,16 @@ async function Taieri({ vedere, grupare, cauta }: { vedere: VedereCroit; grupare
             </thead>
             <tbody>
               {lista.map((t, i) => {
-                const nou = grupare !== '' && (i === 0 || grupa(lista[i - 1]) !== grupa(t));
+                const nou = (peComanda || grupare !== '') && (i === 0 || grupa(lista[i - 1]) !== grupa(t));
                 const din = nou ? lista.filter((x) => grupa(x) === grupa(t)) : [];
                 return (
                   <Fragment key={t.id}>
                     {nou && (
                       <tr className="grupa-model">
-                        <td colSpan={4}><strong>{grupa(t)}</strong> <span className="slab">{din.length} taieri</span></td>
+                        <td colSpan={4}>
+                          <strong>{grupa(t)}</strong>{' '}
+                          <span className="slab">{peComanda && `${t.model} · `}{din.length} {din.length === 1 ? 'taiere' : 'taieri'}</span>
+                        </td>
                         <td className="nr"><strong>{din.reduce((s, x) => s + x.cerut, 0)}</strong></td>
                         <td className="nr"><strong>{din.reduce((s, x) => s + x.croit, 0)}</strong></td>
                         <td colSpan={2} />
@@ -107,7 +118,7 @@ async function Taieri({ vedere, grupare, cauta }: { vedere: VedereCroit; grupare
                       <td className="nr">{t.cerut}</td>
                       <td className={`nr ${t.croit_la && t.croit < t.cerut ? 'lipsa' : ''}`}>{t.croit || '—'}</td>
                       <td className="slab">
-                        {t.componente ? `${t.intinse}/${t.componente} · ${t.taiate}/${t.componente}` : '—'} · {t.imperecheat ? 'da' : 'nu'}
+                        {t.componente ? `${t.intinse}/${t.componente} · ${t.taiate}/${t.componente}` : `${t.intinse ? 'da' : 'nu'} · ${t.taiate ? 'da' : 'nu'}`} · {t.imperecheat ? 'da' : 'nu'}
                       </td>
                       <td>{t.croit_la ? <Stadiu cheie="gata" nume={`croit ${t.croit_la}`} /> : <Stadiu cheie="in_croit" nume="în lucru" />}</td>
                     </tr>
