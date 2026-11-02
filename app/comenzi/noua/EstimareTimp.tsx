@@ -10,9 +10,11 @@ type Linie = { nume: string; minBuc: number | null; bucati: number; termen: stri
  * Cât ar dura comanda, pe măsură ce se scrie: pe fiecare linie, orele-om după
  * minutele pe bucată ale modelului; pentru toată comanda, cu câți operatori alege
  * omul, câte zile lucrătoare și ziua de gata dacă intră în lucru la data aleasă.
+ * Operatorii și ziua de intrare le alege doar producția (`alocaOameni`); KAM-ul vede
+ * estimarea cu echipa obișnuită, din ziua de azi.
  */
-export default function EstimareTimp({ linii, orePeZi, operatori: implicit, costMinut }: {
-  linii: Linie[]; orePeZi: number; operatori: number; costMinut: number;
+export default function EstimareTimp({ linii, orePeZi, operatori: implicit, costMinut, alocaOameni }: {
+  linii: Linie[]; orePeZi: number; operatori: number; costMinut: number; alocaOameni: boolean;
 }) {
   const [operatori, setOperatori] = useState(String(implicit));
   const [start, setStart] = useState(aziRo());
@@ -32,10 +34,14 @@ export default function EstimareTimp({ linii, orePeZi, operatori: implicit, cost
   return (
     <section className="estimare-timp">
       <h2>Timp de producție estimat</h2>
-      <div className="antet-comanda">
-        <label><span>Operatori pe comandă</span><input inputMode="numeric" value={operatori} onChange={(e) => setOperatori(e.target.value)} /></label>
-        <label><span>Intră în lucru</span><input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
-      </div>
+      {alocaOameni ? (
+        <div className="antet-comanda">
+          <label><span>Operatori pe comandă</span><input inputMode="numeric" value={operatori} onChange={(e) => setOperatori(e.target.value)} /></label>
+          <label><span>Intră în lucru</span><input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+        </div>
+      ) : (
+        <p className="slab">Estimat cu echipa obișnuită ({implicit} operatori), dacă ar intra în lucru azi. Câți oameni lucrează și când intră în lucru hotărăște producția.</p>
+      )}
       <table>
         <thead><tr><th>Produs</th><th className="nr">Bucăți</th><th className="nr">Min/buc</th><th className="nr">Ore-om</th><th className="nr">Zile</th></tr></thead>
         <tbody>
@@ -56,7 +62,7 @@ export default function EstimareTimp({ linii, orePeZi, operatori: implicit, cost
           gata în jur de <strong>{dataRo(gata)}</strong>
           {termen && <> · termenul cel mai apropiat: {dataRo(termen)}
             {gata > termen && <span className="lipsa"> — {termen < start ? 'termenul a trecut'
-              : `nu se încadrează${necesari ? `; ar trebui ≈ ${necesari} operatori` : ', termenul e prea aproape'}`}</span>}</>}.
+              : `nu se încadrează${alocaOameni && necesari ? `; ar trebui ≈ ${necesari} operatori` : alocaOameni ? ', termenul e prea aproape' : ' cu echipa obișnuită'}`}</span>}</>}.
         </p>
       )}
       {faraTimp.length > 0 && <p className="slab">Fără timp în nomenclator: {faraTimp.map((x) => x.l.nume).join(', ')} — nu intră în estimare.</p>}

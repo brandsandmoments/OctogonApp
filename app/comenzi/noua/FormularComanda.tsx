@@ -13,9 +13,9 @@ const azi = () => new Date().toLocaleDateString('sv-SE');
 const linieGoala = (): LinieNoua => ({ produsId: '', dataCeruta: '', vanzareDeLa: '', vanzarePanaLa: '', cantitati: {} });
 
 export default function FormularComanda({
-  branduri, produse, marimi, kami, timp, kamImplicit, tipImplicit, brandImplicit, liniiInitiale, observatiiImplicite,
+  branduri, produse, marimi, kami, timp, kamImplicit, tipImplicit, brandImplicit, liniiInitiale, observatiiImplicite, alocaOameni,
 }: Nomenclatoare & {
-  kamImplicit: string; tipImplicit: 'PSF' | 'PSC';
+  kamImplicit: string; tipImplicit: 'PSF' | 'PSC'; alocaOameni: boolean;
   // Precompletat, de ex. din lipsurile unui magazin Shopify: omul vede și schimbă înainte să salveze.
   brandImplicit?: string; liniiInitiale?: LinieNoua[]; observatiiImplicite?: string;
 }) {
@@ -237,7 +237,7 @@ export default function FormularComanda({
       <EstimareTimp linii={linii.filter((l) => l.produsId).map((l) => {
         const p = produse.find((x) => x.id === l.produsId);
         return { nume: p?.nume ?? '', minBuc: p?.timp_min_buc ?? null, bucati: totalLinie(l), termen: l.dataCeruta };
-      })} {...timp} />
+      })} {...timp} alocaOameni={alocaOameni} />
       {eroare && <p className="eroare">{eroare}</p>}
 
       <div className="actiuni">

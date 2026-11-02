@@ -2,6 +2,7 @@ import { nomenclatoareComanda } from '../../lib/comenzi';
 import { propunere } from '../../lib/acoperire';
 import { lipsuriPentruPsc } from '../../lib/magazine';
 import { cere } from '../../lib/sesiune';
+import { poate } from '../../lib/acces';
 import FormularComanda from './FormularComanda';
 import '../../formulare.css';
 
@@ -25,7 +26,9 @@ export default async function ComandaNouaPagina({ searchParams }: { searchParams
   const psf = !lipsuri && q.din_produs ? await propunere(q.din_produs, q.tip === 'PSC' ? 'PSC' : 'PSF') : null;
   const azi = new Date().toLocaleDateString('ro-RO', { timeZone: 'Europe/Bucharest' });
   return (
-    <FormularComanda {...nom} kamImplicit={kamImplicit} tipImplicit={lipsuri ? 'PSC' : psf ? psf.tip : tip}
+    <FormularComanda {...nom} kamImplicit={kamImplicit}
+      // Câți oameni lucrează alege producția (admin, șef și manager de producție), nu KAM-ul.
+      alocaOameni={poate(eu, 'banda', 'modifica') || poate(eu, 'planificare', 'modifica')} tipImplicit={lipsuri ? 'PSC' : psf ? psf.tip : tip}
       brandImplicit={lipsuri?.brand_id ?? psf?.brand_id} liniiInitiale={lipsuri?.linii ?? (psf ? [psf.linie] : undefined)}
       observatiiImplicite={lipsuri
         ? `Din comenzile ${lipsuri.brand} care așteaptă stoc, ${azi}: ${lipsuri.bucati} buc${lipsuri.necunoscute ? ` (+${lipsuri.necunoscute} buc pe variante fără produs în catalog)` : ''}. Scăzut ce e deja în producție sau de aprobat.`

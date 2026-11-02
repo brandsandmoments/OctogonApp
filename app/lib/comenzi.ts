@@ -73,6 +73,9 @@ export function normalizeazaNumar(brut: string): string {
  * intră toată, ori nimic. O comandă pe jumătate scrisă e exact genul de rând
  * orfan pe care structura asta a fost făcută să nu-l mai permită.
  */
+/** Brandul n-are codul din numărul comenzii: fără el, numărul ar ieși gol. */
+class FaraCodBrand extends Error {}
+
 export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda> {
   if (!cmd.brandId) return { ok: false, eroare: 'Alege brandul.' };
   if (!cmd.dataLansare) return { ok: false, eroare: 'Data lansării e obligatorie.' };
@@ -110,6 +113,7 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
       const { rows: [{ prefix }] } = await c.query<{ prefix: string }>(
         `SELECT lower($1) || '-' || b.cod || '-' || to_char($3::date, 'YY') || '-' || luna_scurta($3::date) || '-' AS prefix
            FROM brand b WHERE b.id = $2`, [cmd.tip, cmd.brandId, cmd.dataLansare]);
+      if (!prefix) throw new FaraCodBrand();
       await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [prefix]);
       const { rows: [{ numar }] } = await c.query<{ numar: string }>(
         `SELECT $1 || (coalesce(max(substr(numar, length($1) + 1)::int), 0) + 1) AS numar
@@ -143,6 +147,7 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
     if ((e as { code?: string }).code === '23505') {
       return { ok: false, eroare: 'Numărul comenzii s-a ocupat chiar acum. Mai apasă o dată.' };
     }
+    if (e instanceof FaraCodBrand) return { ok: false, eroare: 'Brandul ales n-are cod pentru numărul comenzii (ms, ps, sl). Spune-i adminului.' };
     throw e;
   }
 }
