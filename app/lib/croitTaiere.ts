@@ -16,6 +16,7 @@ import { firmaCurenta, interogare } from './sesiune';
 export const OPERATII = {
   intins: 'Întins',
   taiat: 'Tăiat',
+  separat: 'Separat piese',
   termocolat: 'Termocolat',
   imperecheat: 'Împerecheat, separat pe culori, pregătit pentru lucru',
 } as const;
@@ -288,8 +289,8 @@ export async function taieriLaCroit(vedere: VedereCroit): Promise<TaiereLaCroit[
             CASE WHEN l.deschise = 0 THEN to_char(l.croit_la, 'YYYY-MM-DD') END AS croit_la,
             l.cerut, l.croit, l.deschise AS loturi_deschise,
             (SELECT count(*) FROM model_componenta mc WHERE mc.model_id = l.model_id AND mc.tip = 'materie_prima')::int AS componente,
-            (SELECT count(*) FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'intins' AND o.terminat_la IS NOT NULL)::int AS intinse,
-            (SELECT count(*) FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'taiat' AND o.terminat_la IS NOT NULL)::int AS taiate,
+            (SELECT count(DISTINCT coalesce(o.componenta_id::text, '')) FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'intins' AND o.terminat_la IS NOT NULL)::int AS intinse,
+            (SELECT count(DISTINCT coalesce(o.componenta_id::text, '')) FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'taiat' AND o.terminat_la IS NOT NULL)::int AS taiate,
             EXISTS (SELECT 1 FROM taiere_operatie o WHERE o.taiere_id = t.id AND o.operatie = 'imperecheat' AND o.terminat_la IS NOT NULL) AS imperecheat
        FROM taiere t JOIN l ON l.taiere_id = t.id
       ORDER BY l.deschise = 0, CASE WHEN l.deschise > 0 THEN t.numar END, l.croit_la DESC, t.numar DESC`,
@@ -429,7 +430,7 @@ export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
 
 // ---------------------------------------------------------------- operații
 
-/** Începe o operație acum: cine o face și pe ce material. */
+/** Începe o operație acum: cine o face și pe ce material. Pe aceeași operație pot lucra mai mulți oameni, fiecare cu rândul lui. */
 export async function incepe(taiereId: string, componentaId: string | null, operatie: Operatie, operatorId: string): Promise<string | null> {
   if (!operatorId) return 'Alege cine lucrează.';
   try {
@@ -439,7 +440,7 @@ export async function incepe(taiereId: string, componentaId: string | null, oper
       [taiereId, operatie === 'imperecheat' ? null : componentaId, operatie, operatorId]);
     return null;
   } catch (e) {
-    if ((e as { code?: string }).code === '23505') return 'Operația e deja începută.';
+    if ((e as { code?: string }).code === '23505') return 'Omul ăsta e deja trecut la operația asta.';
     throw e;
   }
 }

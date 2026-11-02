@@ -90,37 +90,47 @@ export default async function FisaTaierePagina({
     inapoi(id, e);
   }
 
+  // O operație, cu fiecare om care lucrează la ea pe rândul lui (de la ce oră, până la ce
+  // oră) și, dedesubt, „Adaugă" — încă un om pe aceeași operație.
   const Rand = ({ operatie, componenta }: { operatie: Operatie; componenta: string | null }) => {
-    const o = f.operatii.find((x) => x.operatie === operatie && x.componenta_id === componenta);
+    const pe = f.operatii.filter((x) => x.operatie === operatie && x.componenta_id === componenta)
+      .sort((a, b) => a.inceput_la.localeCompare(b.inceput_la));
+    const liberi = f.oameni.filter((x) => !pe.some((o) => o.operator_id === x.id));
     return (
       <tr>
-        <td><strong>{OPERATII[operatie]}</strong>{operatie === 'termocolat' && <span className="slab"> · dacă e cazul</span>}</td>
+        <td><strong>{OPERATII[operatie]}</strong>{operatie === 'termocolat' && <span className="slab"> · dacă e cazul</span>}
+          {pe.length > 1 && <span className="slab"> · {pe.length} oameni</span>}</td>
         <td>
-          {!o ? (
+          {pe.map((o) => (
+            <div key={o.id} className="om-operatie">
+              {!o.terminat_la ? (
+                <form action={terminaOp} className="in-rand"><fieldset disabled={!lucreaza} className="fara-chenar">
+                  <span><strong>{o.operator}</strong> · de la {ora(o.inceput_la).slice(11)}</span>
+                  <input type="hidden" name="id" value={o.id} />
+                  {operatie === 'intins' && (
+                    <label className="bifa"><input type="checkbox" name="fata" value="1" required /> am verificat fața materialului</label>
+                  )}
+                  <button>Termină acum</button>
+                </fieldset></form>
+              ) : (
+                <span>
+                  <strong>{o.operator}</strong> · {ora(o.inceput_la)} – {ora(o.terminat_la).slice(11)}
+                  {operatie === 'intins' && <span className="slab"> · fața verificată</span>}
+                  {o.observatii && <span className="slab"> · {o.observatii}</span>}
+                </span>
+              )}
+              {sef && <Corectura o={o} f={f} actiune={corecteazaOp} />}
+            </div>
+          ))}
+          {liberi.length > 0 && (
             <form action={incepeOp} className="in-rand"><fieldset disabled={!lucreaza} className="fara-chenar">
               <input type="hidden" name="operatie" value={operatie} />
               <input type="hidden" name="componenta" value={componenta ?? ''} />
-              <Oameni f={f} ales={eu} />
-              <button>Începe acum</button>
+              <Oameni f={{ ...f, oameni: liberi }} ales={liberi.some((x) => x.id === eu) ? eu : ''} />
+              <button className={pe.length ? 'secundar' : ''}>{pe.length ? '+ Încă un om, începe acum' : 'Începe acum'}</button>
             </fieldset></form>
-          ) : !o.terminat_la ? (
-            <form action={terminaOp} className="in-rand"><fieldset disabled={!lucreaza} className="fara-chenar">
-              <span>{o.operator} · de la {ora(o.inceput_la).slice(11)}</span>
-              <input type="hidden" name="id" value={o.id} />
-              {operatie === 'intins' && (
-                <label className="bifa"><input type="checkbox" name="fata" value="1" required /> am verificat fața materialului</label>
-              )}
-              <button>Termină acum</button>
-            </fieldset></form>
-          ) : (
-            <span>
-              {o.operator} · {ora(o.inceput_la)} – {ora(o.terminat_la).slice(11)}
-              {operatie === 'intins' && <span className="slab"> · fața verificată</span>}
-              {o.observatii && <span className="slab"> · {o.observatii}</span>}
-            </span>
           )}
         </td>
-        <td>{o && sef && <Corectura o={o} f={f} actiune={corecteazaOp} />}</td>
       </tr>
     );
   };
@@ -139,8 +149,8 @@ export default async function FisaTaierePagina({
 
       {f.componente.length === 0 && (
         <section>
-          <h2>Întins și tăiat <span className="slab">· pe toată taierea (modelul n-are încă materiale în rețetă)</span></h2>
-          <table><tbody>{(['intins', 'taiat'] as const).map((op) => <Rand key={op} operatie={op} componenta={null} />)}</tbody></table>
+          <h2>Întins, tăiat, separat, termocolat <span className="slab">· pe toată taierea (modelul n-are încă materiale în rețetă)</span></h2>
+          <table><tbody>{(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => <Rand key={op} operatie={op} componenta={null} />)}</tbody></table>
         </section>
       )}
       {f.componente.map((c) => {
@@ -150,7 +160,7 @@ export default async function FisaTaierePagina({
             <h2>{c.nume}{c.principal && <span className="slab"> · material de bază</span>}</h2>
             <table>
               <tbody>
-                {(['intins', 'taiat', 'termocolat'] as const).map((op) => <Rand key={op} operatie={op} componenta={c.id} />)}
+                {(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => <Rand key={op} operatie={op} componenta={c.id} />)}
               </tbody>
             </table>
             {mat.length > 0 && (

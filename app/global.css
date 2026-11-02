@@ -244,3 +244,4 @@ th.nr-auto, td.nr-auto { text-align: right; font-variant-numeric: tabular-nums; 
   main table.tabel-auto td .insigna, main table.tabel-auto td.nr-auto { white-space: normal; }
   main table.tabel-auto td { overflow-wrap: anywhere; }
 }
+.om-operatie { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; margin-bottom: .35rem; }
