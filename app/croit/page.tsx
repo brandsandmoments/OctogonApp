@@ -58,11 +58,55 @@ export default async function Croit({ searchParams }: { searchParams: Promise<{ 
       {vedere === 'croite' && (pe === 'comenzi' || pe === 'modele') ? <CroitePe pe={pe} cauta={cauta} /> : vedere === 'ramas' ? <Ramas cauta={cauta} /> : (
         <>
           {/* La Croite, taierile stau sub PSF-ul sau PSC-ul din care au venit (/T1, /T2…). */}
+          {vedere === 'toate' && <DeCroitPeScurt cauta={cauta} />}
+          {vedere === 'toate' && <h2>Croite</h2>}
           {vedere === 'croite' ? <p className="filtre"><Pliere semn={`croite-${cauta ?? ''}`} /></p> : <Grupare ales={g} pastreaza={{ vedere, cauta }} />}
           <Taieri vedere={vedere as VedereCroit} grupare={g} cauta={cauta} peComanda={vedere === 'croite'} />
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * La „Toate", întâi ce mai e de croit — pe PSF/PSC: modelul, culorile, câte bucăți
+ * au rămas și termenul, cu drumul spre „Rămas de croit" unde se croiesc —, apoi croitele.
+ */
+/** Culoarea din numele produsului: fără tip (Rochie, Palton…) și fără model — „Rochie Valerie Negru" → „Negru". */
+const culoare = (produs: string, model: string) => {
+  const m = new Set(model.toLowerCase().split(/\s+/));
+  const rest = produs.split(/\s+/).slice(1).filter((w) => !m.has(w.toLowerCase()));
+  return rest.join(' ') || produs;
+};
+
+async function DeCroitPeScurt({ cauta }: { cauta?: string }) {
+  const lista = (await ramasDeCroit()).filter((r) => potriveste(cauta, r.cod, r.comanda, r.produs, r.model));
+  const pe = new Map<string, RamasDeCroit[]>();
+  for (const r of lista) pe.set(r.comanda, [...(pe.get(r.comanda) ?? []), r]);
+  const comenzi = [...pe].sort(([, a], [, b]) => a[0].data_ceruta.localeCompare(b[0].data_ceruta));
+  return (
+    <section>
+      <h2>De croit <span className="slab">· {lista.reduce((s, r) => s + r.disponibil, 0)} buc în {pe.size} comenzi</span></h2>
+      {pe.size === 0 ? <p className="slab">Nimic de croit.</p> : (
+        <div className="tabel-derulant">
+          <table className="centralizator">
+            <thead><tr><th>Comandă</th><th>Model</th><th>Culori</th><th>Termen</th><th className="nr">De croit</th><th /></tr></thead>
+            <tbody>
+              {comenzi.map(([c, rs]) => (
+                <tr key={c}>
+                  <td>{c} <span className="slab">{rs[0].tip} · P{rs[0].prioritate}</span></td>
+                  <td>{[...new Set(rs.map((r) => r.model))].join(', ')}</td>
+                  <td className="slab">{rs.map((r) => `${culoare(r.produs, r.model)} ${r.disponibil}`).join(' · ')}</td>
+                  <td><Termen data={rs.map((r) => r.data_ceruta).sort()[0]} /></td>
+                  <td className="nr"><strong>{rs.reduce((s, r) => s + r.disponibil, 0)}</strong></td>
+                  <td><Link href={`/croit?vedere=ramas&cauta=${encodeURIComponent(c)}`} className="buton">Croiește</Link></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
