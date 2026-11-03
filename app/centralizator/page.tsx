@@ -47,13 +47,21 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
   // Un rând pe comandă (și model): mărimile și culorile se văd la clic, în cascadă.
   type Rand = (typeof randuri)[number];
   const peComenzi: { cheie: string; r: Rand; randuri: Rand[] }[] = [];
+  const dupaCheie = new Map<string, (typeof peComenzi)[number]>();   // o căutare pe rând, nu o trecere prin toate
   for (const r of randuri) {
     const cheie = `${r.comanda}|${peModel ? r.model ?? r.produs : ''}`;
-    const x = peComenzi.find((y) => y.cheie === cheie);
-    if (x) x.randuri.push(r); else peComenzi.push({ cheie, r, randuri: [r] });
+    const x = dupaCheie.get(cheie);
+    if (x) x.randuri.push(r);
+    else { const nou = { cheie, r, randuri: [r] }; peComenzi.push(nou); dupaCheie.set(cheie, nou); }
   }
   const ordonate = g ? grupeaza(peComenzi, (x) => x.r.data_lansare, g).flatMap((x) => x.randuri) : peComenzi;
   const perioadaRand = (x: { r: Rand }) => (g ? perioada(g, x.r.data_lansare).nume : '');
+  // Rândurile fiecărei perioade și ale fiecărui model, adunate o dată (antetele de grupă le însumează).
+  const pePerioada = new Map<string, Rand[]>();
+  const adauga = (m: Map<string, Rand[]>, k: string, ...v: Rand[]) => { const l = m.get(k); if (l) l.push(...v); else m.set(k, [...v]); };
+  if (g) for (const x of ordonate) adauga(pePerioada, perioadaRand(x), ...x.randuri);
+  const peModelRanduri = new Map<string, Rand[]>();
+  if (peModel) for (const y of randuri) adauga(peModelRanduri, y.model ?? y.produs, y);
   const suma2 = (lista: Rand[], k: 'cerut' | 'planificat' | 'croit' | 'banda' | 'intrat') => lista.reduce((t, r) => t + r[k], 0);
   const lipsa = (lista: Rand[]) => lista.reduce((t, r) => t + (r.inchisa ? 0 : Math.max(0, r.cerut - r.intrat)), 0);
   // Pe culori (produse) și mărimi, pentru cascadă.
@@ -140,10 +148,10 @@ export default async function Centralizator({ searchParams }: { searchParams: Pr
             {ordonate.map((x, i) => {
               const r = x.r;
               const nouaPerioada = g && (i === 0 || perioadaRand(ordonate[i - 1]) !== perioadaRand(x));
-              const dinPerioada = nouaPerioada ? ordonate.filter((y) => perioadaRand(y) === perioadaRand(x)).flatMap((y) => y.randuri) : [];
+              const dinPerioada = nouaPerioada ? pePerioada.get(perioadaRand(x)) ?? [] : [];
               const model = r.model ?? r.produs;
               const nouModel = peModel && (i === 0 || (ordonate[i - 1].r.model ?? ordonate[i - 1].r.produs) !== model);
-              const deModel = nouModel ? randuri.filter((y) => (y.model ?? y.produs) === model) : [];
+              const deModel = nouModel ? peModelRanduri.get(model) ?? [] : [];
               const culori = peCulori(x.randuri);
               const termen = x.randuri.map((y) => y.data_ceruta).sort()[0];
               const gata = x.randuri.every((y) => y.inchisa || y.intrat >= y.cerut);

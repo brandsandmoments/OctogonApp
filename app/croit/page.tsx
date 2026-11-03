@@ -1,6 +1,6 @@
 import { Stadiu, Termen } from '../Insigne';
 import Link from 'next/link';
-import AlegeOameni from './taiere/[id]/AlegeOameni';
+import { CineCroieste, OameniCroit } from './OameniCroit';
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
 import { croiesteDirect, inchideComanda, loturiCroite, oameniCroit, OPERATII, ramasDeCroit, taieriLaCroit, type LotCroit, type Operatie, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
@@ -314,6 +314,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
         același model (PSF cu PSF, PSF cu PSC); o comandă se poate tăia și în mai multe taieri: ce nu tai acum rămâne aici.
       </p>
       {lista.length === 0 ? <p className="slab">{puse.length ? 'Tot ce e de croit e pus deja în taieri (mai sus).' : 'Nu a rămas nimic de croit.'}</p> : (
+        <OameniCroit croit={om.oameni} altii={om.altii}>
         <div className="tabel-derulant">
           <table className="centralizator">
             <thead><tr><th>Comandă</th><th>Model</th><th>Termen</th><th>Produs</th><th>Rămas pe mărimi → tai acum</th><th className="nr">Rest</th><th /></tr></thead>
@@ -391,15 +392,8 @@ async function Ramas({ cauta }: { cauta?: string }) {
                     <tr className="cine-croieste">
                       <td colSpan={7}>
                         <strong>Cine a lucrat</strong>
-                        <span className="cine-operatii">
-                          {(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => (
-                            <label key={op}>
-                              <span>{OPERATII[op]}</span>
-                              <AlegeOameni nume={`om:${op}`} form={formular} croit={om.oameni} altii={om.altii} ales="" dezactivat={!m}
-                                obligatoriu={op === 'intins' || op === 'taiat'} />
-                            </label>
-                          ))}
-                        </span>
+                        <CineCroieste formular={formular} dezactivat={!m}
+                          operatii={(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => [op, OPERATII[op], op === 'intins' || op === 'taiat'])} />
                         <button form={formular} className="principal" disabled={!m}>Salvează croitul</button>
                         <span className="slab"> — devine taierea (deja croită); ce nu tai rămâne aici.</span>
                       </td>
@@ -410,6 +404,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
             </tbody>
           </table>
         </div>
+        </OameniCroit>
       )}
     </>
   );

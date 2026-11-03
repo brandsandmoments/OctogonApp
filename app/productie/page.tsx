@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { Termen } from '../Insigne';
 import { cere, poateModifica, utilizatorCurent } from '../lib/sesiune';
@@ -17,6 +18,7 @@ import { parametriTimp } from '../lib/parametriTimp';
 import './productie.css';
 import FileProductie from './FileProductie';
 import CineLucreaza from './CineLucreaza';
+import ComandaPliabila from './ComandaPliabila';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,8 +33,13 @@ const culoare = (produs: string, model: string) => {
   const m = new Set(model.toLowerCase().split(/[\s,]+/));
   return produs.split(/\s+/).slice(1).filter((w) => !m.has(w.toLowerCase())).join(' ') || produs;
 };
-/** Înapoi în plan, la comanda deschisă (cu eroarea, dacă a fost una). */
+/**
+ * Înapoi în plan, la comanda deschisă (cu eroarea, dacă a fost una). O redirecționare pe
+ * aceeași adresă, cu altă ancoră, nu reîncarcă pagina: o cerem explicit, altfel cifrele
+ * rămân cele de dinainte de acțiune.
+ */
 const inapoiLaComanda = (date: FormData, e?: string | null): never => {
+  revalidatePath('/productie');
   const la = String(date.get('inapoi') ?? '/productie');
   const numar = String(date.get('numar'));
   return redirect(`${la}${la.includes('?') ? '&' : '?'}deschis=${encodeURIComponent(numar)}${e ? `&eroare=${encodeURIComponent(e)}` : ''}#c-${encodeURIComponent(numar)}`);
@@ -66,8 +73,12 @@ export default async function Productie({ searchParams }: { searchParams: Promis
   pana = saptamani[saptamani.length - 1];
   const nr = saptamani.length;
 
+  // Ce trebuie doar comenzii deschise (cine lucrează, tranșele în lucru, oamenii, mașinile) se
+  // încarcă numai când e o comandă deschisă: lista însăși are nevoie doar de plan.
   const [plan, inProductie, inLucru, oameni, masini, param] = await Promise.all([
-    planPeSaptamani(de, pana, curenta, luni), comenziInProductie(), transeSimple(false), personal(), utilaje(), parametriTimp(),
+    planPeSaptamani(de, pana, curenta, luni),
+    f.deschis ? comenziInProductie() : [], f.deschis ? transeSimple(false) : [], f.deschis ? personal() : [],
+    f.deschis ? utilaje() : [], f.deschis ? parametriTimp() : { orePeZi: 8 },
   ]);
   const prod = new Map(inProductie.map((c) => [c.comanda_id, c]));
   const toate = plan
@@ -96,20 +107,22 @@ export default async function Productie({ searchParams }: { searchParams: Promis
     const numar = String(date.get('numar'));
     await aduLaUrgenta(String(date.get('comanda')), String(date.get('saptamana')));
     const inapoiLa = String(date.get('inapoi') ?? '/productie');
+    revalidatePath('/productie');
     redirect(`${inapoiLa}${inapoiLa.includes('?') ? '&' : '?'}deschis=${encodeURIComponent(numar)}#c-${encodeURIComponent(numar)}`);
   }
   async function faraUrgenta(date: FormData) {
     'use server';
     await cere(['planificare', 'banda'], 'modifica');
     await scoateUrgenta(String(date.get('comanda')));
+    revalidatePath('/productie');
     redirect(String(date.get('inapoi') ?? '/productie'));
   }
 
   async function da(date: FormData) {
     'use server';
-    await cere('banda', 'modifica');
+    await cere(['planificare', 'banda'], 'modifica');
     const linie = String(date.get('linie'));
-    const lista = await planPeSaptamani('2000-01-03', '2100-01-04', luni(azi()), luni);
+    const lista = await planPeSaptamani('2000-01-03', '2100-01-04', luni(azi()), luni, linie);
     const l = lista.flatMap((c) => c.culori).find((x) => x.linie_id === linie);
     const cantitati = new Map((l?.marimi ?? []).map((x) => [x.marime_id,
       date.get('tot') ? x.de_dat : numarDinFormular(date.get(`q:${x.marime_id}`)) ?? 0] as [string, number]));
@@ -134,28 +147,32 @@ export default async function Productie({ searchParams }: { searchParams: Promis
     'use server';
     const cine = await cere(['planificare', 'banda'], 'modifica');
     if (!schimbaStadiulProductiei(cine)) return inapoiLaComanda(date, 'Stadiul îl schimbă doar managerul de producție sau șeful de bandă.');
-    inapoiLaComanda(date, await inapoiInLucruCuloare(String(date.get('linie')), numarDinFormular(date.get('depozit')) ?? 0));
+    // Ce e în depozit se citește pe server (nu din formular): după recepție, culoarea nu se mai întoarce în lucru.
+    const linie = String(date.get('linie'));
+    const [c] = await planPeSaptamani('2000-01-03', '2100-01-04', luni(azi()), luni, linie);
+    inapoiLaComanda(date, await inapoiInLucruCuloare(linie, c?.culori[0]?.depozit ?? 0));
   }
   async function timp(date: FormData) {
     'use server';
-    await cere('banda', 'modifica');
+    await cere(['planificare', 'banda'], 'modifica');
     inapoiLaComanda(date, await salveazaTimpOameni(String(date.get('comanda')), numarDinFormular(date.get('minute')), numarDinFormular(date.get('oameni'))));
   }
   async function aloca(date: FormData) {
     'use server';
-    await cere('banda', 'modifica');
+    await cere(['planificare', 'banda'], 'modifica');
     inapoiLaComanda(date, await adaugaAlocareComanda(String(date.get('comanda')), String(date.get('faza') ?? ''),
       String(date.get('utilaj') ?? ''), String(date.get('om') ?? '')));
   }
   async function sterge(date: FormData) {
     'use server';
-    await cere('banda', 'modifica');
+    await cere(['planificare', 'banda'], 'modifica');
     await stergeAlocareComanda(String(date.get('id')));
     inapoiLaComanda(date);
   }
   async function aIesit(date: FormData) {
     'use server';
-    await cere('banda', 'modifica');
+    const cine = await cere(['planificare', 'banda'], 'modifica');
+    if (!schimbaStadiulProductiei(cine)) return inapoiLaComanda(date, 'Ieșirea din lucru o dă doar managerul de producție sau șeful de bandă.');
     for (const id of date.getAll('id').map(String)) await iesitGata(id);
     inapoiLaComanda(date);
   }
@@ -163,7 +180,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
   const lucru = (c: ComandaPlan) => {
     const p = prod.get(c.comanda_id);
     return p && (
-      <CineLucreaza c={p} m={m} aici={aici} oameni={oameni} masini={masini.map((x) => x.nume)} orePeZi={param.orePeZi} zi={azi()}
+      <CineLucreaza c={p} m={m} iese={st} aici={aici} oameni={oameni} masini={masini.map((x) => x.nume)} orePeZi={param.orePeZi} zi={azi()}
         transe={inLucru.filter((t) => t.comanda === c.numar)} timp={timp} aloca={aloca} sterge={sterge} aIesit={aIesit} />
     );
   };
@@ -267,7 +284,8 @@ export default async function Productie({ searchParams }: { searchParams: Promis
                         {buc(g.comenzi, 'ramas_de_intrat') > 0 && ` · ${buc(g.comenzi, 'ramas_de_intrat')} rămase de intrat în lucru`}</span>
                     </summary>
                     {g.comenzi.map((c) => (
-                      <ComandaInPlan key={`${c.comanda_id}${s}`} c={c} m={m} deschis={f.deschis === c.numar} da={da} aici={aici} faraUrgenta={faraUrgenta} lucru={lucru(c)} st={st} stadiul={{ iesit: iesitDinLucru, partial: iesitAcum, inapoi: inapoiInLucru }} />
+                      <ComandaInPlan key={`${c.comanda_id}${s}`} c={c} m={m} deschis={f.deschis === c.numar} da={da} aici={aici} faraUrgenta={faraUrgenta}
+                        lucru={f.deschis === c.numar ? lucru(c) : null} st={st} stadiul={{ iesit: iesitDinLucru, partial: iesitAcum, inapoi: inapoiInLucru }} />
                     ))}
                   </details>
                 ))}
@@ -306,8 +324,7 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiu
   lucru: React.ReactNode; st: boolean; stadiul: ActiuniStadiu;
 }) {
   return (
-    <details id={`c-${c.numar}`} className="comanda-productie" open={deschis}>
-      <summary>
+    <ComandaPliabila id={`c-${c.numar}`} deschis={deschis} href={`${aici}${aici.includes('?') ? '&' : '?'}deschis=${encodeURIComponent(c.numar)}`} sumar={<>
         <span className="p-termen"><Termen data={c.data_ceruta} gata={c.stadiu === 'terminat'} /></span>
         <span className="p-comanda"><strong>{c.numar}</strong><span className="slab">{c.tip} · {c.brand} · P{c.prioritate}</span></span>
         <span className="p-produs"><strong>{c.model}</strong><span className="slab">{c.culori.map((l) => `${culoare(l.produs, c.model)} ${l.cerut}`).join(' · ')}</span></span>
@@ -321,7 +338,9 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiu
           {c.dat > 0 && c.ramas_de_intrat > 0 && <span className="insigna galben">rămas de intrat: {c.ramas_de_intrat}</span>}
         </span>
         <span>{m && c.de_dat > 0 && <span className="buton buton-da">Dă în lucru ({c.de_dat})</span>}</span>
-      </summary>
+      </>}>
+      {/* Conținutul doar pentru comanda deschisă: altfel ar pleca la browser cu fiecare rând. */}
+      {deschis && <>
       <div className="culori-plan">
         {c.culori.map((l) => <CuloareInPlan key={l.linie_id} c={c} l={l} m={m} da={da} aici={aici} st={st} stadiul={stadiul} />)}
       </div>
@@ -333,7 +352,8 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiu
           <button className="secundar">Scoate urgența</button> <span className="slab">se întoarce în săptămâna termenului ({c.data_ceruta.slice(5).split('-').reverse().join('.')})</span>
         </form>
       )}
-    </details>
+      </>}
+    </ComandaPliabila>
   );
 }
 
@@ -352,12 +372,21 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
   // Ce e încă în lucru, pe mărimi: de aici iese, tot sau doar o parte.
   const inLucru = l.dat - l.gata;
   const iese = st && inLucru > 0;
+  // Două formulare: „Intră acum" și „Iese acum". Căsuțele și butoanele își spun formularul
+  // (atributul form), iar fiecare formular are primul un buton implicit ascuns, ca Enter
+  // într-o căsuță să facă acțiunea rândului ei, nu primul buton din card.
+  const fDa = `da-${l.linie_id}`;
+  const fIese = `iese-${l.linie_id}`;
+  const ascunse = <>
+    <input type="hidden" name="linie" value={l.linie_id} />
+    <input type="hidden" name="numar" value={c.numar} />
+    <input type="hidden" name="inapoi" value={aici} />
+    <input type="hidden" name="depozit" value={l.depozit} />
+  </>;
   return (
-    <form action={da} className="culoare-productie">
-      <input type="hidden" name="linie" value={l.linie_id} />
-      <input type="hidden" name="numar" value={c.numar} />
-      <input type="hidden" name="inapoi" value={aici} />
-      <input type="hidden" name="depozit" value={l.depozit} />
+    <div className="culoare-productie">
+      <form id={fDa} action={da}>{ascunse}<button className="implicit" tabIndex={-1} aria-hidden="true" disabled={!m}>Dă în lucru</button></form>
+      <form id={fIese} action={stadiul.partial}>{ascunse}<button className="implicit" tabIndex={-1} aria-hidden="true">Iese</button></form>
       <div className="cap-culoare">
         <strong>{culoare(l.produs, c.model)}</strong>
         {st && spre ? (
@@ -365,8 +394,8 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
             <summary title="Schimbă stadiul">{insigna} ▾</summary>
             <div>
               {spre === 'iesit'
-                ? <button formAction={stadiul.iesit} className="principal">A ieșit tot din lucru ({inLucru} buc)</button>
-                : <button formAction={stadiul.inapoi} className="secundar">Înapoi în lucru ({l.gata} buc)</button>}
+                ? <button form={fIese} formAction={stadiul.iesit} className="principal">A ieșit tot din lucru ({inLucru} buc)</button>
+                : <button form={fIese} formAction={stadiul.inapoi} className="secundar">Înapoi în lucru ({l.gata} buc)</button>}
             </div>
           </details>
         ) : insigna}
@@ -394,7 +423,7 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
                 {l.marimi.map((x) => (
                   <td key={x.marime_id}>
                     {x.de_dat > 0
-                      ? <input name={`q:${x.marime_id}`} inputMode="numeric" className="bucati" placeholder={String(x.de_dat)} disabled={!m}
+                      ? <input form={fDa} name={`q:${x.marime_id}`} inputMode="numeric" className="bucati" placeholder={String(x.de_dat)} disabled={!m}
                                aria-label={`${l.produs} ${x.marime}: intră acum, din ${x.de_dat}`} />
                       : <span className="slab">—</span>}
                   </td>
@@ -408,7 +437,7 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
                 {l.marimi.map((x) => (
                   <td key={x.marime_id}>
                     {x.dat > x.gata
-                      ? <input name={`o:${x.marime_id}`} inputMode="numeric" className="bucati" placeholder={String(x.dat - x.gata)}
+                      ? <input form={fIese} name={`o:${x.marime_id}`} inputMode="numeric" className="bucati" placeholder={String(x.dat - x.gata)}
                                aria-label={`${l.produs} ${x.marime}: iese din lucru acum, din ${x.dat - x.gata}`} />
                       : <span className="slab">—</span>}
                   </td>
@@ -421,20 +450,20 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
       </div>
       {m && l.de_dat > 0 && (
         <div className="actiuni-culoare">
-          <button name="tot" value="1" className="secundar">Tot ({l.de_dat})</button>
-          <button className="principal">Dă în lucru</button>
+          <button form={fDa} name="tot" value="1" className="secundar">Tot ({l.de_dat})</button>
+          <button form={fDa} className="principal">Dă în lucru</button>
         </div>
       )}
       {iese && (
         <div className="actiuni-culoare iese">
           <span className="slab">În lucru: {inLucru} buc. Scrie pe mărimi ce a ieșit, sau</span>
-          <button formAction={stadiul.iesit} className="secundar">A ieșit tot ({inLucru})</button>
-          <button formAction={stadiul.partial} className="principal">A ieșit din lucru</button>
+          <button form={fIese} formAction={stadiul.iesit} className="secundar">A ieșit tot ({inLucru})</button>
+          <button form={fIese} className="principal">A ieșit din lucru</button>
         </div>
       )}
       {l.de_dat === 0 && l.croit < l.cerut && l.stadiu !== 'terminat' && (
         <p className="slab">Mai sunt {l.cerut - l.croit} buc de croit: <Link href={`/croit?vedere=ramas&cauta=${encodeURIComponent(c.numar)}`}>la croit</Link>.</p>
       )}
-    </form>
+    </div>
   );
 }

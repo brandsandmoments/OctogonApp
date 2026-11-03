@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { meniulLui, ROLURI, type Rol } from './lib/acces';
 import { iesire } from './lib/logare';
 import { utilizatorCurent } from './lib/sesiune';
+import Activitate from './Activitate';
 import Navigare from './Navigare';
 import Tabele from './Tabele';
 import './global.css';
@@ -17,6 +18,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
   return (
     <html lang="ro">
       <body>
+        <Activitate />
         {/* Pe copia de test (OCTOGON_TEST=1): să nu o confunde nimeni cu aplicația adevărată. */}
         {process.env.OCTOGON_TEST === '1' && (
           <div className="banda-test">Copie de test — datele se pot schimba oricum; clienții sunt anonimizați. Aplicația adevărată e separată.</div>

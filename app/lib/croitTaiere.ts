@@ -84,7 +84,8 @@ export async function ramasDeCroit(planificari?: string[]): Promise<RamasDeCroit
        LEFT JOIN model mo    ON mo.id = p.model_id
        JOIN marime m         ON m.id = r.marime_id
        LEFT JOIN deschis d   ON d.planificare_id = r.planificare_id AND d.marime_id = r.marime_id
-       CROSS JOIN LATERAL (SELECT date_trunc('week', cl.data_ceruta)::date AS saptamana) ps   -- săptămâna termenului (planul e după termen)
+       CROSS JOIN LATERAL (SELECT coalesce((SELECT min(x.saptamana) FROM plan_linie x WHERE x.linie_id = cl.id),
+                                            date_trunc('week', cl.data_ceruta)::date) AS saptamana) ps   -- săptămâna din plan: a urgenței, altfel a termenului
       WHERE pl.stadiu IN ('lansat_spre_croit', 'in_croit')
         AND ($1::uuid[] IS NULL OR pl.id = ANY ($1::uuid[]))
       ORDER BY ps.saptamana NULLS LAST, pl.ordine_croit NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, m.ordine`,
@@ -149,6 +150,23 @@ async function taiereNoua(c: PoolClient): Promise<string> {
 }
 
 /**
+ * Blochează planificarea și verifică din nou, sub lacăt, cât a rămas de croit: verificarea
+ * de dinainte de tranzacție nu oprește doi oameni care salvează aceeași comandă deodată.
+ */
+async function blocheazaSiVerifica(c: PoolClient, a: { planificareId: string; marimi: Iterable<[string, number]> }): Promise<void> {
+  await c.query(`SELECT 1 FROM planificare WHERE id = $1 FOR UPDATE`, [a.planificareId]);
+  const { rows } = await c.query<{ marime_id: string; disponibil: number }>(
+    `SELECT r.marime_id,
+            greatest(r.rest - coalesce((SELECT sum(lq.cantitate) FROM lot_croit lc JOIN lot_croit_cantitate lq ON lq.lot_id = lc.id
+                                         WHERE lc.croit_la IS NULL AND lc.planificare_id = r.planificare_id AND lq.marime_id = r.marime_id), 0), 0)::int AS disponibil
+       FROM planificare_rest_de_croit r WHERE r.planificare_id = $1`, [a.planificareId]);
+  for (const [marime, q] of a.marimi) {
+    const d = rows.find((x) => x.marime_id === marime)?.disponibil ?? 0;
+    if (q > d) opreste(`Între timp s-a croit din comanda asta: pe o mărime au mai rămas doar ${d} buc. Reîncarcă pagina.`);
+  }
+}
+
+/**
  * Face o taiere — sau adaugă la una încă necroită — din bucăți ale comenzilor
  * rămase de croit: fiecare comandă primește un lot cu mărimile alese. Nu se poate
  * pune mai mult decât a rămas; baza refuză două modele în aceeași taiere.
@@ -187,7 +205,7 @@ export async function puneInTaiere(alocari: Alocare[], taiereId?: string): Promi
         `SELECT id FROM lot_croit WHERE taiere_id = $1 AND planificare_id = $2 AND croit_la IS NULL`, [id, a.planificareId]);
       let lot = existent?.id;
       if (!lot) {
-        await c.query(`SELECT 1 FROM planificare WHERE id = $1 FOR UPDATE`, [a.planificareId]);
+        await blocheazaSiVerifica(c, a);
         try {
           ({ rows: [{ id: lot }] } = await c.query<{ id: string }>(
             `INSERT INTO lot_croit (firma_id, planificare_id, numar_lot, taiere_id)
@@ -263,7 +281,7 @@ export async function croiesteDirect(alocari: Alocare[], oameni: Map<Operatie, s
     const id = await taiereNoua(c);
     const croit = new Map<string, Map<string, number>>();
     for (const a of alese) {
-      await c.query(`SELECT 1 FROM planificare WHERE id = $1 FOR UPDATE`, [a.planificareId]);
+      await blocheazaSiVerifica(c, a);
       let lot: string;
       try {
         ({ rows: [{ id: lot }] } = await c.query<{ id: string }>(

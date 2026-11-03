@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { caFirma } from './db';
 import { firmaCurenta, interogare } from './sesiune';
 
@@ -44,7 +45,8 @@ export async function deAlimentat(): Promise<LotDeAlimentat[]> {
        JOIN comanda c        ON c.id = cl.comanda_id
        JOIN produs p         ON p.id = cl.produs_id
        JOIN marime m         ON m.id = ra.marime_id
-       CROSS JOIN LATERAL (SELECT date_trunc('week', cl.data_ceruta)::date AS saptamana) ps   -- săptămâna termenului (planul e după termen)
+       CROSS JOIN LATERAL (SELECT coalesce((SELECT min(x.saptamana) FROM plan_linie x WHERE x.linie_id = cl.id),
+                                            date_trunc('week', cl.data_ceruta)::date) AS saptamana) ps   -- săptămâna din plan: a urgenței, altfel a termenului
       WHERE ra.lot_id IN (SELECT lot_id FROM lot_rest_de_alimentat GROUP BY lot_id HAVING sum(rest) > 0)
       ORDER BY ps.saptamana NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, lc.numar_lot, m.ordine`,
   );
@@ -180,10 +182,11 @@ export type AlimentareNoua = {
  * consumul de accesorii, care abia acum ies din depozit. Ca la croit, consumul nu
  * se oprește la stoc negativ: etichetele au fost puse, deci au existat.
  */
-export async function alimenteaza(a: AlimentareNoua): Promise<{ id: string } | { eroare: string }> {
+export async function alimenteaza(a: AlimentareNoua, client?: PoolClient): Promise<{ id: string } | { eroare: string }> {
   if (a.persoane != null && !(Number.isInteger(a.persoane) && a.persoane > 0)) return { eroare: 'Numărul de persoane trebuie să fie întreg, mai mare ca zero.' };
   if (a.timpMinBuc != null && !(a.timpMinBuc > 0)) return { eroare: 'Timpul pe bucată trebuie să fie mai mare ca zero.' };
-  return caFirma(firmaCurenta(), async (c) => {
+  // Cu `client`, în tranzacția celui care cheamă (mai multe loturi deodată, totul sau nimic).
+  const lucreaza = async (c: PoolClient): Promise<{ id: string } | { eroare: string }> => {
     const { rows: [lot] } = await c.query<{ croit_la: string | null }>(
       `SELECT croit_la FROM lot_croit WHERE id = $1 FOR UPDATE`, [a.lotId]);
     if (!lot) return { eroare: 'Lotul nu există.' };
@@ -223,7 +226,8 @@ export async function alimenteaza(a: AlimentareNoua): Promise<{ id: string } | {
         GROUP BY pm.material_id
        HAVING sum(mc.consum) * $2 > 0`, [a.lotId, bucati, id]);
     return { id };
-  });
+  };
+  return client ? lucreaza(client) : caFirma(firmaCurenta(), lucreaza);
 }
 
 // ---------------------------------------------------------------- o tranșă
@@ -304,8 +308,9 @@ export async function transeSimple(gata: boolean): Promise<TransaSimpla[]> {
             (SELECT sum(cantitate) FROM alimentare_cantitate WHERE alimentare_id = ab.id)::int AS bucati,
             (SELECT string_agg(m.cod || ' ' || ac.cantitate, ' · ' ORDER BY m.ordine) FROM alimentare_cantitate ac
                JOIN marime m ON m.id = ac.marime_id WHERE ac.alimentare_id = ab.id) AS marimi,
-            to_char(coalesce(ab.intrat_productie_la, ab.alimentat_la), 'YYYY-MM-DD') AS intrat_la,
-            to_char(ab.iesit_productie_la, 'YYYY-MM-DD') AS gata_la,
+            -- ziua din România (nu a serverului), ca gruparea pe săptămâni să nu mute ce iese după miezul nopții
+            to_char(coalesce(ab.intrat_productie_la, ab.alimentat_la) AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD') AS intrat_la,
+            to_char(ab.iesit_productie_la AT TIME ZONE 'Europe/Bucharest', 'YYYY-MM-DD') AS gata_la,
             to_char(coalesce(ab.intrat_productie_la, ab.alimentat_la) AT TIME ZONE 'Europe/Bucharest', 'DD.MM HH24:MI') AS intrat_ora,
             to_char(ab.iesit_productie_la AT TIME ZONE 'Europe/Bucharest', 'DD.MM HH24:MI') AS gata_ora,
             round(extract(epoch FROM coalesce(ab.iesit_productie_la, now()) - coalesce(ab.intrat_productie_la, ab.alimentat_la)) / 60)::int AS minute,
@@ -323,13 +328,17 @@ export async function transeSimple(gata: boolean): Promise<TransaSimpla[]> {
       ORDER BY CASE WHEN $1 THEN ab.iesit_productie_la END DESC, cl.data_ceruta, c.numar, p.denumire`, [gata]);
 }
 
-/** „A ieșit gata": tranșa iese din producție acum (intrată, dacă nu era bifată); întoarce cât a stat în lucru. */
-export async function iesitGata(id: string): Promise<{ cod: string; minute: number } | null> {
-  await interogare(
+/**
+ * „A ieșit gata": tranșa iese din producție acum (intrată, dacă nu era bifată); întoarce cât
+ * a stat în lucru. Totul într-o tranzacție — cu `c`, în tranzacția celui care o cheamă.
+ */
+export async function iesitGata(id: string, c?: PoolClient): Promise<{ cod: string; minute: number } | null> {
+  if (!c) return caFirma(firmaCurenta(), (cl) => iesitGata(id, cl));
+  await c.query(
     `UPDATE alimentare_banda SET intrat_productie_la = coalesce(intrat_productie_la, now()), iesit_productie_la = now()
       WHERE id = $1 AND iesit_productie_la IS NULL`, [id]);
-  await interogare(`UPDATE alocare_operatie SET gata_la = now(), incepe_la = coalesce(incepe_la, now()) WHERE alimentare_id = $1 AND gata_la IS NULL`, [id]);
-  const [t] = await interogare<{ cod: string; minute: number }>(
+  await c.query(`UPDATE alocare_operatie SET gata_la = now(), incepe_la = coalesce(incepe_la, now()) WHERE alimentare_id = $1 AND gata_la IS NULL`, [id]);
+  const { rows: [t] } = await c.query<{ cod: string; minute: number }>(
     `SELECT p.denumire AS cod,
             round(extract(epoch FROM ab.iesit_productie_la - coalesce(ab.intrat_productie_la, ab.alimentat_la)) / 60)::int AS minute
        FROM alimentare_banda ab JOIN lot_croit lc ON lc.id = ab.lot_id JOIN planificare pl ON pl.id = lc.planificare_id

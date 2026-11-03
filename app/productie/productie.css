@@ -55,16 +55,16 @@ details.comanda-productie > summary::before { content: '▸'; display: inline-fl
 details.comanda-productie[open] > summary::before { content: '▾'; background: var(--text); color: var(--card); }
 details.comanda-productie[open] > summary { border-bottom: 1px solid var(--linie); background: var(--bej); }
 details.comanda-productie > summary .cifre { margin-left: auto; font-variant-numeric: tabular-nums; }
-form.culoare-productie { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem 1.25rem; padding: .7rem .8rem; border-bottom: 1px solid var(--linie); }
-form.culoare-productie .actiuni-culoare { display: flex; flex-direction: column; gap: .4rem; }
+.culoare-productie { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem 1.25rem; padding: .7rem .8rem; border-bottom: 1px solid var(--linie); }
+.culoare-productie .actiuni-culoare { display: flex; flex-direction: column; gap: .4rem; }
 tr.intra-acum td { background: color-mix(in srgb, var(--albastru-fundal) 70%, transparent); }
 tr.intra-acum input.bucati { width: 3.2rem; }
 section.cine-lucreaza { padding: .7rem .8rem; background: color-mix(in srgb, var(--bej) 45%, transparent); border-radius: 0 0 .5rem .5rem; }
 section.cine-lucreaza h4 { margin: .2rem 0 .5rem; }
 section.cine-lucreaza label { display: inline-flex; flex-direction: column; gap: .15rem; }
 table.alocari-comanda { margin: .6rem 0; }
-form.culoare-productie .actiuni-culoare button { padding: .35rem .9rem; }
-form.culoare-productie .actiuni-culoare .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
+.culoare-productie .actiuni-culoare button { padding: .35rem .9rem; }
+.culoare-productie .actiuni-culoare .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
 details.comanda-productie > summary .buton-da { margin-left: .6rem; background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; padding: .2rem .7rem; }
 .faza.stadiu-necroit { border-left-color: var(--linie); }
 .faza.stadiu-croit { border-left-color: var(--albastru); }
@@ -103,7 +103,7 @@ details.grupa-plan > .comanda-productie:first-of-type { margin-top: .35rem; }
 
 /* Planul: fiecare culoare e un card delimitat, cu antet (nume, stadiu) și tabelul mărimilor cu grilă. */
 .culori-plan { display: grid; gap: .7rem; padding: .7rem .8rem; }
-.culori-plan form.culoare-productie { display: block; padding: 0; border: 1px solid var(--linie); border-radius: .45rem; background: var(--card); overflow: hidden; }
+.culori-plan .culoare-productie { display: block; padding: 0; border: 1px solid var(--linie); border-radius: .45rem; background: var(--card); overflow: hidden; }
 .culori-plan .cap-culoare { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; padding: .45rem .7rem; background: var(--bej); border-bottom: 1px solid var(--linie); }
 .culori-plan .cap-culoare .slab { margin-left: auto; font-variant-numeric: tabular-nums; }
 .culori-plan .tabel-derulant { padding: 0; }
@@ -114,7 +114,7 @@ details.grupa-plan > .comanda-productie:first-of-type { margin-top: .35rem; }
 .culori-plan table.marimi-comanda thead th { border-top: 0; background: color-mix(in srgb, var(--bej) 50%, transparent); font-weight: 600; }
 .culori-plan table.marimi-comanda tbody tr:last-child td { border-bottom: 0; }
 .culori-plan .actiuni-culoare { flex-direction: row !important; justify-content: flex-end; padding: .5rem .7rem; border-top: 1px solid var(--linie); }
-.culori-plan form.culoare-productie > p { margin: 0; padding: .45rem .7rem; border-top: 1px solid var(--linie); }
+.culori-plan .culoare-productie > p { margin: 0; padding: .45rem .7rem; border-top: 1px solid var(--linie); }
 
 /* Stadiul culorii, de schimbat dintr-un clic. */
 details.schimba-stadiu { position: relative; display: inline-block; }
@@ -132,3 +132,8 @@ details.comanda-productie > section.cine-lucreaza { margin: 0 .8rem .8rem; borde
 tr.iese-acum td { background: color-mix(in srgb, var(--galben-fundal, #fdf3d6) 75%, transparent); }
 tr.iese-acum input.bucati { width: 3.2rem; }
 .culori-plan .actiuni-culoare.iese { align-items: center; flex-wrap: wrap; gap: .5rem; }
+
+/* Butonul implicit al unui formular (Enter într-o căsuță): randat, dar nevăzut. */
+.culoare-productie button.implicit { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+.culoare-productie { position: relative; }
+details.comanda-productie > p.se-incarca { padding: .6rem .9rem; margin: 0; }

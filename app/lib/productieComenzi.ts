@@ -133,10 +133,19 @@ export async function daInLucruCuloare(linieId: string, cantitati: Map<string, n
     ramas.set(r.marime_id, vreau - q);
   }
   if ([...ramas.values()].some((q) => q > 0)) return 'Ai scris mai mult decât s-a croit și n-a intrat încă în lucru.';
-  for (const [lotId, q] of peLot) {
-    const r = await alimenteaza({ lotId, cantitati: q, persoane: null, timpMinBuc: null, responsabil: '', observatii: '' });
-    if ('eroare' in r) return r.eroare;
-    await interogare(`UPDATE alimentare_banda SET intrat_productie_la = now() WHERE id = $1`, [r.id]);
+  // Toate loturile într-o tranzacție: dacă unul e refuzat, nu rămâne nimic dat pe jumătate.
+  class Refuzat extends Error {}
+  try {
+    await caFirma(firmaCurenta(), async (c) => {
+      for (const [lotId, q] of peLot) {
+        const r = await alimenteaza({ lotId, cantitati: q, persoane: null, timpMinBuc: null, responsabil: '', observatii: '' }, c);
+        if ('eroare' in r) throw new Refuzat(r.eroare);
+        await c.query(`UPDATE alimentare_banda SET intrat_productie_la = now() WHERE id = $1`, [r.id]);
+      }
+    });
+  } catch (e) {
+    if (e instanceof Refuzat) return e.message;
+    throw e;
   }
   return null;
 }
@@ -221,7 +230,7 @@ const stadiulComenzii = (st: StadiuPlan[]): StadiuPlan => {
  * de acum, ca întârziat. Fiecare culoare își are stadiul și mărimile — cerut, croit, dat
  * în lucru, ieșit, în depozit — ca să se dea în lucru exact ce intră.
  */
-export async function planPeSaptamani(de: string, pana: string, curenta: string, luniDe: (zi: string) => string): Promise<ComandaPlan[]> {
+export async function planPeSaptamani(de: string, pana: string, curenta: string, luniDe: (zi: string) => string, doarLinie: string | null = null): Promise<ComandaPlan[]> {
   const sfarsit = new Date(`${pana}T12:00:00Z`); sfarsit.setUTCDate(sfarsit.getUTCDate() + 6);
   const panaLa = sfarsit.toISOString().slice(0, 10);
   const randuri = await interogare<Rand & { depozit: number; inchisa: boolean; urgent: string | null }>(
@@ -259,8 +268,12 @@ export async function planPeSaptamani(de: string, pana: string, curenta: string,
       WHERE c.stare IN ('lansata', 'in_productie', 'inchisa')
         AND ((cl.data_ceruta <= $2::date
               AND (cl.data_ceruta >= $1::date OR ($3::date BETWEEN $1::date AND $2::date AND c.stare <> 'inchisa')))
-          OR EXISTS (SELECT 1 FROM plan_linie x WHERE x.linie_id = cl.id AND x.saptamana BETWEEN $1::date AND $2::date))
-      ORDER BY cl.data_ceruta, c.prioritate, c.numar, p.denumire`, [de, panaLa, curenta]);
+          OR EXISTS (SELECT 1 FROM plan_linie x WHERE x.linie_id = cl.id AND x.saptamana BETWEEN $1::date AND $2::date)
+          -- adusă la urgență într-o săptămână trecută și nefăcută: stă, ca întârziată, în săptămâna de acum
+          OR ($3::date BETWEEN $1::date AND $2::date AND c.stare <> 'inchisa'
+              AND EXISTS (SELECT 1 FROM plan_linie x WHERE x.linie_id = cl.id AND x.saptamana < $3::date)))
+        AND ($4::uuid IS NULL OR cl.id = $4::uuid)
+      ORDER BY cl.data_ceruta, c.prioritate, c.numar, p.denumire`, [de, panaLa, curenta, doarLinie]);
 
   const linii = new Map<string, CuloarePlan & { comanda_id: string }>();
   const info = new Map<string, Rand>();
@@ -353,10 +366,12 @@ const TRANSE_CULOARE = `SELECT ab.id FROM alimentare_banda ab JOIN lot_croit lc 
 
 /** Culoarea a ieșit din lucru: toate tranșele ei încă în lucru ies acum (ca „A ieșit gata"). */
 export async function iesitDinLucruCuloare(linieId: string): Promise<string | null> {
-  const transe = await interogare<{ id: string }>(`${TRANSE_CULOARE} AND ab.iesit_productie_la IS NULL`, [linieId]);
-  if (!transe.length) return 'Culoarea nu are nimic în lucru.';
-  for (const t of transe) await iesitGata(t.id);
-  return null;
+  return caFirma(firmaCurenta(), async (c) => {
+    const { rows: transe } = await c.query<{ id: string }>(`${TRANSE_CULOARE} AND ab.iesit_productie_la IS NULL FOR UPDATE OF ab`, [linieId]);
+    if (!transe.length) return 'Culoarea nu are nimic în lucru.';
+    for (const t of transe) await iesitGata(t.id, c);
+    return null;
+  });
 }
 
 /**
@@ -369,27 +384,27 @@ export async function iesitPartialCuloare(linieId: string, cantitati: Map<string
   const cerute = [...cantitati].filter(([, q]) => q > 0);
   if (cerute.some(([, q]) => !Number.isInteger(q))) return 'Cantitățile trebuie să fie numere întregi.';
   if (!cerute.length) return 'Scrie câte bucăți au ieșit, pe mărimi (sau „Tot a ieșit").';
-  const randuri = await interogare<{ id: string; marime_id: string; cantitate: number }>(
-    `SELECT ab.id, ac.marime_id, ac.cantitate FROM alimentare_banda ab JOIN alimentare_cantitate ac ON ac.alimentare_id = ab.id
-      WHERE ab.id IN (${TRANSE_CULOARE}) AND ab.iesit_productie_la IS NULL ORDER BY ab.alimentat_la, ab.numar`, [linieId]);
-  for (const [m, q] of cerute) {
-    const inLucru = randuri.filter((r) => r.marime_id === m).reduce((s, r) => s + r.cantitate, 0);
-    if (q > inLucru) return `Pe o mărime au fost scrise ${q} buc, dar în lucru sunt doar ${inLucru}.`;
-  }
-  // Ce iese din fiecare tranșă, pe mărimi.
-  const rest = new Map(cerute);
-  const iesePe = new Map<string, Map<string, number>>();
-  for (const r of randuri) {
-    const q = Math.min(rest.get(r.marime_id) ?? 0, r.cantitate);
-    if (q <= 0) continue;
-    rest.set(r.marime_id, (rest.get(r.marime_id) ?? 0) - q);
-    iesePe.set(r.id, (iesePe.get(r.id) ?? new Map()).set(r.marime_id, q));
-  }
-  const intregi: string[] = [];
-  await caFirma(firmaCurenta(), async (c) => {
+  return caFirma(firmaCurenta(), async (c) => {
+    // Tranșele în lucru se citesc sub lacăt, ca două ieșiri deodată să nu scoată aceleași bucăți.
+    const { rows: randuri } = await c.query<{ id: string; marime_id: string; cantitate: number }>(
+      `SELECT ab.id, ac.marime_id, ac.cantitate FROM alimentare_banda ab JOIN alimentare_cantitate ac ON ac.alimentare_id = ab.id
+        WHERE ab.id IN (${TRANSE_CULOARE}) AND ab.iesit_productie_la IS NULL ORDER BY ab.alimentat_la, ab.numar FOR UPDATE OF ab`, [linieId]);
+    for (const [m, q] of cerute) {
+      const inLucru = randuri.filter((r) => r.marime_id === m).reduce((s, r) => s + r.cantitate, 0);
+      if (q > inLucru) return `Pe o mărime au fost scrise ${q} buc, dar în lucru sunt doar ${inLucru}.`;
+    }
+    // Ce iese din fiecare tranșă, pe mărimi.
+    const rest = new Map(cerute);
+    const iesePe = new Map<string, Map<string, number>>();
+    for (const r of randuri) {
+      const q = Math.min(rest.get(r.marime_id) ?? 0, r.cantitate);
+      if (q <= 0) continue;
+      rest.set(r.marime_id, (rest.get(r.marime_id) ?? 0) - q);
+      iesePe.set(r.id, (iesePe.get(r.id) ?? new Map()).set(r.marime_id, q));
+    }
     for (const [id, ies] of iesePe) {
       const aTranse = randuri.filter((r) => r.id === id);
-      if (aTranse.every((r) => (ies.get(r.marime_id) ?? 0) === r.cantitate)) { intregi.push(id); continue; }
+      if (aTranse.every((r) => (ies.get(r.marime_id) ?? 0) === r.cantitate)) { await iesitGata(id, c); continue; }
       const { rows: [nou] } = await c.query<{ id: string }>(
         `INSERT INTO alimentare_banda (firma_id, lot_id, numar, alimentat_la, alimentat_de, responsabil, persoane, timp_min_buc,
                                        intrat_productie_la, iesit_productie_la, observatii)
@@ -407,9 +422,8 @@ export async function iesitPartialCuloare(linieId: string, cantitati: Map<string
         }
       }
     }
+    return null;
   });
-  for (const id of intregi) await iesitGata(id);
-  return null;
 }
 
 /**

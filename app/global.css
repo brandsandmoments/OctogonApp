@@ -254,3 +254,11 @@ tr.cine-croieste td { background: color-mix(in srgb, var(--bej) 55%, transparent
 tr.cine-croieste .cine-operatii { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin: .4rem 0 .6rem; }
 tr.cine-croieste .cine-operatii > label { display: inline-flex; flex-direction: column; gap: .2rem; font-size: .85rem; }
 .alege-oameni { display: inline-flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+
+/* Bara de activitate (Activitate.tsx): sus, cât se încarcă o pagină sau se salvează ceva. */
+.activitate { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 1000; pointer-events: none; opacity: 0; transition: opacity .2s; }
+.activitate.activ { opacity: 1; background: linear-gradient(90deg, transparent, var(--text) 40%, var(--text) 60%, transparent); background-size: 50% 100%;
+  background-repeat: no-repeat; animation: activitate 1s linear infinite; }
+@keyframes activitate { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+body:has(.activitate.activ) { cursor: progress; }
+@media (prefers-reduced-motion: reduce) { .activitate.activ { animation: none; background: var(--text); } }

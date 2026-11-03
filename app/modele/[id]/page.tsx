@@ -1,3 +1,4 @@
+import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { cere, poateModifica } from '../../lib/sesiune';
 import { cantitate } from '../../lib/format';
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic';
 /** Înapoi pe pagina modelului, cu eroarea în adresă dacă există, la secțiunea unde s-a lucrat. */
 function inapoi(id: string, eroare: string | null, unde?: string): never {
   const aici = `/modele/${id}`;
+  revalidatePath(aici);   // aceeași adresă, altă ancoră: fără asta pagina nu se reîncarcă
   redirect(`${eroare ? `${aici}?eroare=${encodeURIComponent(eroare)}` : aici}${unde ? `#${unde}` : ''}`);
 }
 

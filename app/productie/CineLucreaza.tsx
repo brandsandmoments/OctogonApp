@@ -13,8 +13,8 @@ const culoare = (produs: string, model: string) => {
 };
 
 /** Comanda deschisă: minute pe bucată, câți oameni (ziua estimată), fazele cu mașina și omul, tranșele în lucru. */
-export default function CineLucreaza({ c, m, aici, oameni, masini, orePeZi, zi, transe, timp, aloca, sterge, aIesit }: {
-  c: ComandaProd; aici: string; m: boolean; oameni: { id: string; nume: string; functii: string[] }[]; masini: string[];
+export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi, zi, transe, timp, aloca, sterge, aIesit }: {
+  c: ComandaProd; iese: boolean; aici: string; m: boolean; oameni: { id: string; nume: string; functii: string[] }[]; masini: string[];
   orePeZi: number; zi: string; transe: Awaited<ReturnType<typeof transeSimple>>;
   timp: (d: FormData) => Promise<void>; aloca: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>; aIesit: (d: FormData) => Promise<void>;
 }) {
@@ -87,7 +87,7 @@ export default function CineLucreaza({ c, m, aici, oameni, masini, orePeZi, zi, 
                   <td className="ce slab">{t.marimi}</td>
                   <td>{t.bucati} buc</td>
                   <td className="ce slab">din {t.intrat_ora} · {durata(t.minute)}</td>
-                  <td>{m && (
+                  <td>{iese && (
                     <form action={aIesit}><input type="hidden" name="id" value={t.id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} /><input type="hidden" name="inapoi" value={aici} />
                       <button className="secundar">A ieșit gata</button></form>
                   )}</td>
@@ -95,7 +95,7 @@ export default function CineLucreaza({ c, m, aici, oameni, masini, orePeZi, zi, 
               ))}
             </tbody>
           </table>
-          {m && transe.length > 1 && (
+          {iese && transe.length > 1 && (
             <form action={aIesit}>
               {transe.map((t) => <input key={t.id} type="hidden" name="id" value={t.id} />)}
               <input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
