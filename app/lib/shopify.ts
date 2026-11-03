@@ -187,17 +187,19 @@ type VariantaShopify = {
   inventoryItem: { id: string; inventoryLevels: { nodes: { quantities: { name: string; quantity: number }[] }[] } } | null;
 };
 
-type Catalog = { produse: { id: string; cod_sku: string }[]; marimi: Map<string, string> };
+type Catalog = { produse: { id: string; cod_sku: string }[]; dupaNume: Map<string, string>; marimi: Map<string, string> };
 
 async function catalog(c: PoolClient): Promise<Catalog> {
-  const produse = (await c.query<{ id: string; cod_sku: string }>(`SELECT id, upper(cod_sku) AS cod_sku FROM produs`)).rows
-    .sort((a, b) => b.cod_sku.length - a.cod_sku.length); // cel mai lung prefix câștigă, ca la vânzări
+  const toate = (await c.query<{ id: string; cod_sku: string; nume: string }>(`SELECT id, upper(cod_sku) AS cod_sku, lower(denumire) AS nume FROM produs`)).rows;
+  const produse = [...toate].sort((a, b) => b.cod_sku.length - a.cod_sku.length); // cel mai lung prefix câștigă, ca la vânzări
+  // Denumirea din catalog e titlul din Shopify: variantele fără SKU (ciorne, produse noi) se leagă după titlu.
+  const dupaNume = new Map(toate.map((p) => [p.nume, p.id]));
   const marimi = new Map<string, string>();
   for (const m of (await c.query<{ id: string; cod: string }>(`SELECT id, upper(cod) AS cod FROM marime`)).rows) marimi.set(m.cod, m.id);
   for (const a of (await c.query<{ marime_id: string; alias: string }>(`SELECT marime_id, upper(alias) AS alias FROM marime_alias`)).rows) {
     if (!marimi.has(a.alias)) marimi.set(a.alias, a.marime_id);
   }
-  return { produse, marimi };
+  return { produse, dupaNume, marimi };
 }
 
 const OPTIUNE_MARIME = /^(m[aă]rime|size|talie|marimea)$/i;
@@ -205,7 +207,8 @@ const OPTIUNE_MARIME = /^(m[aă]rime|size|talie|marimea)$/i;
 async function scrieVarianta(c: PoolClient, magazinId: string, cat: Catalog, v: VariantaShopify) {
   const optiuni = Object.fromEntries(v.selectedOptions.map((o) => [o.name, o.value]));
   const sku = v.sku?.trim().toUpperCase() || null;
-  const produs = sku ? cat.produse.find((p) => sku.startsWith(`${p.cod_sku}-`)) : undefined;
+  const produs = (sku ? cat.produse.find((p) => sku.startsWith(`${p.cod_sku}-`)) : undefined)
+    ?? ((id) => (id ? { id, cod_sku: '' } : undefined))(cat.dupaNume.get(v.product.title.trim().toLowerCase()));
   const marimeText = v.selectedOptions.find((o) => OPTIUNE_MARIME.test(o.name))?.value
     ?? (produs && sku ? sku.slice(produs.cod_sku.length + 1) : null);
   const cantitate = (nume: string) => (v.inventoryItem?.inventoryLevels.nodes ?? [])
@@ -238,9 +241,75 @@ async function sincronizeazaProduse(c: PoolClient, a: Acces): Promise<number> {
     for (const v of d.productVariants.nodes) { await scrieVarianta(c, a.magazinId, cat, v); vazute.push(v.id); }
     dupa = d.productVariants.pageInfo.hasNextPage ? d.productVariants.pageInfo.endCursor : null;
   } while (dupa);
+  await produseNoi(c, a.magazinId);
   await c.query(`DELETE FROM magazin_varianta WHERE magazin_id = $1 AND NOT (varianta_gid = ANY($2))`, [a.magazinId, vazute]);
   await c.query(`UPDATE magazin SET produse_sincronizate_la = now() WHERE id = $1`, [a.magazinId]);
   return vazute.length;
+}
+
+/**
+ * Produsele din Shopify care nu sunt încă în catalog (active sau ciorne) se creează aici, ca să
+ * se poată da comenzi pe ele imediat: denumirea e titlul din Shopify; codul, din SKU-urile
+ * variantelor (fără mărime) sau, fără SKU, din brand + titlu; modelul, din titlu fără felul hainei
+ * și fără culoare („Rochie Positano Catifea Albastru" → „Positano Catifea"), găsit sau creat;
+ * culoarea, de la capătul titlului. Apoi variantele se leagă de produs.
+ */
+export async function produseNoi(c: PoolClient, magazinId: string): Promise<number> {
+  const { rows: noi } = await c.query<{ produs_gid: string; titlu: string; brand_id: string | null; activ: boolean; skus: string[] }>(
+    `SELECT mv.produs_gid, min(mv.titlu_produs) AS titlu, m.brand_id, bool_or(mv.activ) AS activ,
+            array_remove(array_agg(DISTINCT mv.sku), NULL) AS skus
+       FROM magazin_varianta mv JOIN magazin m ON m.id = mv.magazin_id
+      WHERE mv.magazin_id = $1 AND mv.produs_id IS NULL AND coalesce(btrim(mv.titlu_produs), '') <> ''
+      GROUP BY mv.produs_gid, m.brand_id`, [magazinId]);
+  if (!noi.length) return 0;
+  const culori = (await c.query<{ id: string; nume: string }>(`SELECT id, nume FROM culoare`)).rows;
+  const slug = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  let create = 0;
+  for (const p of noi) {
+    if (!p.brand_id) continue;
+    const titlu = p.titlu.trim().replace(/\s+/g, ' ');
+    const cuv = titlu.split(' ');
+    // Culoarea: ultimele două sau ultimul cuvânt, dacă sunt o culoare cunoscută; altfel ultimul cuvânt.
+    const cunoscuta = (n: number) => cuv.length > n ? culori.find((x) => x.nume.toLowerCase() === cuv.slice(-n).join(' ').toLowerCase()) : undefined;
+    const potrivita = cunoscuta(2) ?? cunoscuta(1);
+    const nCul = potrivita ? potrivita.nume.split(' ').length : cuv.length > 1 ? 1 : 0;
+    const culoare = nCul ? cuv.slice(-nCul).join(' ') : null;
+    const numeModel = cuv.slice(1, cuv.length - nCul).join(' ') || cuv[0];
+    // Codul: prefixul comun al SKU-urilor (fără mărime); fără SKU, prefixul brandului + titlul.
+    let cod = '';
+    if (p.skus.length) {
+      cod = p.skus.reduce((a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return a.slice(0, i); });
+      cod = p.skus.length > 1 ? cod.replace(/-[^-]*$/, '') : cod.replace(/-[^-]+$/, '');
+    }
+    if (!cod) {
+      const { rows: [pre] } = await c.query<{ prefix: string | null }>(
+        `SELECT split_part(cod_sku, '-', 1) AS prefix FROM produs WHERE brand_id = $1 AND NOT din_aplicatie GROUP BY 1 ORDER BY count(*) DESC LIMIT 1`, [p.brand_id]);
+      cod = [pre?.prefix ?? 'SHOP', slug(cuv.slice(0, cuv.length - nCul).join('')), culoare ? slug(culoare).replace(/-/g, '') : ''].filter(Boolean).join('-');
+    }
+    const { rows: [dublu] } = await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM produs WHERE upper(cod_sku) = upper($1)`, [cod]);
+    if (dublu.n) cod = `${cod}-${dublu.n + 1}`;
+    const { rows: [mod] } = await c.query<{ id: string }>(
+      `SELECT id FROM model WHERE brand_id = $1 AND lower(denumire) = lower($2) LIMIT 1`, [p.brand_id, numeModel]);
+    const modelId = mod?.id ?? (await c.query<{ id: string }>(
+      `INSERT INTO model (firma_id, brand_id, cod, denumire) VALUES (firma_curenta(), $1, $2, $3)
+       ON CONFLICT (firma_id, brand_id, cod) DO UPDATE SET denumire = model.denumire RETURNING id`,
+      [p.brand_id, slug(numeModel).toLowerCase(), numeModel])).rows[0].id;
+    let culoareId: string | null = null;
+    if (culoare) {
+      culoareId = culori.find((x) => x.nume.toLowerCase() === culoare.toLowerCase())?.id
+        ?? (await c.query<{ id: string }>(`INSERT INTO culoare (firma_id, nume) VALUES (firma_curenta(), $1) RETURNING id`, [culoare])).rows[0].id;
+      if (!culori.some((x) => x.id === culoareId)) culori.push({ id: culoareId, nume: culoare });
+    }
+    const { rows: [nou] } = await c.query<{ id: string }>(
+      `INSERT INTO produs (firma_id, cod_sku, denumire, brand_id, culoare_id, model_id, activ)
+       VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6)
+       ON CONFLICT (firma_id, denumire) DO UPDATE SET denumire = produs.denumire RETURNING id`,
+      [cod, titlu, p.brand_id, culoareId, modelId, p.activ]);
+    await c.query(`UPDATE magazin_varianta SET produs_id = $1 WHERE magazin_id = $2 AND produs_gid = $3 AND produs_id IS NULL`,
+      [nou.id, magazinId, p.produs_gid]);
+    create++;
+  }
+  return create;
 }
 
 // ---------------------------------------------------------------- comenzile
