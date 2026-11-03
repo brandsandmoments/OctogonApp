@@ -1,0 +1,30 @@
+/* Foaia de croit: pe ecran ca o pagină A4, pe hârtie fără meniuri. */
+main.fisa-croit { max-width: 210mm; margin: 0 auto; padding: 1rem; color: #000; background: #fff; font-size: 9.5pt; line-height: 1.25; }
+main.fisa-croit .bara-fisa { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+main.fisa-croit .bara-fisa .principal { background: #1b1a17; color: #fff; border: 1px solid #1b1a17; border-radius: .35rem; padding: .4rem 1rem; font-weight: 600; cursor: pointer; }
+main.fisa-croit header { border: 2px solid #000; padding: .3rem .5rem; margin-bottom: .45rem; text-align: center; }
+main.fisa-croit h1 { margin: 0; font-size: 15pt; text-transform: uppercase; letter-spacing: .02em; }
+main.fisa-croit header p { margin: .2rem 0 0; font-size: 9.5pt; }
+main.fisa-croit h2 { font-size: 10pt; margin: .55rem 0 .2rem; text-transform: uppercase; }
+table.fisa-tabel { width: 100%; border-collapse: collapse; }
+table.fisa-tabel th, table.fisa-tabel td { border: 1px solid #000; padding: .12rem .3rem; text-align: center; vertical-align: middle; color: #000; }
+table.fisa-tabel th { background: #dbe9f2; font-size: 8pt; font-weight: 700; text-transform: uppercase; }
+table.fisa-tabel .st { text-align: left; }
+table.fisa-tabel .mic { font-size: 8pt; }
+table.fisa-tabel.mic td, table.fisa-tabel.mic th { font-size: 7.5pt; padding: .05rem .3rem; }
+table.fisa-tabel tr.total td { font-weight: 700; background: #f0f0f0; }
+table.fisa-tabel.necesar .material { display: block; font-size: 7pt; color: #333; line-height: 1.1; }
+table.fisa-tabel.de-scris td { height: 1.35rem; }
+main.fisa-croit .atentie { border: 1px dashed #000; padding: .3rem .5rem; font-size: 9pt; }
+main.fisa-croit .observatii { border: 1px solid #000; min-height: 3.5rem; margin-top: .6rem; padding: .25rem .4rem; }
+main.fisa-croit .observatii span { font-size: 9pt; font-weight: 700; text-transform: uppercase; }
+@media print {
+  @page { size: A4 portrait; margin: 8mm; }
+  .nu-print, .activitate, .banda-test { display: none !important; }
+  body { background: #fff; }
+  main.fisa-croit { max-width: none; padding: 0; }
+  table.fisa-tabel th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  table.fisa-tabel tr { break-inside: avoid; }
+}
+main.fisa-croit table.fisa-tabel th, main.fisa-croit table.fisa-tabel td { line-height: 1.2; height: auto; }
+main.fisa-croit table.fisa-tabel.de-scris td { height: 1.35rem; }

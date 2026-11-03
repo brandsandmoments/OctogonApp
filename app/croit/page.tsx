@@ -341,7 +341,9 @@ async function Ramas({ cauta }: { cauta?: string }) {
                         <form id={formular} action={croieste}>
                           {randuri.map((r) => <input key={r.planificare_id} type="hidden" name="pl" value={r.planificare_id} />)}
                         </form>
-                        <span className="slab">deschide și scrie ce tai</span>
+                        <a href={`/croit/fisa?${randuri.map((r) => `pl=${r.planificare_id}`).join('&')}`} target="_blank" rel="noopener" className="buton">
+                          Printează foaia de croit
+                        </a>
                       </td>
                     </tr>
                     {randuri.map((r) => (

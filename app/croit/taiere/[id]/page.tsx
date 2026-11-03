@@ -180,6 +180,7 @@ export default async function FisaTaierePagina({
         {f.loturi.reduce((s, l) => s + l.marimi.reduce((a, m) => a + m.cerut, 0), 0)} buc cerute ·{' '}
         făcută {f.taiere.facuta_la ?? '—'} ·{' '}
         <strong>{deschise.length ? 'în lucru' : 'croită'}</strong>
+        {' · '}<a href={`/croit/fisa?taiere=${id}`} target="_blank" rel="noopener">Printează foaia de croit</a>
       </p>
       {eroare && <p className="eroare">{eroare}</p>}
 
