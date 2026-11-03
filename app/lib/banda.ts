@@ -44,7 +44,7 @@ export async function deAlimentat(): Promise<LotDeAlimentat[]> {
        JOIN comanda c        ON c.id = cl.comanda_id
        JOIN produs p         ON p.id = cl.produs_id
        JOIN marime m         ON m.id = ra.marime_id
-       LEFT JOIN LATERAL (SELECT min(x.saptamana) AS saptamana FROM plan_linie x WHERE x.linie_id = cl.id) ps ON true
+       CROSS JOIN LATERAL (SELECT date_trunc('week', cl.data_ceruta)::date AS saptamana) ps   -- săptămâna termenului (planul e după termen)
       WHERE ra.lot_id IN (SELECT lot_id FROM lot_rest_de_alimentat GROUP BY lot_id HAVING sum(rest) > 0)
       ORDER BY ps.saptamana NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, lc.numar_lot, m.ordine`,
   );
@@ -335,4 +335,11 @@ export async function iesitGata(id: string): Promise<{ cod: string; minute: numb
        FROM alimentare_banda ab JOIN lot_croit lc ON lc.id = ab.lot_id JOIN planificare pl ON pl.id = lc.planificare_id
        JOIN comanda_linie cl ON cl.id = pl.linie_id JOIN produs p ON p.id = cl.produs_id WHERE ab.id = $1`, [id]);
   return t ?? null;
+}
+
+/** Câți oameni lucrează acum (alocați, neterminați) pe fiecare tranșă de pe bandă. */
+export async function oameniPeTranse(): Promise<Map<string, number>> {
+  const r = await interogare<{ id: string; n: number }>(
+    `SELECT alimentare_id AS id, count(DISTINCT angajat_id)::int AS n FROM alocare_operatie WHERE gata_la IS NULL GROUP BY 1`);
+  return new Map(r.map((x) => [x.id, x.n]));
 }

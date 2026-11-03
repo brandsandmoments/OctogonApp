@@ -169,3 +169,167 @@ export async function adaugaAlocareComanda(comandaId: string, faza: string, util
 export async function stergeAlocareComanda(id: string): Promise<void> {
   await interogare(`DELETE FROM alocare_comanda WHERE id = $1`, [id]);
 }
+
+// ---------------------------------------------------------------- planul pe săptămâni, după termen
+
+/** Unde e o culoare (sau o comandă) pe drum: necroită, doar croită, intrată în lucru, ieșită din lucru, terminată (în depozit). */
+export const STADII_PLAN = {
+  necroit: 'Necroit',
+  croit: 'Doar croit',
+  in_lucru: 'Intrat în lucru',
+  iesit: 'Ieșit din lucru',
+  terminat: 'Terminat',
+} as const;
+export type StadiuPlan = keyof typeof STADII_PLAN;
+const ORDINE_PLAN: StadiuPlan[] = ['necroit', 'croit', 'in_lucru', 'iesit', 'terminat'];
+
+export type MarimePlan = MarimeProd & { depozit: number };
+export type CuloarePlan = Omit<CuloareProd, 'marimi'> & { marimi: MarimePlan[]; depozit: number; stadiu: StadiuPlan; inchisa: boolean };
+export type ComandaPlan = {
+  comanda_id: string; numar: string; tip: string; brand: string; prioritate: number; kam: string | null; model: string;
+  saptamana: string;            // lunea săptămânii termenului (întârziatele nefăcute stau în săptămâna de acum)
+  intarziata: boolean;
+  urgenta: boolean;             // adusă la urgență în săptămâna asta, peste plan (termenul ei e altul)
+  data_ceruta: string; culori: CuloarePlan[];
+  cerut: number; croit: number; dat: number; gata: number; depozit: number; de_dat: number;
+  ramas_de_intrat: number;      // din comandă, încă neintrat în lucru (croit sau nu)
+  stadiu: StadiuPlan;
+};
+
+const stadiulCulorii = (l: { cerut: number; croit: number; dat: number; gata: number; depozit: number; inchisa: boolean }): StadiuPlan =>
+  l.inchisa || l.depozit >= l.cerut ? 'terminat'
+    : l.dat > 0 && l.gata >= l.dat ? 'iesit'
+    : l.dat > 0 ? 'in_lucru'
+    : l.croit > 0 ? 'croit' : 'necroit';
+
+/**
+ * Planul pe săptămâni se face singur, după termen: în fiecare săptămână intră comenzile
+ * (pe culori) cu termenul în ea. Ce a rămas nefăcut cu termenul trecut apare în săptămâna
+ * de acum, ca întârziat. Fiecare culoare își are stadiul și mărimile — cerut, croit, dat
+ * în lucru, ieșit, în depozit — ca să se dea în lucru exact ce intră.
+ */
+export async function planPeSaptamani(de: string, pana: string, curenta: string, luniDe: (zi: string) => string): Promise<ComandaPlan[]> {
+  const sfarsit = new Date(`${pana}T12:00:00Z`); sfarsit.setUTCDate(sfarsit.getUTCDate() + 6);
+  const panaLa = sfarsit.toISOString().slice(0, 10);
+  const randuri = await interogare<Rand & { depozit: number; inchisa: boolean; urgent: string | null }>(
+    `WITH croit AS (
+         SELECT pl.linie_id, le.marime_id, sum(le.cantitate)::int AS q
+           FROM planificare pl JOIN lot_croit lc ON lc.planificare_id = pl.id
+           JOIN lot_croit_efectiv le ON le.lot_id = lc.id GROUP BY 1, 2),
+     dat AS (
+         SELECT pl.linie_id, ac.marime_id, sum(ac.cantitate)::int AS q,
+                sum(ac.cantitate) FILTER (WHERE ab.iesit_productie_la IS NOT NULL)::int AS gata
+           FROM planificare pl JOIN lot_croit lc ON lc.planificare_id = pl.id
+           JOIN alimentare_banda ab ON ab.lot_id = lc.id
+           JOIN alimentare_cantitate ac ON ac.alimentare_id = ab.id GROUP BY 1, 2),
+     depozit AS (
+         SELECT e.linie_id, e.marime_id, sum(r.cantitate)::int AS q, bool_or(r.inchide_pozitia) AS inchisa
+           FROM eticheta e JOIN receptie r ON r.eticheta_id = e.id GROUP BY 1, 2)
+     SELECT c.id AS comanda_id, c.numar, c.tip::text AS tip, b.nume AS brand, c.prioritate, k.nume AS kam, c.oameni_productie AS oameni,
+            cl.id AS linie_id, p.denumire AS produs, p.model_id, coalesce(mo.denumire, p.denumire) AS model,
+            mo.timp_min_buc::float AS timp_min_buc, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
+            cc.marime_id, m.cod AS marime, cc.cantitate AS cerut,
+            coalesce(cr.q, 0) AS croit, coalesce(d.q, 0) AS dat, coalesce(d.gata, 0) AS gata,
+            coalesce(dp.q, 0) AS depozit, coalesce(dp.inchisa, false) AS inchisa,
+            (SELECT to_char(min(x.saptamana), 'YYYY-MM-DD') FROM plan_linie x WHERE x.linie_id = cl.id) AS urgent
+       FROM comanda c
+       JOIN brand b              ON b.id = c.brand_id
+       LEFT JOIN utilizator k    ON k.id = c.kam_id
+       JOIN comanda_linie cl     ON cl.comanda_id = c.id
+       JOIN produs p             ON p.id = cl.produs_id
+       LEFT JOIN model mo        ON mo.id = p.model_id
+       JOIN comanda_cantitate cc ON cc.linie_id = cl.id
+       JOIN marime m             ON m.id = cc.marime_id
+       LEFT JOIN croit cr  ON cr.linie_id = cl.id AND cr.marime_id = cc.marime_id
+       LEFT JOIN dat d     ON d.linie_id = cl.id AND d.marime_id = cc.marime_id
+       LEFT JOIN depozit dp ON dp.linie_id = cl.id AND dp.marime_id = cc.marime_id
+      WHERE c.stare IN ('lansata', 'in_productie', 'inchisa')
+        AND ((cl.data_ceruta <= $2::date
+              AND (cl.data_ceruta >= $1::date OR ($3::date BETWEEN $1::date AND $2::date AND c.stare <> 'inchisa')))
+          OR EXISTS (SELECT 1 FROM plan_linie x WHERE x.linie_id = cl.id AND x.saptamana BETWEEN $1::date AND $2::date))
+      ORDER BY cl.data_ceruta, c.prioritate, c.numar, p.denumire`, [de, panaLa, curenta]);
+
+  const linii = new Map<string, CuloarePlan & { comanda_id: string }>();
+  const info = new Map<string, Rand>();
+  const modelLinie = new Map<string, string>();
+  const urgentLinie = new Map<string, string | null>();
+  for (const r of randuri) {
+    info.set(r.comanda_id, r);
+    modelLinie.set(r.linie_id, r.model);
+    urgentLinie.set(r.linie_id, r.urgent);
+    let l = linii.get(r.linie_id);
+    if (!l) {
+      l = { comanda_id: r.comanda_id, linie_id: r.linie_id, produs: r.produs, data_ceruta: r.data_ceruta, marimi: [],
+            cerut: 0, croit: 0, dat: 0, gata: 0, de_dat: 0, depozit: 0, stadiu: 'necroit', inchisa: true };
+      linii.set(r.linie_id, l);
+    }
+    const de_dat = Math.max(0, r.croit - r.dat);
+    l.marimi.push({ marime_id: r.marime_id, marime: r.marime, cerut: r.cerut, croit: r.croit, dat: r.dat, gata: r.gata, de_dat, depozit: r.depozit });
+    l.cerut += r.cerut; l.croit += r.croit; l.dat += r.dat; l.gata += r.gata; l.de_dat += de_dat; l.depozit += r.depozit;
+    l.inchisa = l.inchisa && (r.inchisa || r.depozit >= r.cerut);
+  }
+  const pe = new Map<string, ComandaPlan>();
+  for (const l of linii.values()) {
+    l.stadiu = stadiulCulorii(l);
+    l.marimi.sort((a, b) => rangMarime(a.marime) - rangMarime(b.marime));
+    // Săptămâna culorii: cea în care a fost adusă la urgență, altfel a termenului. Ce a
+    // rămas nefăcut dintr-o săptămână trecută stă în săptămâna de acum.
+    const urgent = urgentLinie.get(l.linie_id) ?? null;
+    const proprie = urgent ?? luniDe(l.data_ceruta);
+    const intarziata = proprie < curenta && l.stadiu !== 'terminat';
+    const saptamana = intarziata ? curenta : proprie;
+    if (saptamana < de || saptamana > pana) continue;   // în afara perioadei (sau terminată, cu termen trecut)
+    const r = info.get(l.comanda_id)!;
+    const cheie = `${l.comanda_id}|${saptamana}`;
+    let c = pe.get(cheie);
+    if (!c) {
+      c = { comanda_id: r.comanda_id, numar: r.numar, tip: r.tip, brand: r.brand, prioritate: r.prioritate, kam: r.kam, model: modelLinie.get(l.linie_id)!,
+            saptamana, intarziata: false, urgenta: false, data_ceruta: l.data_ceruta, culori: [], cerut: 0, croit: 0, dat: 0, gata: 0, depozit: 0,
+            de_dat: 0, ramas_de_intrat: 0, stadiu: 'terminat' };
+      pe.set(cheie, c);
+    }
+    const { comanda_id: _, ...culoare } = l;
+    c.culori.push(culoare);
+    const model = modelLinie.get(l.linie_id)!;
+    if (!c.model.split(', ').includes(model)) c.model += `, ${model}`;
+    if (l.data_ceruta < c.data_ceruta) c.data_ceruta = l.data_ceruta;
+    c.intarziata = c.intarziata || (intarziata && l.data_ceruta < curenta);
+    c.urgenta = c.urgenta || (urgent !== null && urgent !== luniDe(l.data_ceruta));
+    c.cerut += l.cerut; c.croit += l.croit; c.dat += l.dat; c.gata += l.gata; c.depozit += l.depozit; c.de_dat += l.de_dat;
+    if (l.stadiu !== 'terminat') c.ramas_de_intrat += Math.max(0, l.cerut - l.dat);
+    if (ORDINE_PLAN.indexOf(l.stadiu) < ORDINE_PLAN.indexOf(c.stadiu)) c.stadiu = l.stadiu;
+  }
+  return [...pe.values()].sort((a, b) => a.saptamana.localeCompare(b.saptamana) || a.data_ceruta.localeCompare(b.data_ceruta)
+    || a.prioritate - b.prioritate || a.numar.localeCompare(b.numar));
+}
+
+/** Comenzile deschise care se potrivesc căutării (PSF/PSC, model sau produs), pentru reprioritizare. */
+export async function cautaComenziDeschise(q: string): Promise<{ comanda_id: string; numar: string; tip: string; brand: string; model: string; data_ceruta: string; cerut: number }[]> {
+  if (!q.trim()) return [];
+  return interogare(
+    `SELECT c.id AS comanda_id, c.numar, c.tip::text AS tip, b.nume AS brand,
+            string_agg(DISTINCT coalesce(mo.denumire, p.denumire), ', ') AS model,
+            to_char(min(cl.data_ceruta), 'YYYY-MM-DD') AS data_ceruta,
+            (SELECT sum(cc.cantitate) FROM comanda_cantitate cc JOIN comanda_linie y ON y.id = cc.linie_id WHERE y.comanda_id = c.id)::int AS cerut
+       FROM comanda c JOIN brand b ON b.id = c.brand_id
+       JOIN comanda_linie cl ON cl.comanda_id = c.id JOIN produs p ON p.id = cl.produs_id LEFT JOIN model mo ON mo.id = p.model_id
+      WHERE c.stare IN ('lansata', 'in_productie')
+        AND (c.numar ILIKE '%' || $1 || '%' OR p.denumire ILIKE '%' || $1 || '%' OR mo.denumire ILIKE '%' || $1 || '%')
+      GROUP BY c.id, c.numar, c.tip, b.nume
+      ORDER BY min(cl.data_ceruta), c.numar LIMIT 20`, [q.trim()]);
+}
+
+/** Adu o comandă la urgență într-o săptămână, peste plan: toate culorile ei se lucrează atunci. */
+export async function aduLaUrgenta(comandaId: string, saptamana: string): Promise<void> {
+  await caFirma(firmaCurenta(), async (c) => {
+    await c.query(`DELETE FROM plan_linie WHERE linie_id IN (SELECT id FROM comanda_linie WHERE comanda_id = $1)`, [comandaId]);
+    await c.query(
+      `INSERT INTO plan_linie (firma_id, linie_id, saptamana) SELECT firma_curenta(), id, $2::date FROM comanda_linie WHERE comanda_id = $1`,
+      [comandaId, saptamana]);
+  });
+}
+
+/** Scoate urgența: comanda se întoarce în săptămâna termenului ei. */
+export async function scoateUrgenta(comandaId: string): Promise<void> {
+  await interogare(`DELETE FROM plan_linie WHERE linie_id IN (SELECT id FROM comanda_linie WHERE comanda_id = $1)`, [comandaId]);
+}

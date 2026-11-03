@@ -65,3 +65,37 @@ section.cine-lucreaza label { display: inline-flex; flex-direction: column; gap:
 table.alocari-comanda { margin: .6rem 0; }
 form.culoare-productie .actiuni-culoare button { padding: .35rem .9rem; }
 form.culoare-productie .actiuni-culoare .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
+details.comanda-productie > summary .buton-da { margin-left: .6rem; background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; padding: .2rem .7rem; }
+.faza.stadiu-necroit { border-left-color: var(--linie); }
+.faza.stadiu-croit { border-left-color: var(--albastru); }
+.faza.stadiu-in_lucru { border-left-color: var(--violet); }
+.faza.stadiu-iesit { border-left-color: var(--galben); }
+.faza.stadiu-terminat { border-left-color: var(--verde); }
+details.reprioritizare { margin: .2rem 0 .7rem; }
+details.reprioritizare > summary { list-style: none; cursor: pointer; display: inline-flex; gap: .5rem; align-items: center; }
+details.reprioritizare > summary::-webkit-details-marker { display: none; }
+details.reprioritizare[open] { border: 1px dashed var(--rosu); border-radius: .5rem; padding: .5rem .7rem; background: var(--card); }
+details.reprioritizare .principal { background: var(--text); color: var(--card); border-color: var(--text); }
+form.fara-urgenta { padding: .5rem .8rem; }
+/* Planul: listă pe coloane, în cascadă pe săptămânile termenului */
+.plan-lista { --plan-col: 1.9rem 7.5rem minmax(9rem, 1.1fr) minmax(12rem, 2fr) 4rem 4rem 4.5rem 5rem minmax(9rem, 1.3fr) 9.5rem; }
+.plan-cap, .plan-lista details.comanda-productie > summary { display: grid; grid-template-columns: var(--plan-col); gap: .5rem; align-items: center; }
+.plan-cap { padding: .3rem .8rem; color: var(--slab); font-size: .78rem; font-weight: 600; border-bottom: 2px solid var(--accent-linie); }
+.plan-lista details.comanda-productie { margin: 0 0 .35rem; }
+.plan-lista details.comanda-productie > summary { padding: .45rem .8rem; }
+.plan-lista .p-comanda, .plan-lista .p-produs { display: flex; flex-direction: column; min-width: 0; }
+.plan-lista .p-produs .slab { font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-lista .p-stadiu { display: flex; flex-wrap: wrap; gap: .25rem; }
+.plan-lista .nr { text-align: right; font-variant-numeric: tabular-nums; }
+.plan-lista details.comanda-productie > summary .buton-da { margin-left: 0; }
+details.grupa-plan { margin: .6rem 0; }
+details.grupa-plan > summary { cursor: pointer; padding: .4rem .6rem; border-left: 4px solid var(--linie); background: color-mix(in srgb, var(--linie) 30%, transparent); }
+details.grupa-plan.intarziate > summary { border-left-color: var(--rosu); }
+details.grupa-plan.urgente > summary { border-left-color: var(--rosu); background: var(--rosu-fundal); }
+details.grupa-plan.aici > summary { border-left-color: var(--verde); }
+details.grupa-plan > .comanda-productie:first-of-type { margin-top: .35rem; }
+@media screen and (max-width: 900px) {
+  .plan-cap { display: none; }
+  .plan-lista details.comanda-productie > summary { grid-template-columns: 1.9rem 1fr 1fr; }
+  .plan-lista details.comanda-productie > summary > .nr { display: none; }
+}

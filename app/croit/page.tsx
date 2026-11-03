@@ -346,7 +346,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
                         <td>
                           <Link href={`/planificare/${r.planificare_id}`}>{r.cod}</Link>{' '}
                           <span className="slab">{r.tip} · P{r.prioritate}</span>
-                          {r.saptamana && <> <span className="insigna albastru" title="săptămâna de lucru din Producție">săpt. {r.saptamana.slice(5).split('-').reverse().join('.')}</span></>}
+                          {r.saptamana && <> <span className="insigna albastru" title="săptămâna termenului, în planul din Producție">săpt. {r.saptamana.slice(5).split('-').reverse().join('.')}</span></>}
                           {r.stofa_lipsa && <> <span className="insigna galben" title="Stocul de stofă din aplicație nu ajunge, în ordinea priorității. Se poate croi oricum, dacă stofa e la croit.">stofă insuficientă</span></>}
                         </td>
                         <td>{r.model}</td>

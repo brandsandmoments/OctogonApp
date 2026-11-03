@@ -84,7 +84,7 @@ export async function ramasDeCroit(planificari?: string[]): Promise<RamasDeCroit
        LEFT JOIN model mo    ON mo.id = p.model_id
        JOIN marime m         ON m.id = r.marime_id
        LEFT JOIN deschis d   ON d.planificare_id = r.planificare_id AND d.marime_id = r.marime_id
-       LEFT JOIN LATERAL (SELECT min(x.saptamana) AS saptamana FROM plan_linie x WHERE x.linie_id = cl.id) ps ON true
+       CROSS JOIN LATERAL (SELECT date_trunc('week', cl.data_ceruta)::date AS saptamana) ps   -- săptămâna termenului (planul e după termen)
       WHERE pl.stadiu IN ('lansat_spre_croit', 'in_croit')
         AND ($1::uuid[] IS NULL OR pl.id = ANY ($1::uuid[]))
       ORDER BY ps.saptamana NULLS LAST, pl.ordine_croit NULLS LAST, c.prioritate, cl.data_ceruta, c.numar, pl.numar_transa, m.ordine`,

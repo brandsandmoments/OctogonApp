@@ -5,7 +5,7 @@ import { comenziDepozit } from './depozit';
 import { numarePeSectiuni } from './dezvoltare';
 import { azi, zilePanaLa } from './format';
 import { luni } from './perioade';
-import { comenziInPlan } from './productie';
+import { planPeSaptamani } from './productieComenzi';
 import { comenziMagazine } from './magazine';
 import { alerte, produseMagazine } from './produse';
 import { psfDeAprobat } from './aprobare';
@@ -61,24 +61,22 @@ async function croit(): Promise<Grupa> {
 
 async function planificare(): Promise<Grupa> {
   const curenta = luni(azi());
-  const comenzi = await comenziInPlan([curenta]);
-  // Comenzile cu culori încă neprogramate, și cele cu culori rămase din săptămânile trecute.
-  const deProgramat = comenzi.filter((c) => c.linii.some((l) => l.de_programat > 0));
-  const ramase = comenzi.filter((c) => c.linii.some((l) => l.stadiu !== 'gata' && l.plan.some((p) => p.saptamana < curenta)));
-  const cate = (n: number) => (n === 1 ? 'comandă' : 'comenzi');
+  const comenzi = await planPeSaptamani(curenta, curenta, curenta, luni);
+  const deLucru = comenzi.filter((c) => c.stadiu !== 'terminat');
+  const ramas = deLucru.reduce((s, c) => s + c.ramas_de_intrat, 0);
+  const deDat = deLucru.reduce((s, c) => s + c.de_dat, 0);
   return {
     nume: 'Producție',
     carduri: [
       {
-        titlu: 'De programat', numar: deProgramat.length, unitate: cate(deProgramat.length),
-        detaliu: 'PSF și PSC cu culori încă neprogramate pe o săptămână',
-        href: '/productie', actiune: 'Programează',
-        ton: deProgramat.length === 0 ? 'verde' : deProgramat.some((c) => intarziat(zilePanaLa(c.data_ceruta))) ? 'rosu' : 'neutru',
+        titlu: 'Cu termen săptămâna asta', numar: deLucru.length, unitate: deLucru.length === 1 ? 'comandă' : 'comenzi',
+        detaliu: `${ramas} buc rămase de intrat în lucru${comenzi.some((c) => c.intarziata) ? ' · unele întârziate' : ''}`,
+        href: '/productie', actiune: 'Vezi planul', ton: comenzi.some((c) => c.intarziata) ? 'rosu' : deLucru.length ? 'neutru' : 'verde',
       },
       {
-        titlu: 'Rămase din săptămânile trecute', numar: ramase.length, unitate: cate(ramase.length),
-        detaliu: 'programate și încă neterminate',
-        href: '/productie', actiune: 'Vezi săptămâna', ton: ramase.length ? 'galben' : 'verde',
+        titlu: 'Croite, de dat în lucru', numar: deDat, unitate: buc(deDat),
+        detaliu: 'din comenzile cu termen săptămâna asta',
+        href: '/productie', actiune: 'Dă în lucru', ton: deDat ? 'galben' : 'verde',
       },
     ],
   };
