@@ -289,65 +289,6 @@ export async function schimbaEtapa(id: string, etapa: EtapaBanda, bifat: boolean
 
 // ---------------------------------------------------------------- în lucru, simplu
 
-export type LotDeDat = {
-  lot_id: string; cod: string; comanda: string; tip: string; brand: string; prioritate: number; data_ceruta: string;
-  model: string; produs: string; saptamana: string | null;
-  marimi: { marime_id: string; marime: string; rest: number }[];
-  rest: number;
-};
-
-/** Ce s-a croit și n-a intrat încă în lucru, pe loturi (o culoare a unei comenzi), cu mărimile rămase. */
-export async function deDatInLucru(): Promise<LotDeDat[]> {
-  const randuri = await interogare<Omit<LotDeDat, 'marimi' | 'rest'> & { marime_id: string; marime: string; rest_m: number }>(
-    `SELECT ra.lot_id, c.numar || '/P' || pl.numar_transa || '/C' || lc.numar_lot AS cod, c.numar AS comanda, c.tip::text AS tip,
-            b.nume AS brand, c.prioritate, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
-            coalesce(mo.denumire, p.denumire) AS model, p.denumire AS produs, to_char(ps.saptamana, 'YYYY-MM-DD') AS saptamana,
-            ra.marime_id, m.cod AS marime, ra.rest AS rest_m
-       FROM lot_rest_de_alimentat ra
-       JOIN lot_croit lc     ON lc.id = ra.lot_id
-       JOIN planificare pl   ON pl.id = lc.planificare_id
-       JOIN comanda_linie cl ON cl.id = pl.linie_id
-       JOIN comanda c        ON c.id = cl.comanda_id
-       JOIN brand b          ON b.id = c.brand_id
-       JOIN produs p         ON p.id = cl.produs_id
-       LEFT JOIN model mo    ON mo.id = p.model_id
-       JOIN marime m         ON m.id = ra.marime_id
-       LEFT JOIN LATERAL (SELECT min(x.saptamana) AS saptamana FROM plan_linie x WHERE x.linie_id = cl.id) ps ON true
-      WHERE ra.rest > 0
-      ORDER BY ps.saptamana NULLS LAST, cl.data_ceruta, c.prioritate, c.numar, p.denumire, m.ordine`);
-  const pe = new Map<string, LotDeDat>();
-  for (const { marime_id, marime, rest_m, ...r } of randuri) {
-    const x = pe.get(r.lot_id) ?? { ...r, marimi: [], rest: 0 };
-    x.marimi.push({ marime_id, marime, rest: rest_m });
-    x.rest += rest_m;
-    pe.set(r.lot_id, x);
-  }
-  return [...pe.values()];
-}
-
-/**
- * Dă în lucru dintr-o salvare: pe fiecare lot ales, o tranșă cu bucățile scrise (intră
- * acum în producție) și oamenii care lucrează la ea. Fiecare lot e tranșa lui; dacă
- * unul nu trece, celelalte rămân date.
- */
-export async function daInLucru(loturi: { lotId: string; cantitati: Map<string, number> }[], oameni: string[]): Promise<string | null> {
-  const alese = loturi.filter((l) => [...l.cantitati.values()].some((q) => q > 0));
-  if (alese.length === 0) return 'Scrie ce intră în lucru (bucăți pe mărimi sau „tot").';
-  for (const l of alese) {
-    const r = await alimenteaza({ lotId: l.lotId, cantitati: l.cantitati, persoane: null, timpMinBuc: null, responsabil: '', observatii: '' });
-    if ('eroare' in r) return r.eroare;
-    await caFirma(firmaCurenta(), async (c) => {
-      await c.query(`UPDATE alimentare_banda SET intrat_productie_la = now() WHERE id = $1`, [r.id]);
-      for (const om of new Set(oameni.filter(Boolean))) {
-        await c.query(
-          `INSERT INTO alocare_operatie (firma_id, alimentare_id, faza, angajat_id, incepe_la) VALUES (firma_curenta(), $1, 'Cusut', $2, now())`,
-          [r.id, om]);
-      }
-    });
-  }
-  return null;
-}
-
 export type TransaSimpla = {
   id: string; cod: string; comanda: string; model: string; produs: string; bucati: number; marimi: string;
   intrat_la: string; gata_la: string | null; oameni: string | null; data_ceruta: string;

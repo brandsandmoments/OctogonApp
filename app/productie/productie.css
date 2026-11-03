@@ -41,3 +41,27 @@ table.marimi-comanda td.total { font-weight: 600; }
 .detalii-banda h4 { margin: .4rem 0 .3rem; font-size: .9rem; }
 .detalii-banda h4:not(:first-child) { margin-top: .9rem; }
 .detalii-banda .buton { font-size: .8rem; padding: .15rem .5rem; }
+/* Dashboard-ul de producție */
+.carduri-productie { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .6rem; margin: .5rem 0 1rem; }
+.carduri-productie > div { background: var(--card); border: 1px solid var(--linie); border-radius: .5rem; padding: .6rem .8rem; display: flex; flex-direction: column; gap: .15rem; }
+.carduri-productie span { color: var(--slab); font-size: .85rem; }
+.carduri-productie strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.carduri-productie .rosu strong { color: var(--rosu); }
+details.comanda-productie { border: 1px solid var(--linie); border-radius: .5rem; margin: 0 0 .6rem; background: var(--card); }
+details.comanda-productie > summary { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; padding: .6rem .8rem; cursor: pointer; list-style: none; }
+details.comanda-productie > summary::-webkit-details-marker { display: none; }
+details.comanda-productie > summary::before { content: '▸'; display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem;
+  border: 1.5px solid var(--text); border-radius: .35rem; font-weight: 700; }
+details.comanda-productie[open] > summary::before { content: '▾'; background: var(--text); color: var(--card); }
+details.comanda-productie[open] > summary { border-bottom: 1px solid var(--linie); background: var(--bej); }
+details.comanda-productie > summary .cifre { margin-left: auto; font-variant-numeric: tabular-nums; }
+form.culoare-productie { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem 1.25rem; padding: .7rem .8rem; border-bottom: 1px solid var(--linie); }
+form.culoare-productie .actiuni-culoare { display: flex; flex-direction: column; gap: .4rem; }
+tr.intra-acum td { background: color-mix(in srgb, var(--albastru-fundal) 70%, transparent); }
+tr.intra-acum input.bucati { width: 3.2rem; }
+section.cine-lucreaza { padding: .7rem .8rem; background: color-mix(in srgb, var(--bej) 45%, transparent); border-radius: 0 0 .5rem .5rem; }
+section.cine-lucreaza h4 { margin: .2rem 0 .5rem; }
+section.cine-lucreaza label { display: inline-flex; flex-direction: column; gap: .15rem; }
+table.alocari-comanda { margin: .6rem 0; }
+form.culoare-productie .actiuni-culoare button { padding: .35rem .9rem; }
+form.culoare-productie .actiuni-culoare .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }

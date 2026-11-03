@@ -13,7 +13,7 @@ export default async function FileProductie({ activ }: { activ: FilaProductie })
   const buc = loturi.reduce((s, l) => s + l.rest, 0);
   const file: [FilaProductie, string, string][] = [
     ['plan', '/productie', '1 · Plan pe săptămâni'],
-    ['banda', '/banda', `2 · Bandă · ${buc} buc de dat în lucru · ${pe.length} în lucru`],
+    ['banda', '/banda', `2 · Producție · ${buc} buc de dat în lucru · ${pe.length} în lucru`],
     ['predate', '/banda?vedere=predate', '3 · Terminate (ieșite gata)'],
   ];
   return (
