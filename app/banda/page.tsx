@@ -4,11 +4,11 @@ import { Fragment } from 'react';
 import Cauta from '../Cauta';
 import Pliere from '../Pliere';
 import { durata, potriveste } from '../lib/format';
-import { cere, poateModifica } from '../lib/sesiune';
+import { cere } from '../lib/sesiune';
 import { oameniPeTranse, transe } from '../lib/banda';
 import { modeleComenzi } from '../lib/modele';
 import FileProductie from '../productie/FileProductie';
-import DashboardProductie from './DashboardProductie';
+import { redirect } from 'next/navigation';
 import { transeSimple } from '../lib/banda';
 import '../productie/productie.css';
 import { grupareDinAdresa, grupeaza, type TipPerioada } from '../lib/perioade';
@@ -16,16 +16,13 @@ import { grupareDinAdresa, grupeaza, type TipPerioada } from '../lib/perioade';
 export const dynamic = 'force-dynamic';
 
 /**
- * Producția: dashboard-ul comenzilor croite, pe PSF/PSC (DashboardProductie) — ce
- * intră în lucru lângă fiecare culoare, cine lucrează —; separat, ce a ieșit gata,
- * pe săptămâni, luni sau ani.
+ * Ce a ieșit gata din producție, pe săptămâni, luni sau ani. Restul producției —
+ * ce intră în lucru, cine lucrează, „A ieșit gata" — e în planul pe săptămâni.
  */
 export default async function Banda({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; cauta?: string; eroare?: string; ok?: string; deschis?: string }> }) {
   await cere('banda');
-  // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
-  const m = await poateModifica('banda');
-  const { vedere, grupare, cauta, eroare, ok, deschis } = await searchParams;
-  const predate = vedere === 'predate';
+  const { vedere, grupare, cauta, eroare, ok } = await searchParams;
+  if (vedere !== 'predate') redirect('/productie');
   // Terminatele, pe săptămâni de la început; se schimbă pe luni sau ani dintr-un clic.
   const g = grupareDinAdresa(grupare, 'saptamana');
   const PE: [string, string][] = [['saptamana', 'Pe săptămâni'], ['luna', 'Pe luni'], ['an', 'Pe ani'], ['fara', 'Toate, negrupate']];
@@ -33,22 +30,18 @@ export default async function Banda({ searchParams }: { searchParams: Promise<{ 
   return (
     <main className="lat">
       <h1>Producție</h1>
-      <FileProductie activ={predate ? 'predate' : 'banda'} />
-      <p className="slab">
-        {predate ? 'Ce a ieșit gata din producție.' : 'Comenzile croite, pe PSF/PSC. Deschide comanda: scrie ce intră în lucru lângă fiecare culoare și cine lucrează.'}
-      </p>
+      <FileProductie activ="predate" />
+      <p className="slab">Ce a ieșit gata din producție.</p>
       <Cauta valoare={cauta} pastreaza={{ vedere, grupare }} placeholder="caută: comandă, model, produs" />
-      {predate && (
-        <div className="filtre">
-          {PE.map(([k, nume]) => (
-            <Link key={k} href={adresaGrupare(k)} className={`buton ${(g || 'fara') === k ? 'activ-buton' : ''}`}>{nume}</Link>
-          ))}
-          {g && <Pliere semn={JSON.stringify([g, cauta])} />}
-        </div>
-      )}
+      <div className="filtre">
+        {PE.map(([k, nume]) => (
+          <Link key={k} href={adresaGrupare(k)} className={`buton ${(g || 'fara') === k ? 'activ-buton' : ''}`}>{nume}</Link>
+        ))}
+        {g && <Pliere semn={JSON.stringify([g, cauta])} />}
+      </div>
       {eroare && <p className="eroare">{eroare}</p>}
       {ok && <p className="insigna verde">{ok}</p>}
-      {predate ? <Gata g={g} cauta={cauta} /> : <DashboardProductie m={m} cauta={cauta} deschis={deschis} />}
+      <Gata g={g} cauta={cauta} />
     </main>
   );
 }

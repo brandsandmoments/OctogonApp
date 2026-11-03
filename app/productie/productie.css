@@ -78,7 +78,7 @@ details.reprioritizare[open] { border: 1px dashed var(--rosu); border-radius: .5
 details.reprioritizare .principal { background: var(--text); color: var(--card); border-color: var(--text); }
 form.fara-urgenta { padding: .5rem .8rem; }
 /* Planul: listă pe coloane, în cascadă pe săptămânile termenului */
-.plan-lista { --plan-col: 1.9rem 7.5rem minmax(9rem, 1.1fr) minmax(12rem, 2fr) 4rem 4rem 4.5rem 5rem minmax(9rem, 1.3fr) 9.5rem; }
+.plan-lista { --plan-col: 1.9rem 10.5rem minmax(9rem, 1.1fr) minmax(12rem, 2fr) 4rem 4rem 4.5rem 5rem minmax(9rem, 1.3fr) 9.5rem; }
 .plan-cap, .plan-lista details.comanda-productie > summary { display: grid; grid-template-columns: var(--plan-col); gap: .5rem; align-items: center; }
 .plan-cap { padding: .3rem .8rem; color: var(--slab); font-size: .78rem; font-weight: 600; border-bottom: 2px solid var(--accent-linie); }
 .plan-lista details.comanda-productie { margin: 0 0 .35rem; }
@@ -96,6 +96,36 @@ details.grupa-plan.aici > summary { border-left-color: var(--verde); }
 details.grupa-plan > .comanda-productie:first-of-type { margin-top: .35rem; }
 @media screen and (max-width: 900px) {
   .plan-cap { display: none; }
-  .plan-lista details.comanda-productie > summary { grid-template-columns: 1.9rem 1fr 1fr; }
+  .plan-lista details.comanda-productie > summary { grid-template-columns: 1.9rem minmax(0, 1fr) minmax(0, 1fr); }
+  .plan-lista details.comanda-productie > summary > .p-produs, .plan-lista details.comanda-productie > summary > .p-stadiu { grid-column: 2 / -1; }
   .plan-lista details.comanda-productie > summary > .nr { display: none; }
 }
+
+/* Planul: fiecare culoare e un card delimitat, cu antet (nume, stadiu) și tabelul mărimilor cu grilă. */
+.culori-plan { display: grid; gap: .7rem; padding: .7rem .8rem; }
+.culori-plan form.culoare-productie { display: block; padding: 0; border: 1px solid var(--linie); border-radius: .45rem; background: var(--card); overflow: hidden; }
+.culori-plan .cap-culoare { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; padding: .45rem .7rem; background: var(--bej); border-bottom: 1px solid var(--linie); }
+.culori-plan .cap-culoare .slab { margin-left: auto; font-variant-numeric: tabular-nums; }
+.culori-plan .tabel-derulant { padding: 0; }
+.culori-plan table.marimi-comanda { width: 100%; }
+.culori-plan table.marimi-comanda th, .culori-plan table.marimi-comanda td { border: 1px solid var(--linie); padding: .3rem .6rem; }
+.culori-plan table.marimi-comanda tr > :first-child { border-left: 0; width: 9rem; }
+.culori-plan table.marimi-comanda tr > :last-child { border-right: 0; }
+.culori-plan table.marimi-comanda thead th { border-top: 0; background: color-mix(in srgb, var(--bej) 50%, transparent); font-weight: 600; }
+.culori-plan table.marimi-comanda tbody tr:last-child td { border-bottom: 0; }
+.culori-plan .actiuni-culoare { flex-direction: row !important; justify-content: flex-end; padding: .5rem .7rem; border-top: 1px solid var(--linie); }
+.culori-plan form.culoare-productie > p { margin: 0; padding: .45rem .7rem; border-top: 1px solid var(--linie); }
+
+/* Stadiul culorii, de schimbat dintr-un clic. */
+details.schimba-stadiu { position: relative; display: inline-block; }
+details.schimba-stadiu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: .2rem; border-radius: 1rem; outline: 1px dashed transparent; }
+details.schimba-stadiu > summary:hover { outline-color: var(--text); }
+details.schimba-stadiu > summary::-webkit-details-marker { display: none; }
+details.schimba-stadiu > div { position: absolute; z-index: 5; top: calc(100% + .3rem); left: 0; padding: .5rem; background: var(--card);
+  border: 1px solid var(--linie); border-radius: .45rem; box-shadow: 0 6px 18px rgb(0 0 0 / .12); white-space: nowrap; }
+details.schimba-stadiu .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
+
+/* Cine lucrează, în plan: card separat sub culori. */
+details.comanda-productie > section.cine-lucreaza { margin: 0 .8rem .8rem; border: 1px solid var(--linie); border-radius: .45rem; }
+.plan-lista .p-termen { min-width: 0; }
+.plan-lista .p-termen .insigna { white-space: normal; line-height: 1.25; }

@@ -46,6 +46,9 @@ export type Cine = { roluri: readonly string[]; drepturi: Drepturi };
 
 export const esteAdmin = (c: Cine) => c.roluri.includes('admin');
 
+/** Stadiul unei culori în lucru (intrat / ieșit din lucru) îl schimbă doar adminul, managerul de producție și șeful de bandă. */
+export const schimbaStadiulProductiei = (c: Cine) => ['admin', 'planificator', 'banda'].some((r) => c.roluri.includes(r));
+
 /** Poate omul face asta în zonă? „modifică" îl include pe „vede". */
 export function poate(c: Cine, zona: Zona, nivel: Nivel = 'vede'): boolean {
   if (esteAdmin(c)) return true;
@@ -79,7 +82,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     ecrane: [
       { href: '/centralizator', nume: 'Centralizator', ce: 'toate comenzile și stadiul lor: rămas de croit, croit, în lucru, în depozit', zona: 'centralizator' },
       { href: '/croit', nume: 'Croit', ce: 'ce e de croit, ce s-a croit, ce a rămas', zona: 'croit' },
-      { href: '/productie', nume: 'Producție', ce: 'planul pe săptămâni, ce se dă pe bandă, ce e pe bandă și cine lucrează, ce s-a terminat', zona: ['planificare', 'banda'], alte: ['/banda'] },
+      { href: '/productie', nume: 'Producție', ce: 'planul pe săptămâni: ce intră în lucru, reprioritizare, cine lucrează, ce a ieșit gata', zona: ['planificare', 'banda'], alte: ['/banda'] },
       { href: '/calculator', nume: 'Calculator timp', ce: 'cât durează un lot: din minutele pe bucată și câți operatori, zile lucrătoare și ziua de gata', zona: ['comenzi', 'planificare', 'banda', 'centralizator', 'kam', 'croit'] },
       { href: '/banda/oameni', nume: 'Oameni producție', ce: 'personalul pe funcții: operatori, alimentator, control, călcat, CTC, croit', zona: 'banda' },
     ],

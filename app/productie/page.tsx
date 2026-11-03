@@ -1,16 +1,22 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Termen } from '../Insigne';
-import { cere, poateModifica } from '../lib/sesiune';
+import { cere, poateModifica, utilizatorCurent } from '../lib/sesiune';
+import { schimbaStadiulProductiei } from '../lib/acces';
 import { azi, numarDinFormular, potriveste } from '../lib/format';
 import Cauta from '../Cauta';
 import { adaugaZile, luni } from '../lib/perioade';
 import {
-  aduLaUrgenta, cautaComenziDeschise, daInLucruCuloare, planPeSaptamani, scoateUrgenta, STADII_PLAN,
+  adaugaAlocareComanda, aduLaUrgenta, cautaComenziDeschise, comenziInProductie, daInLucruCuloare, planPeSaptamani,
+  iesitDinLucruCuloare, inapoiInLucruCuloare, salveazaTimpOameni, scoateUrgenta, stergeAlocareComanda, STADII_PLAN,
   type ComandaPlan, type CuloarePlan, type StadiuPlan,
 } from '../lib/productieComenzi';
+import { iesitGata, transeSimple } from '../lib/banda';
+import { personal, utilaje } from '../lib/alocare';
+import { parametriTimp } from '../lib/parametriTimp';
 import './productie.css';
 import FileProductie from './FileProductie';
+import CineLucreaza from './CineLucreaza';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +31,12 @@ const culoare = (produs: string, model: string) => {
   const m = new Set(model.toLowerCase().split(/[\s,]+/));
   return produs.split(/\s+/).slice(1).filter((w) => !m.has(w.toLowerCase())).join(' ') || produs;
 };
+/** Înapoi în plan, la comanda deschisă (cu eroarea, dacă a fost una). */
+const inapoiLaComanda = (date: FormData, e?: string | null): never => {
+  const la = String(date.get('inapoi') ?? '/productie');
+  const numar = String(date.get('numar'));
+  return redirect(`${la}${la.includes('?') ? '&' : '?'}deschis=${encodeURIComponent(numar)}${e ? `&eroare=${encodeURIComponent(e)}` : ''}#c-${encodeURIComponent(numar)}`);
+};
 const eData = (v?: string) => Boolean(v && /^\d{4}-\d{2}-\d{2}$/.test(v));
 
 type Cautare = { sapt?: string; de?: string; pana?: string; stadiu?: string; eroare?: string; cauta?: string; deschis?: string; urg?: string; us?: string };
@@ -36,11 +48,14 @@ type Cautare = { sapt?: string; de?: string; pana?: string; stadiu?: string; ero
  * comandă deschide mărimile și se scrie exact ce intră; ce nu intră rămâne în plan, cu
  * „rămas de intrat în lucru". Ce a rămas nefăcut cu termenul trecut apare în săptămâna
  * de acum, ca întârziat. Peste plan, „Reprioritizare" aduce la urgență o comandă dintr-o
- * altă săptămână (caută după PSF/PSC sau model).
+ * altă săptămână (caută după PSF/PSC sau model). Deschisă, o comandă croită arată și cine
+ * lucrează (minute pe bucată, oameni, fazele) și tranșele în lucru, cu „A ieșit gata".
  */
 export default async function Productie({ searchParams }: { searchParams: Promise<Cautare> }) {
   await cere(['planificare', 'banda']);
   const m = (await poateModifica('banda')) || (await poateModifica('planificare'));
+  const u = await utilizatorCurent();
+  const st = Boolean(u && schimbaStadiulProductiei(u));
   const f = await searchParams;
   const curenta = luni(azi());
   let de = eData(f.de) ? luni(f.de!) : eData(f.sapt) ? luni(f.sapt!) : curenta;
@@ -51,7 +66,11 @@ export default async function Productie({ searchParams }: { searchParams: Promis
   pana = saptamani[saptamani.length - 1];
   const nr = saptamani.length;
 
-  const toate = (await planPeSaptamani(de, pana, curenta, luni))
+  const [plan, inProductie, inLucru, oameni, masini, param] = await Promise.all([
+    planPeSaptamani(de, pana, curenta, luni), comenziInProductie(), transeSimple(false), personal(), utilaje(), parametriTimp(),
+  ]);
+  const prod = new Map(inProductie.map((c) => [c.comanda_id, c]));
+  const toate = plan
     .filter((c) => potriveste(f.cauta, c.numar, c.model, ...c.culori.map((l) => l.produs)));
   const stadiu = f.stadiu && f.stadiu in STADII_PLAN ? (f.stadiu as StadiuPlan) : null;
   const comenzi = stadiu ? toate.filter((c) => c.stadiu === stadiu) : toate;
@@ -90,16 +109,56 @@ export default async function Productie({ searchParams }: { searchParams: Promis
     'use server';
     await cere('banda', 'modifica');
     const linie = String(date.get('linie'));
-    const numar = String(date.get('numar'));
-    const inapoiLa = String(date.get('inapoi') ?? '/productie');
     const lista = await planPeSaptamani('2000-01-03', '2100-01-04', luni(azi()), luni);
     const l = lista.flatMap((c) => c.culori).find((x) => x.linie_id === linie);
     const cantitati = new Map((l?.marimi ?? []).map((x) => [x.marime_id,
       date.get('tot') ? x.de_dat : numarDinFormular(date.get(`q:${x.marime_id}`)) ?? 0] as [string, number]));
-    const e = l ? await daInLucruCuloare(linie, cantitati) : 'Culoarea nu mai are nimic croit de dat în lucru.';
-    const sep = inapoiLa.includes('?') ? '&' : '?';
-    redirect(`${inapoiLa}${sep}deschis=${encodeURIComponent(numar)}${e ? `&eroare=${encodeURIComponent(e)}` : ''}#c-${encodeURIComponent(numar)}`);
+    inapoiLaComanda(date, l ? await daInLucruCuloare(linie, cantitati) : 'Culoarea nu mai are nimic croit de dat în lucru.');
   }
+  // Stadiul unei culori: două acțiuni, câte una pe buton (butonul cu formAction își pierde name/value).
+  async function iesitDinLucru(date: FormData) {
+    'use server';
+    const cine = await cere(['planificare', 'banda'], 'modifica');
+    if (!schimbaStadiulProductiei(cine)) return inapoiLaComanda(date, 'Stadiul îl schimbă doar managerul de producție sau șeful de bandă.');
+    inapoiLaComanda(date, await iesitDinLucruCuloare(String(date.get('linie'))));
+  }
+  async function inapoiInLucru(date: FormData) {
+    'use server';
+    const cine = await cere(['planificare', 'banda'], 'modifica');
+    if (!schimbaStadiulProductiei(cine)) return inapoiLaComanda(date, 'Stadiul îl schimbă doar managerul de producție sau șeful de bandă.');
+    inapoiLaComanda(date, await inapoiInLucruCuloare(String(date.get('linie')), numarDinFormular(date.get('depozit')) ?? 0));
+  }
+  async function timp(date: FormData) {
+    'use server';
+    await cere('banda', 'modifica');
+    inapoiLaComanda(date, await salveazaTimpOameni(String(date.get('comanda')), numarDinFormular(date.get('minute')), numarDinFormular(date.get('oameni'))));
+  }
+  async function aloca(date: FormData) {
+    'use server';
+    await cere('banda', 'modifica');
+    inapoiLaComanda(date, await adaugaAlocareComanda(String(date.get('comanda')), String(date.get('faza') ?? ''),
+      String(date.get('utilaj') ?? ''), String(date.get('om') ?? '')));
+  }
+  async function sterge(date: FormData) {
+    'use server';
+    await cere('banda', 'modifica');
+    await stergeAlocareComanda(String(date.get('id')));
+    inapoiLaComanda(date);
+  }
+  async function aIesit(date: FormData) {
+    'use server';
+    await cere('banda', 'modifica');
+    for (const id of date.getAll('id').map(String)) await iesitGata(id);
+    inapoiLaComanda(date);
+  }
+  // Ce are nevoie partea „Cine lucrează" a unei comenzi croite, deschisă în plan.
+  const lucru = (c: ComandaPlan) => {
+    const p = prod.get(c.comanda_id);
+    return p && (
+      <CineLucreaza c={p} m={m} aici={aici} oameni={oameni} masini={masini.map((x) => x.nume)} orePeZi={param.orePeZi} zi={azi()}
+        transe={inLucru.filter((t) => t.comanda === c.numar)} timp={timp} aloca={aloca} sterge={sterge} aIesit={aIesit} />
+    );
+  };
 
   return (
     <main className="lat">
@@ -200,7 +259,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
                         {buc(g.comenzi, 'ramas_de_intrat') > 0 && ` · ${buc(g.comenzi, 'ramas_de_intrat')} rămase de intrat în lucru`}</span>
                     </summary>
                     {g.comenzi.map((c) => (
-                      <ComandaInPlan key={`${c.comanda_id}${s}`} c={c} m={m} deschis={f.deschis === c.numar} da={da} aici={aici} faraUrgenta={faraUrgenta} />
+                      <ComandaInPlan key={`${c.comanda_id}${s}`} c={c} m={m} deschis={f.deschis === c.numar} da={da} aici={aici} faraUrgenta={faraUrgenta} lucru={lucru(c)} st={st} stadiul={{ iesit: iesitDinLucru, inapoi: inapoiInLucru }} />
                     ))}
                   </details>
                 ))}
@@ -234,8 +293,9 @@ function grupePlan(lista: ComandaPlan[], s: string) {
 }
 
 /** O comandă din plan: stadiul, termenul, ce a rămas de intrat în lucru; deschisă, culorile cu „Intră acum". */
-function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta }: {
+function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiul }: {
   c: ComandaPlan; m: boolean; deschis: boolean; da: (d: FormData) => Promise<void>; aici: string; faraUrgenta: (d: FormData) => Promise<void>;
+  lucru: React.ReactNode; st: boolean; stadiul: ActiuniStadiu;
 }) {
   return (
     <details id={`c-${c.numar}`} className="comanda-productie" open={deschis}>
@@ -254,7 +314,10 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta }: {
         </span>
         <span>{m && c.de_dat > 0 && <span className="buton buton-da">Dă în lucru ({c.de_dat})</span>}</span>
       </summary>
-      {c.culori.map((l) => <CuloareInPlan key={l.linie_id} c={c} l={l} m={m} da={da} aici={aici} />)}
+      <div className="culori-plan">
+        {c.culori.map((l) => <CuloareInPlan key={l.linie_id} c={c} l={l} m={m} da={da} aici={aici} st={st} stadiul={stadiul} />)}
+      </div>
+      {lucru}
       {m && c.urgenta && (
         <form action={faraUrgenta} className="fara-urgenta">
           <input type="hidden" name="comanda" value={c.comanda_id} />
@@ -266,17 +329,42 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta }: {
   );
 }
 
-function CuloareInPlan({ c, l, m, da, aici }: { c: ComandaPlan; l: CuloarePlan; m: boolean; da: (d: FormData) => Promise<void>; aici: string }) {
+type ActiuniStadiu = { iesit: (d: FormData) => Promise<void>; inapoi: (d: FormData) => Promise<void> };
+
+/**
+ * O culoare, ca un card: sus numele și stadiul — „Intrat în lucru" și „Ieșit din lucru" se
+ * pot schimba dintr-un clic (managerul de producție, șeful de bandă); dedesubt, mărimile.
+ */
+function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
+  c: ComandaPlan; l: CuloarePlan; m: boolean; da: (d: FormData) => Promise<void>; aici: string; st: boolean; stadiul: ActiuniStadiu;
+}) {
+  const insigna = <span className={`insigna ${TON[l.stadiu]}`}>{STADII_PLAN[l.stadiu]}</span>;
+  const spre = l.stadiu === 'in_lucru' ? 'iesit' : l.stadiu === 'iesit' && l.depozit === 0 ? 'in_lucru' : null;
   return (
     <form action={da} className="culoare-productie">
       <input type="hidden" name="linie" value={l.linie_id} />
       <input type="hidden" name="numar" value={c.numar} />
       <input type="hidden" name="inapoi" value={aici} />
+      <input type="hidden" name="depozit" value={l.depozit} />
+      <div className="cap-culoare">
+        <strong>{culoare(l.produs, c.model)}</strong>
+        {st && spre ? (
+          <details className="schimba-stadiu">
+            <summary title="Schimbă stadiul">{insigna} ▾</summary>
+            <div>
+              {spre === 'iesit'
+                ? <button formAction={stadiul.iesit} className="principal">A ieșit din lucru ({l.dat - l.gata} buc)</button>
+                : <button formAction={stadiul.inapoi} className="secundar">Înapoi în lucru ({l.gata} buc)</button>}
+            </div>
+          </details>
+        ) : insigna}
+        <span className="slab">{l.cerut} cerut · {l.croit} croit{l.dat > 0 && ` · ${l.dat} dat în lucru`}{l.gata > 0 && ` · ${l.gata} ieșit`}</span>
+      </div>
       <div className="tabel-derulant">
         <table className="marimi-comanda">
           <thead>
             <tr>
-              <th>{culoare(l.produs, c.model)} <span className={`insigna ${TON[l.stadiu]}`}>{STADII_PLAN[l.stadiu]}</span></th>
+              <th />
               {l.marimi.map((x) => <th key={x.marime_id}>{x.marime}</th>)}<th>Total</th>
             </tr>
           </thead>

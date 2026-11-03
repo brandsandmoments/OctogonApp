@@ -1,7 +1,7 @@
 import { caFirma } from './db';
 import { firmaCurenta, interogare } from './sesiune';
 import { rangMarime } from './format';
-import { alimenteaza } from './banda';
+import { alimenteaza, iesitGata } from './banda';
 import { adaugaZileLucratoare } from './timp';
 
 /**
@@ -332,4 +332,29 @@ export async function aduLaUrgenta(comandaId: string, saptamana: string): Promis
 /** Scoate urgența: comanda se întoarce în săptămâna termenului ei. */
 export async function scoateUrgenta(comandaId: string): Promise<void> {
   await interogare(`DELETE FROM plan_linie WHERE linie_id IN (SELECT id FROM comanda_linie WHERE comanda_id = $1)`, [comandaId]);
+}
+
+/** Tranșele unei culori de pe bandă (prin loturile croite ale culorii). */
+const TRANSE_CULOARE = `SELECT ab.id FROM alimentare_banda ab JOIN lot_croit lc ON lc.id = ab.lot_id
+                         JOIN planificare pl ON pl.id = lc.planificare_id WHERE pl.linie_id = $1`;
+
+/** Culoarea a ieșit din lucru: toate tranșele ei încă în lucru ies acum (ca „A ieșit gata"). */
+export async function iesitDinLucruCuloare(linieId: string): Promise<string | null> {
+  const transe = await interogare<{ id: string }>(`${TRANSE_CULOARE} AND ab.iesit_productie_la IS NULL`, [linieId]);
+  if (!transe.length) return 'Culoarea nu are nimic în lucru.';
+  for (const t of transe) await iesitGata(t.id);
+  return null;
+}
+
+/**
+ * Culoarea se întoarce în lucru (ieșită din greșeală): tranșele ei ieșite se redeschid.
+ * Doar cele care n-au trecut încă de CTC și nimic din culoare n-a intrat în depozit.
+ */
+export async function inapoiInLucruCuloare(linieId: string, inDepozit: number): Promise<string | null> {
+  if (inDepozit > 0) return 'Din culoarea asta a intrat deja marfă în depozit; nu se mai poate întoarce în lucru.';
+  const r = await interogare<{ id: string }>(
+    `UPDATE alimentare_banda SET iesit_productie_la = NULL WHERE id IN (${TRANSE_CULOARE}) AND iesit_productie_la IS NOT NULL AND ctc_la IS NULL RETURNING id`, [linieId]);
+  if (!r.length) return 'Ce a ieșit din lucru din culoarea asta a trecut deja de CTC; nu se mai poate întoarce în lucru.';
+  await interogare(`UPDATE alocare_operatie SET gata_la = NULL WHERE alimentare_id = ANY($1::uuid[])`, [r.map((x) => x.id)]);
+  return null;
 }
