@@ -24,7 +24,7 @@ async function respinge(date: FormData) {
 }
 
 /**
- * PSF-urile date de KAM-i, de aprobat. Pe fiecare mărime: cât cere PSF-ul, cât e pe
+ * PSF-urile și PSC-urile date de KAM-i fără drept de aprobare, de aprobat. Pe fiecare mărime: cât cere PSF-ul, cât e pe
  * stoc în magazin, cât s-a vândut în 30 de zile și cât e deja în producție. Aprobat,
  * PSF-ul se lansează și intră în planificare; respins, se anulează cu motivul scris.
  */
@@ -34,8 +34,8 @@ export default async function Aprobare({ searchParams }: { searchParams: Promise
   const lista = await psfDeAprobat();
   return (
     <main className="lat">
-      <h1>PSF de aprobat</h1>
-      <p className="sumar">{lista.length} PSF-uri date de KAM-i așteaptă. Aprobat, PSF-ul se lansează în producție; respins, KAM-ul vede motivul.</p>
+      <h1>De aprobat · PSF și PSC</h1>
+      <p className="sumar">{lista.length} {lista.length === 1 ? 'comandă dată' : 'comenzi date'} de KAM-i așteaptă. Aprobată, comanda se lansează în producție; respinsă, KAM-ul vede motivul.</p>
       {f.eroare && <p className="eroare">{f.eroare}</p>}
       {f.aprobat && <p className="mesaj-ok">{f.aprobat} aprobat și lansat.</p>}
       {f.respins && <p className="mesaj-ok">{f.respins} respins.</p>}

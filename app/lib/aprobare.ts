@@ -54,16 +54,16 @@ export async function aprobaPsf(numar: string, cine: string): Promise<string | n
   const r = await interogare<{ id: string }>(
     `UPDATE comanda SET stare = 'lansata', aprobata_de = $2, aprobata_la = now()
       WHERE numar = $1 AND stare = 'de_aprobat' RETURNING id`, [numar, cine]);
-  if (!r.length) return 'PSF-ul nu mai așteaptă aprobarea (poate l-a aprobat altcineva).';
+  if (!r.length) return 'Comanda nu mai așteaptă aprobarea (poate a aprobat-o altcineva).';
   // Aprobat, pleacă direct la croit.
   await interogare(`SELECT planifica_automat($1)`, [r[0].id]);
   return null;
 }
 
 export async function respingePsf(numar: string, motiv: string, cine: string): Promise<string | null> {
-  if (!motiv.trim()) return 'Scrie de ce îl respingi: KAM-ul vede motivul.';
+  if (!motiv.trim()) return 'Scrie de ce o respingi: KAM-ul vede motivul.';
   const r = await interogare(
     `UPDATE comanda SET stare = 'anulata', aprobata_de = $3, aprobata_la = now(), motiv_respingere = $2
       WHERE numar = $1 AND stare = 'de_aprobat' RETURNING id`, [numar, motiv.trim(), cine]);
-  return r.length ? null : 'PSF-ul nu mai așteaptă aprobarea (poate l-a aprobat altcineva).';
+  return r.length ? null : 'Comanda nu mai așteaptă aprobarea (poate a aprobat-o altcineva).';
 }

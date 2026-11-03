@@ -33,7 +33,7 @@ export const ZONE = {
   materiale: 'Gestiune materii prime (stoc, intrări, inventar)',
   dezvoltare: 'Dezvoltare produs',
   expediere: 'Expediere',
-  aprobare: 'Aprobare PSF (date de KAM-i)',
+  aprobare: 'Aprobare PSF și PSC (date de KAM-i)',
   retete: 'Rețete și proces tehnologic',
   financiar: 'Financiar (colete, facturi, rambursuri)',
 } as const;
@@ -74,7 +74,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     ecrane: [
       { href: '/comenzi', nume: 'PSF și PSC', ce: 'comenzile date: punere pe stoc din forecast și din comanda clientului', zona: 'comenzi' },
       { href: '/comenzi/noua', nume: 'Comandă nouă', ce: 'PSF sau PSC, cu grila de mărimi', zona: 'comenzi', nivel: 'modifica' },
-      { href: '/comenzi/aprobare', nume: 'PSF de aprobat', ce: 'PSF-urile date de KAM-i: aprobă sau respinge', zona: 'aprobare', nivel: 'modifica' },
+      { href: '/comenzi/aprobare', nume: 'De aprobat', ce: 'PSF-urile și PSC-urile date de KAM-i: aprobă sau respinge', zona: 'aprobare', nivel: 'modifica' },
     ],
   },
   {

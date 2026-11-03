@@ -60,7 +60,7 @@ export default function FormularComanda({
       const r = await salveazaComanda({
         tip, brandId, kamId, dataLansare, prioritate, observatii, lanseaza, linii,
       });
-      if (r.ok) router.push(r.deAprobat ? `/comenzi?tip=PSF&toate=1&trimis=${encodeURIComponent(r.numar)}` : `/necesar/${encodeURIComponent(r.numar)}`);
+      if (r.ok) router.push(r.deAprobat ? `/comenzi?tip=${tip}&toate=1&trimis=${encodeURIComponent(r.numar)}` : `/necesar/${encodeURIComponent(r.numar)}`);
       else setEroare(r.eroare);
     });
   }
