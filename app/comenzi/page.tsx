@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Fragment } from 'react';
 import Cauta from '../Cauta';
 import { Progres, Stadiu, Termen } from '../Insigne';
@@ -8,6 +9,7 @@ import { grupareDinAdresa, grupeaza } from '../lib/perioade';
 import { centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/centralizator';
 import { modeleComenzi } from '../lib/modele';
 import { cere, poateModifica } from '../lib/sesiune';
+import { schimbaTermen } from '../lib/comenzi';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +25,7 @@ const TIPURI = {
  * mărimi sunt în centralizator. Se grupează pe săptămâni, luni, trimestre sau ani,
  * după ziua lansării.
  */
-export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string; grupare?: string; cauta?: string; trimis?: string }> }) {
+export default async function Comenzi({ searchParams }: { searchParams: Promise<{ tip?: string; toate?: string; grupare?: string; cauta?: string; trimis?: string; eroare?: string; ok?: string }> }) {
   await cere('comenzi');
   const f = await searchParams;
   const tip: keyof typeof TIPURI = f.tip === 'PSC' ? 'PSC' : 'PSF';
@@ -53,6 +55,17 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
   // Comenzile pornesc pe săptămâni de lansare, strânse.
   const g = grupareDinAdresa(f.grupare, 'saptamana');
   const grupe = g ? grupeaza(lista, (c) => c.lansare, g) : [{ perioada: null, randuri: lista }];
+  const aici = `/comenzi?tip=${tip}${f.toate ? `&toate=${f.toate}` : ''}${f.grupare ? `&grupare=${f.grupare}` : ''}${f.cauta ? `&cauta=${encodeURIComponent(f.cauta)}` : ''}`;
+
+  // Termenul scris greșit la lansare se corectează de aici (pe toate liniile comenzii).
+  async function termen(date: FormData) {
+    'use server';
+    const cine = await cere('comenzi', 'modifica');
+    const numar = String(date.get('numar'));
+    const e = await schimbaTermen(numar, String(date.get('data') ?? ''), cine.nume);
+    const la = String(date.get('inapoi') ?? '/comenzi');
+    redirect(`${la}${la.includes('?') ? '&' : '?'}${e ? `eroare=${encodeURIComponent(e)}` : `ok=${encodeURIComponent(`${numar}: termenul a fost schimbat.`)}`}`);
+  }
 
   return (
     <main className="lat">
@@ -68,6 +81,8 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
           {f.toate === '1' ? 'doar deschise' : 'și închise'}
         </Link>
       </p>
+      {f.eroare && <p className="eroare">{f.eroare}</p>}
+      {f.ok && <p className="mesaj-ok">{f.ok}</p>}
       {f.trimis && <p className="mesaj-ok">{f.trimis} a fost trimis spre aprobare: un responsabil îl aprobă, apoi se lansează în producție.</p>}
       <Cauta valoare={f.cauta} pastreaza={{ tip, toate: f.toate, grupare: f.grupare }} placeholder="caută: comandă, produs, SKU, KAM" />
       <Grupare ales={g} pastreaza={{ tip, toate: f.toate, cauta: f.cauta }} />
@@ -113,7 +128,20 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
                   <td>{modele.get(c.numar)}</td>
                   <td>{c.kam ?? <span className="slab">—</span>}</td>
                   <td className="slab">{c.lansare}</td>
-                  <td><Termen data={c.cerutLa} gata={c.intrat >= c.cerut} /></td>
+                  <td>
+                    <Termen data={c.cerutLa} gata={c.intrat >= c.cerut} />
+                    {poateDa && c.intrat < c.cerut && (
+                      <details className="schimba-termen">
+                        <summary className="slab">schimbă</summary>
+                        <form action={termen} className="in-rand">
+                          <input type="hidden" name="numar" value={c.numar} />
+                          <input type="hidden" name="inapoi" value={aici} />
+                          <input type="date" name="data" defaultValue={c.cerutLa} min={c.lansare} required aria-label={`Termenul nou pentru ${c.numar}`} />
+                          <button className="secundar">Salvează termenul</button>
+                        </form>
+                      </details>
+                    )}
+                  </td>
                   <td className="nr">{c.cerut}</td>
                   <td><Progres cerut={c.cerut} croit={c.croit} intrat={c.intrat} /></td>
                   <td>

@@ -280,3 +280,7 @@ form.formular-mostra .principal { background: var(--text); color: var(--card); b
 form.formular-mostra .variatii-mostra { display: grid; gap: .4rem; justify-items: start; margin-top: .3rem; }
 form.formular-mostra .variatii-mostra input.bucati { width: 3.4rem; }
 form.formular-mostra .variatii-mostra td.ce input { min-width: 12rem; }
+/* Comenzi: schimbarea termenului, sub insigna lui. */
+details.schimba-termen { display: inline-block; margin-left: .35rem; }
+details.schimba-termen > summary { cursor: pointer; display: inline; font-size: .8rem; text-decoration: underline dotted; }
+details.schimba-termen form { margin-top: .3rem; gap: .3rem; }

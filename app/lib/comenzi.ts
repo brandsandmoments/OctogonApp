@@ -153,3 +153,27 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
     throw e;
   }
 }
+
+/**
+ * Schimbă termenul cerut în stoc al comenzii (pe toate liniile ei), de ex. o dată scrisă greșit
+ * la lansare. Planul pe săptămâni o mută singur în săptămâna noului termen. Schimbarea se
+ * notează în observațiile comenzii (de la ce dată la ce dată, cine, când).
+ */
+export async function schimbaTermen(numar: string, data: string, cine: string): Promise<string | null> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return 'Alege data nouă.';
+  return caFirma(firmaCurenta(), async (c) => {
+    const { rows: [cm] } = await c.query<{ id: string; vechi: string | null; data_lansare: string; stare: string }>(
+      `SELECT c.id, to_char(c.data_lansare, 'YYYY-MM-DD') AS data_lansare, c.stare::text AS stare,
+              (SELECT to_char(min(cl.data_ceruta), 'DD.MM.YYYY') FROM comanda_linie cl WHERE cl.comanda_id = c.id) AS vechi
+         FROM comanda c WHERE c.numar = $1 FOR UPDATE`, [numar]);
+    if (!cm) return 'Comanda nu există.';
+    if (cm.stare === 'anulata') return 'Comanda e anulată.';
+    if (data < cm.data_lansare) return 'Termenul nu poate fi înainte de lansare.';
+    await c.query(`UPDATE comanda_linie SET data_ceruta = $2 WHERE comanda_id = $1`, [cm.id, data]);
+    const nou = data.split('-').reverse().join('.');
+    const azi = new Date().toLocaleDateString('ro-RO', { timeZone: 'Europe/Bucharest' });
+    await c.query(`UPDATE comanda SET observatii = concat_ws(' · ', nullif(observatii, ''), $2::text) WHERE id = $1`,
+      [cm.id, `Termen schimbat din ${cm.vechi ?? '—'} în ${nou} de ${cine}, ${azi}`]);
+    return null;
+  });
+}
