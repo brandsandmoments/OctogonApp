@@ -797,3 +797,53 @@ export async function salveazaTaierea(d: {
     return null;
   }));
 }
+
+// ---------------------------------------------------------------- materialele croite (stofă, căptușeală…)
+
+/** Un material croit într-o taiere: numele scris de croit și bucățile, pe comandă (lot) și mărime. */
+export type MaterialCroit = { material: string; bucati: Map<string, Map<string, number>> };
+
+/** Materialele croite ale taierii, în ordinea în care au fost scrise. */
+export async function materialeCroite(taiereId: string): Promise<MaterialCroit[]> {
+  const r = await interogare<{ material: string; lot_id: string; marime_id: string; cantitate: number }>(
+    `SELECT material, lot_id, marime_id, cantitate FROM taiere_material_croit WHERE taiere_id = $1 ORDER BY scris_la, material`, [taiereId]);
+  const pe = new Map<string, MaterialCroit>();
+  for (const x of r) {
+    const m = pe.get(x.material) ?? { material: x.material, bucati: new Map() };
+    m.bucati.set(x.lot_id, (m.bucati.get(x.lot_id) ?? new Map()).set(x.marime_id, x.cantitate));
+    pe.set(x.material, m);
+  }
+  return [...pe.values()];
+}
+
+/**
+ * Scrie (sau rescrie) un material croit: numele și bucățile pe comandă și mărime. Cu `vechi`,
+ * materialul își schimbă și numele. Bucățile pot fi oricâte (în plus sau în minus față de comandă).
+ */
+export async function salveazaMaterialCroit(taiereId: string, material: string, bucati: Map<string, Map<string, number>>, vechi?: string): Promise<string | null> {
+  const nume = material.trim().replace(/\s+/g, ' ');
+  if (!nume) return 'Scrie numele materialului (ex. căptușeală, stofă, inserție).';
+  for (const pe of bucati.values()) for (const q of pe.values()) if (!Number.isInteger(q) || q < 0) return 'Bucățile trebuie să fie numere întregi, de la 0 în sus.';
+  return caFirma(firmaCurenta(), async (c) => {
+    const { rows: loturi } = await c.query<{ id: string }>(`SELECT id FROM lot_croit WHERE taiere_id = $1`, [taiereId]);
+    const ale = new Set(loturi.map((l) => l.id));
+    const { rows: [dublura] } = await c.query(
+      `SELECT 1 FROM taiere_material_croit WHERE taiere_id = $1 AND lower(material) = lower($2) AND lower(material) <> lower(coalesce($3, '')) LIMIT 1`,
+      [taiereId, nume, vechi ?? null]);
+    if (dublura) return `Materialul „${nume}" e deja scris la taierea asta.`;
+    await c.query(`DELETE FROM taiere_material_croit WHERE taiere_id = $1 AND material = $2`, [taiereId, vechi ?? nume]);
+    for (const [lot, pe] of bucati) {
+      if (!ale.has(lot)) continue;
+      for (const [marime, q] of pe) {
+        await c.query(
+          `INSERT INTO taiere_material_croit (firma_id, taiere_id, lot_id, material, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3, $4, $5)`,
+          [taiereId, lot, nume, marime, q]);
+      }
+    }
+    return null;
+  });
+}
+
+export async function stergeMaterialCroit(taiereId: string, material: string): Promise<void> {
+  await interogare(`DELETE FROM taiere_material_croit WHERE taiere_id = $1 AND material = $2`, [taiereId, material]);
+}

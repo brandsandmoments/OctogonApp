@@ -198,3 +198,14 @@
 .estimare-timp { margin: 1.5rem 0; padding: 1rem; border: 1px solid var(--linie); border-radius: .5rem; }
 .estimare-timp h2 { margin-top: 0; }
 .estimare-rezultat { font-size: 1rem; }
+
+/* Fișa taierii · materiale croite: fiecare material un card, cu bucățile pe comandă și mărime. */
+section.materiale-croite { margin-top: 1.5rem; }
+section.materiale-croite .material-croit { border: 1px solid var(--linie); border-radius: .5rem; padding: .7rem .8rem; margin: 0 0 .8rem; background: var(--card); }
+section.materiale-croite .cap-material { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+section.materiale-croite .cap-material input[name="material"] { width: auto; flex: 0 1 24rem; min-width: 14rem; font-weight: 600; }
+section.materiale-croite .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
+section.materiale-croite .sterge-material { margin-top: .5rem; }
+section.materiale-croite details.material-nou > summary { display: inline-block; cursor: pointer; list-style: none; margin-bottom: .6rem; }
+section.materiale-croite details.material-nou > summary::-webkit-details-marker { display: none; }
+section.materiale-croite table.grila-material .marimi-croit label { position: relative; }

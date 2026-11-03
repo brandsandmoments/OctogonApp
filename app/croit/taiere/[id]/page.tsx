@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import AlegeOameni from './AlegeOameni';
+import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import {
-  corecteaza, fisaTaiere, incepe, OPERATII, salveazaTaierea, scoateDinTaiere, scrieMetri, termina,
-  type FisaTaiere, type Operatie, type OperatieScrisa,
+  corecteaza, fisaTaiere, incepe, materialeCroite, OPERATII, salveazaMaterialCroit, salveazaTaierea, scoateDinTaiere, scrieMetri,
+  stergeMaterialCroit, termina, type FisaTaiere, type MaterialCroit, type Operatie, type OperatieScrisa,
 } from '../../../lib/croitTaiere';
 import { cantitate, numarDinFormular } from '../../../lib/format';
 import { motiveCroit } from '../../../lib/planificare';
@@ -19,6 +20,12 @@ const inapoi = (id: string, e?: string | null): never =>
   redirect(e ? `/croit/taiere/${id}?eroare=${encodeURIComponent(e)}` : `/croit/taiere/${id}`);
 
 const ora = (t: string | null) => (t ? t.replace('T', ' ') : '');
+
+/** Înapoi la materialele croite: aceeași adresă cu altă ancoră nu reîncarcă pagina, deci o cerem. */
+const laMateriale = (id: string, e?: string | null): never => {
+  revalidatePath(`/croit/taiere/${id}`);
+  redirect(`/croit/taiere/${id}${e ? `?eroare=${encodeURIComponent(e)}` : ''}#materiale`);
+};
 
 /**
  * Fișa taierii, cum o folosește croitul pe tabletă. Pe fiecare tip de material:
@@ -40,7 +47,7 @@ export default async function FisaTaierePagina({
   const lucreaza = lucreazaLaCroit(u);
   const sef = poate(u, 'croit', 'modifica');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
-  const [f, motive] = await Promise.all([fisaTaiere(id), motiveCroit()]);
+  const [f, motive, materiale] = await Promise.all([fisaTaiere(id), motiveCroit(), materialeCroite(id)]);
   if (!f) notFound();
   const deschise = f.loturi.filter((l) => !l.croit_la);
   const neinceputa = f.operatii.length === 0;
@@ -91,6 +98,25 @@ export default async function FisaTaierePagina({
     }
     const oameni = new Map(OPERATII_TAIERE.map((op) => [op, date.getAll(`om:${op}`).map(String).filter(Boolean)] as [Operatie, string[]]));
     inapoi(id, await salveazaTaierea({ taiereId: id, cantitati, oameni }));
+  }
+  // Materialele croite (căptușeală, stofă…): numele și bucățile pe comandă și mărime.
+  async function salvMaterial(date: FormData) {
+    'use server';
+    await cereOperatorCroit();
+    const bucati = new Map<string, Map<string, number>>();
+    for (const [k, v] of date.entries()) {
+      if (!k.startsWith('q:')) continue;
+      const [, lot, marime] = k.split(':');
+      bucati.set(lot, (bucati.get(lot) ?? new Map()).set(marime, String(v).trim() === '' ? 0 : numarDinFormular(v) ?? -1));
+    }
+    const e = await salveazaMaterialCroit(id, String(date.get('material') ?? ''), bucati, String(date.get('vechi') ?? '') || undefined);
+    laMateriale(id, e);
+  }
+  async function stergeMaterial(date: FormData) {
+    'use server';
+    await cereOperatorCroit();
+    await stergeMaterialCroit(id, String(date.get('material')));
+    laMateriale(id);
   }
   async function scoate(date: FormData) {
     'use server';
@@ -291,7 +317,92 @@ export default async function FisaTaierePagina({
           )}
         </>
       )}
+      <MaterialeCroite f={f} materiale={materiale} editabil={lucreaza} salveaza={salvMaterial} sterge={stergeMaterial} />
     </main>
+  );
+}
+
+/**
+ * Materialele croite, pentru produsele din mai multe materiale: fiecare material (scris de
+ * mână, nepredefinit) cu bucățile lui pe comandă și mărime. „+ Adaugă material de croit"
+ * pornește cu bucățile comenzii de croit; se corectează în plus sau în minus, după ce s-a
+ * tăiat de fapt din materialul acela. Diferența față de comandă se vede lângă fiecare căsuță.
+ */
+function MaterialeCroite({ f, materiale, editabil, salveaza, sterge }: {
+  f: FisaTaiere; materiale: MaterialCroit[]; editabil: boolean;
+  salveaza: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>;
+}) {
+  const baza = (m: FisaTaiere['loturi'][number]['marimi'][number]) => m.croit ?? m.cerut;   // bucățile comenzii de croit
+  const Grila = ({ mat }: { mat?: MaterialCroit }) => (
+    <div className="tabel-derulant">
+      <table className="grila grila-material">
+        <tbody>
+          {f.loturi.map((l) => (
+            <tr key={l.id}>
+              <td><strong>{l.cod}</strong> <span className="slab">{l.produs}</span></td>
+              <td>
+                <span className="marimi-croit">
+                  {l.marimi.map((m) => {
+                    const b = baza(m);
+                    const scris = mat?.bucati.get(l.id)?.get(m.marime_id);
+                    const dif = scris === undefined ? 0 : scris - b;
+                    return (
+                      <label key={m.marime_id}>
+                        <span className="slab">{m.marime} · {b}</span>
+                        {editabil
+                          ? <input name={`q:${l.id}:${m.marime_id}`} defaultValue={scris ?? b} inputMode="numeric" className="bucati"
+                                   aria-label={`${mat?.material ?? 'Material nou'} · ${l.cod} ${m.marime}`} />
+                          : <strong>{scris ?? '—'}</strong>}
+                        {dif !== 0 && <span className={`insigna ${dif > 0 ? 'albastru' : 'rosu'}`}>{dif > 0 ? `+${dif}` : dif}</span>}
+                      </label>
+                    );
+                  })}
+                </span>
+              </td>
+              <td className="nr slab">
+                {mat ? l.marimi.reduce((s, m) => s + (mat.bucati.get(l.id)?.get(m.marime_id) ?? 0), 0) : l.marimi.reduce((s, m) => s + baza(m), 0)} buc
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+  return (
+    <section id="materiale" className="materiale-croite">
+      <h2>Materiale croite</h2>
+      <p className="slab">Pentru produsele din mai multe materiale: fiecare material cu bucățile croite din el. Pornește de la bucățile comenzii (scrise lângă mărime); corectează unde s-a tăiat în plus sau în minus.</p>
+      {materiale.map((mat) => (
+        <div key={mat.material} className="material-croit">
+          <form action={salveaza}>
+            <input type="hidden" name="vechi" value={mat.material} />
+            <div className="cap-material">
+              {editabil ? <input name="material" defaultValue={mat.material} required aria-label="Numele materialului" /> : <strong>{mat.material}</strong>}
+              {editabil && <button className="principal">Salvează</button>}
+            </div>
+            <Grila mat={mat} />
+          </form>
+          {editabil && (
+            <form action={sterge} className="sterge-material">
+              <input type="hidden" name="material" value={mat.material} />
+              <button className="secundar">Șterge materialul</button>
+            </form>
+          )}
+        </div>
+      ))}
+      {editabil && (
+        <details className="material-nou">
+          <summary className="buton">+ Adaugă material de croit</summary>
+          <form action={salveaza} className="material-croit">
+            <div className="cap-material">
+              <input name="material" required placeholder="numele materialului (ex. căptușeală, stofă, inserție)" aria-label="Numele materialului" autoComplete="off" />
+              <button className="principal">Salvează materialul</button>
+            </div>
+            <Grila />
+          </form>
+        </details>
+      )}
+    </section>
   );
 }
 
