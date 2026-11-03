@@ -8,7 +8,7 @@ import Cauta from '../Cauta';
 import { adaugaZile, luni } from '../lib/perioade';
 import {
   adaugaAlocareComanda, aduLaUrgenta, cautaComenziDeschise, comenziInProductie, daInLucruCuloare, planPeSaptamani,
-  iesitDinLucruCuloare, inapoiInLucruCuloare, salveazaTimpOameni, scoateUrgenta, stergeAlocareComanda, STADII_PLAN,
+  iesitDinLucruCuloare, iesitPartialCuloare, inapoiInLucruCuloare, salveazaTimpOameni, scoateUrgenta, stergeAlocareComanda, STADII_PLAN,
   type ComandaPlan, type CuloarePlan, type StadiuPlan,
 } from '../lib/productieComenzi';
 import { iesitGata, transeSimple } from '../lib/banda';
@@ -121,6 +121,14 @@ export default async function Productie({ searchParams }: { searchParams: Promis
     const cine = await cere(['planificare', 'banda'], 'modifica');
     if (!schimbaStadiulProductiei(cine)) return inapoiLaComanda(date, 'Stadiul îl schimbă doar managerul de producție sau șeful de bandă.');
     inapoiLaComanda(date, await iesitDinLucruCuloare(String(date.get('linie'))));
+  }
+  async function iesitAcum(date: FormData) {
+    'use server';
+    const cine = await cere(['planificare', 'banda'], 'modifica');
+    if (!schimbaStadiulProductiei(cine)) return inapoiLaComanda(date, 'Stadiul îl schimbă doar managerul de producție sau șeful de bandă.');
+    const cantitati = new Map([...date.keys()].filter((k) => k.startsWith('o:'))
+      .map((k) => [k.slice(2), numarDinFormular(date.get(k)) ?? 0] as [string, number]));
+    inapoiLaComanda(date, await iesitPartialCuloare(String(date.get('linie')), cantitati));
   }
   async function inapoiInLucru(date: FormData) {
     'use server';
@@ -259,7 +267,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
                         {buc(g.comenzi, 'ramas_de_intrat') > 0 && ` · ${buc(g.comenzi, 'ramas_de_intrat')} rămase de intrat în lucru`}</span>
                     </summary>
                     {g.comenzi.map((c) => (
-                      <ComandaInPlan key={`${c.comanda_id}${s}`} c={c} m={m} deschis={f.deschis === c.numar} da={da} aici={aici} faraUrgenta={faraUrgenta} lucru={lucru(c)} st={st} stadiul={{ iesit: iesitDinLucru, inapoi: inapoiInLucru }} />
+                      <ComandaInPlan key={`${c.comanda_id}${s}`} c={c} m={m} deschis={f.deschis === c.numar} da={da} aici={aici} faraUrgenta={faraUrgenta} lucru={lucru(c)} st={st} stadiul={{ iesit: iesitDinLucru, partial: iesitAcum, inapoi: inapoiInLucru }} />
                     ))}
                   </details>
                 ))}
@@ -329,17 +337,21 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiu
   );
 }
 
-type ActiuniStadiu = { iesit: (d: FormData) => Promise<void>; inapoi: (d: FormData) => Promise<void> };
+type ActiuniStadiu = { iesit: (d: FormData) => Promise<void>; partial: (d: FormData) => Promise<void>; inapoi: (d: FormData) => Promise<void> };
 
 /**
  * O culoare, ca un card: sus numele și stadiul — „Intrat în lucru" și „Ieșit din lucru" se
- * pot schimba dintr-un clic (managerul de producție, șeful de bandă); dedesubt, mărimile.
+ * pot schimba dintr-un clic (managerul de producție, șeful de bandă); dedesubt, mărimile,
+ * cu „Intră acum" și, pentru ce e în lucru, „Iese acum" (tot sau doar o parte).
  */
 function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
   c: ComandaPlan; l: CuloarePlan; m: boolean; da: (d: FormData) => Promise<void>; aici: string; st: boolean; stadiul: ActiuniStadiu;
 }) {
   const insigna = <span className={`insigna ${TON[l.stadiu]}`}>{STADII_PLAN[l.stadiu]}</span>;
   const spre = l.stadiu === 'in_lucru' ? 'iesit' : l.stadiu === 'iesit' && l.depozit === 0 ? 'in_lucru' : null;
+  // Ce e încă în lucru, pe mărimi: de aici iese, tot sau doar o parte.
+  const inLucru = l.dat - l.gata;
+  const iese = st && inLucru > 0;
   return (
     <form action={da} className="culoare-productie">
       <input type="hidden" name="linie" value={l.linie_id} />
@@ -353,7 +365,7 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
             <summary title="Schimbă stadiul">{insigna} ▾</summary>
             <div>
               {spre === 'iesit'
-                ? <button formAction={stadiul.iesit} className="principal">A ieșit din lucru ({l.dat - l.gata} buc)</button>
+                ? <button formAction={stadiul.iesit} className="principal">A ieșit tot din lucru ({inLucru} buc)</button>
                 : <button formAction={stadiul.inapoi} className="secundar">Înapoi în lucru ({l.gata} buc)</button>}
             </div>
           </details>
@@ -390,6 +402,20 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
                 <td className="total">{l.de_dat}</td>
               </tr>
             )}
+            {iese && (
+              <tr className="iese-acum">
+                <td className="ce"><strong>Iese acum</strong></td>
+                {l.marimi.map((x) => (
+                  <td key={x.marime_id}>
+                    {x.dat > x.gata
+                      ? <input name={`o:${x.marime_id}`} inputMode="numeric" className="bucati" placeholder={String(x.dat - x.gata)}
+                               aria-label={`${l.produs} ${x.marime}: iese din lucru acum, din ${x.dat - x.gata}`} />
+                      : <span className="slab">—</span>}
+                  </td>
+                ))}
+                <td className="total">{inLucru}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -397,6 +423,13 @@ function CuloareInPlan({ c, l, m, da, aici, st, stadiul }: {
         <div className="actiuni-culoare">
           <button name="tot" value="1" className="secundar">Tot ({l.de_dat})</button>
           <button className="principal">Dă în lucru</button>
+        </div>
+      )}
+      {iese && (
+        <div className="actiuni-culoare iese">
+          <span className="slab">În lucru: {inLucru} buc. Scrie pe mărimi ce a ieșit, sau</span>
+          <button formAction={stadiul.iesit} className="secundar">A ieșit tot ({inLucru})</button>
+          <button formAction={stadiul.partial} className="principal">A ieșit din lucru</button>
         </div>
       )}
       {l.de_dat === 0 && l.croit < l.cerut && l.stadiu !== 'terminat' && (

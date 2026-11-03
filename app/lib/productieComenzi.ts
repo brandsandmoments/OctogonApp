@@ -347,6 +347,59 @@ export async function iesitDinLucruCuloare(linieId: string): Promise<string | nu
 }
 
 /**
+ * Iese din lucru doar o parte din culoare, pe mărimi. Se ia din tranșele în lucru, de la
+ * cea mai veche: o tranșă luată toată iese întreagă; din una luată pe jumătate se desparte
+ * o tranșă nouă (același lot, aceleași date de intrare) cu bucățile ieșite, iar restul
+ * rămâne în lucru, cu oamenii ei.
+ */
+export async function iesitPartialCuloare(linieId: string, cantitati: Map<string, number>): Promise<string | null> {
+  const cerute = [...cantitati].filter(([, q]) => q > 0);
+  if (cerute.some(([, q]) => !Number.isInteger(q))) return 'Cantitățile trebuie să fie numere întregi.';
+  if (!cerute.length) return 'Scrie câte bucăți au ieșit, pe mărimi (sau „Tot a ieșit").';
+  const randuri = await interogare<{ id: string; marime_id: string; cantitate: number }>(
+    `SELECT ab.id, ac.marime_id, ac.cantitate FROM alimentare_banda ab JOIN alimentare_cantitate ac ON ac.alimentare_id = ab.id
+      WHERE ab.id IN (${TRANSE_CULOARE}) AND ab.iesit_productie_la IS NULL ORDER BY ab.alimentat_la, ab.numar`, [linieId]);
+  for (const [m, q] of cerute) {
+    const inLucru = randuri.filter((r) => r.marime_id === m).reduce((s, r) => s + r.cantitate, 0);
+    if (q > inLucru) return `Pe o mărime au fost scrise ${q} buc, dar în lucru sunt doar ${inLucru}.`;
+  }
+  // Ce iese din fiecare tranșă, pe mărimi.
+  const rest = new Map(cerute);
+  const iesePe = new Map<string, Map<string, number>>();
+  for (const r of randuri) {
+    const q = Math.min(rest.get(r.marime_id) ?? 0, r.cantitate);
+    if (q <= 0) continue;
+    rest.set(r.marime_id, (rest.get(r.marime_id) ?? 0) - q);
+    iesePe.set(r.id, (iesePe.get(r.id) ?? new Map()).set(r.marime_id, q));
+  }
+  const intregi: string[] = [];
+  await caFirma(firmaCurenta(), async (c) => {
+    for (const [id, ies] of iesePe) {
+      const aTranse = randuri.filter((r) => r.id === id);
+      if (aTranse.every((r) => (ies.get(r.marime_id) ?? 0) === r.cantitate)) { intregi.push(id); continue; }
+      const { rows: [nou] } = await c.query<{ id: string }>(
+        `INSERT INTO alimentare_banda (firma_id, lot_id, numar, alimentat_la, alimentat_de, responsabil, persoane, timp_min_buc,
+                                       intrat_productie_la, iesit_productie_la, observatii)
+         SELECT firma_id, lot_id, (SELECT max(numar) + 1 FROM alimentare_banda x WHERE x.lot_id = ab.lot_id), alimentat_la, alimentat_de,
+                responsabil, persoane, timp_min_buc, coalesce(intrat_productie_la, alimentat_la), now(),
+                concat_ws(' · ', observatii, 'ieșită parțial din tranșa ' || numar)
+           FROM alimentare_banda ab WHERE id = $1 RETURNING id`, [id]);
+      for (const [m, q] of ies) {
+        await c.query(`INSERT INTO alimentare_cantitate (firma_id, alimentare_id, marime_id, cantitate) VALUES (firma_curenta(), $1, $2, $3)`, [nou.id, m, q]);
+        // Cantitatea nu poate ajunge la zero (CHECK > 0): mărimea luată toată se șterge din tranșa veche.
+        if (q === aTranse.find((r) => r.marime_id === m)?.cantitate) {
+          await c.query(`DELETE FROM alimentare_cantitate WHERE alimentare_id = $1 AND marime_id = $2`, [id, m]);
+        } else {
+          await c.query(`UPDATE alimentare_cantitate SET cantitate = cantitate - $3 WHERE alimentare_id = $1 AND marime_id = $2`, [id, m, q]);
+        }
+      }
+    }
+  });
+  for (const id of intregi) await iesitGata(id);
+  return null;
+}
+
+/**
  * Culoarea se întoarce în lucru (ieșită din greșeală): tranșele ei ieșite se redeschid.
  * Doar cele care n-au trecut încă de CTC și nimic din culoare n-a intrat în depozit.
  */

@@ -129,3 +129,6 @@ details.schimba-stadiu .principal { background: var(--text); color: var(--card);
 details.comanda-productie > section.cine-lucreaza { margin: 0 .8rem .8rem; border: 1px solid var(--linie); border-radius: .45rem; }
 .plan-lista .p-termen { min-width: 0; }
 .plan-lista .p-termen .insigna { white-space: normal; line-height: 1.25; }
+tr.iese-acum td { background: color-mix(in srgb, var(--galben-fundal, #fdf3d6) 75%, transparent); }
+tr.iese-acum input.bucati { width: 3.2rem; }
+.culori-plan .actiuni-culoare.iese { align-items: center; flex-wrap: wrap; gap: .5rem; }
