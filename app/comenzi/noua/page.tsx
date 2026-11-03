@@ -4,6 +4,7 @@ import { lipsuriPentruPsc } from '../../lib/magazine';
 import { cere } from '../../lib/sesiune';
 import { poate } from '../../lib/acces';
 import FormularComanda from './FormularComanda';
+import AduDinShopify from '../AduDinShopify';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,9 @@ export default async function ComandaNouaPagina({ searchParams }: { searchParams
   const psf = !lipsuri && q.din_produs ? await propunere(q.din_produs, q.tip === 'PSC' ? 'PSC' : 'PSF') : null;
   const azi = new Date().toLocaleDateString('ro-RO', { timeZone: 'Europe/Bucharest' });
   return (
+    <>
+    {/* Produsul nou din Shopify (și ciornele) se aduce de aici, fără să se piardă ce e scris în formular. */}
+    <p className="slab sus-comanda">Nu găsești produsul? <AduDinShopify text="Adu-l din Shopify" /></p>
     <FormularComanda {...nom} kamImplicit={kamImplicit}
       // Câți oameni lucrează alege producția (admin, șef și manager de producție), nu KAM-ul.
       alocaOameni={poate(eu, 'banda', 'modifica') || poate(eu, 'planificare', 'modifica')} tipImplicit={lipsuri ? 'PSC' : psf ? psf.tip : tip}
@@ -33,5 +37,6 @@ export default async function ComandaNouaPagina({ searchParams }: { searchParams
       observatiiImplicite={lipsuri
         ? `Din comenzile ${lipsuri.brand} care așteaptă stoc, ${azi}: ${lipsuri.bucati} buc${lipsuri.necunoscute ? ` (+${lipsuri.necunoscute} buc pe variante fără produs în catalog)` : ''}. Scăzut ce e deja în producție sau de aprobat.`
         : psf ? `${psf.tip} din produse/alerte, ${azi}. ${psf.rezumat}` : undefined} />
+    </>
   );
 }

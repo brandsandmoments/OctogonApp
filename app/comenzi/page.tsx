@@ -10,6 +10,7 @@ import { centralizatorPeStadii, STADII_LINIE, type StadiuLinie } from '../lib/ce
 import { modeleComenzi } from '../lib/modele';
 import { cere, poateModifica } from '../lib/sesiune';
 import { schimbaTermen } from '../lib/comenzi';
+import AduDinShopify from './AduDinShopify';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +88,7 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
       <Cauta valoare={f.cauta} pastreaza={{ tip, toate: f.toate, grupare: f.grupare }} placeholder="caută: comandă, produs, SKU, KAM" />
       <Grupare ales={g} pastreaza={{ tip, toate: f.toate, cauta: f.cauta }} />
       {poateDa && (
-        <p><Link href={`/comenzi/noua?tip=${tip}`} className="buton">+ {tip} nouă</Link></p>
+        <p className="filtre"><Link href={`/comenzi/noua?tip=${tip}`} className="buton">+ {tip} nouă</Link> <AduDinShopify /></p>
       )}
       <div className="tabel-derulant">
         <table>

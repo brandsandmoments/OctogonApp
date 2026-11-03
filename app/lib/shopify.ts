@@ -269,9 +269,9 @@ export async function produseNoi(c: PoolClient, magazinId: string): Promise<numb
     if (!p.brand_id) continue;
     const titlu = p.titlu.trim().replace(/\s+/g, ' ');
     const cuv = titlu.split(' ');
-    // Culoarea: o culoare cunoscută (din două cuvinte sau din unul) oriunde după felul hainei, cea mai
-    // din dreapta („Rochie Seraphyne Negru Paiete" → Negru); altfel ultimul cuvânt. Modelul: restul,
-    // fără felul hainei („Seraphyne Paiete").
+    // Culoarea: o culoare cunoscută (din unul, două sau trei cuvinte) oriunde după felul hainei, cea mai
+    // din dreapta („Rochie Seraphyne Negru Paiete" → Negru). Modelul: restul, fără felul hainei
+    // („Seraphyne Paiete").
     let poz = -1, nCul = 0;
     // De la dreapta, la fiecare capăt cea mai lungă culoare întâi („Alb cu Negru" înaintea lui „Negru").
     for (let e = cuv.length - 1; e >= 1 && poz < 0; e--) {
@@ -281,7 +281,8 @@ export async function produseNoi(c: PoolClient, magazinId: string): Promise<numb
         if (culori.some((x) => x.nume.toLowerCase() === cuv.slice(i, e + 1).join(' ').toLowerCase())) { poz = i; nCul = n; break; }
       }
     }
-    if (poz < 0 && cuv.length > 1) { poz = cuv.length - 1; nCul = 1; }
+    // Fără o culoare cunoscută, produsul rămâne fără culoare: tot titlul (fără felul hainei) e modelul
+    // („Rochie Mini Zelve" → modelul „Mini Zelve"), nu se inventează culori din numele modelului.
     const culoare = poz >= 0 ? cuv.slice(poz, poz + nCul).join(' ') : null;
     const fara = poz >= 0 ? [...cuv.slice(0, poz), ...cuv.slice(poz + nCul)] : cuv;
     const numeModel = fara.slice(1).join(' ') || cuv[0];

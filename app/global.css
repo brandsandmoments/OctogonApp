@@ -284,3 +284,7 @@ form.formular-mostra .variatii-mostra td.ce input { min-width: 12rem; }
 details.schimba-termen { display: inline-block; margin-left: .35rem; }
 details.schimba-termen > summary { cursor: pointer; display: inline; font-size: .8rem; text-decoration: underline dotted; }
 details.schimba-termen form { margin-top: .3rem; gap: .3rem; }
+/* Comenzi: „Adu produsele noi din Shopify". */
+.adu-din-shopify { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.adu-din-shopify .mesaj-ok, .adu-din-shopify .eroare { margin: 0; font-size: .85rem; }
+p.sus-comanda { max-width: 72rem; margin: .8rem auto 0; padding: 0 1rem; }
