@@ -262,3 +262,18 @@ tr.cine-croieste .cine-operatii > label { display: inline-flex; flex-direction: 
 @keyframes activitate { from { background-position: -50% 0; } to { background-position: 150% 0; } }
 body:has(.activitate.activ) { cursor: progress; }
 @media (prefers-reduced-motion: reduce) { .activitate.activ { animation: none; background: var(--text); } }
+
+/* Croit · Mostre: formularul de mostră / comandă de croit. */
+form.formular-mostra { display: grid; gap: .8rem; padding: 1rem; margin: 0 0 1.5rem; border: 1px solid var(--linie); border-radius: .5rem; background: var(--card); }
+form.formular-mostra h2 { margin: 0; }
+form.formular-mostra fieldset.ce-dai { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.2rem; border: 0; padding: 0; margin: 0; }
+form.formular-mostra fieldset.ce-dai label { display: inline-flex; flex-direction: row; align-items: center; gap: .35rem; font-weight: 600; font-size: 1rem; }
+form.formular-mostra .campuri-mostra { display: flex; flex-wrap: wrap; gap: .6rem 1rem; }
+form.formular-mostra label { display: inline-flex; flex-direction: column; gap: .2rem; }
+form.formular-mostra label > span { font-size: .8rem; color: var(--slab); }
+form.formular-mostra label.lat { flex: 1 1 22rem; }
+form.formular-mostra label.lat input { width: 100%; }
+form.formular-mostra .marimi-mostra { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .8rem; }
+form.formular-mostra .marimi-mostra input.bucati { width: 3.6rem; }
+form.formular-mostra .actiuni { display: flex; flex-wrap: wrap; gap: .5rem; }
+form.formular-mostra .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }

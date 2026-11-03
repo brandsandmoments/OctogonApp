@@ -55,6 +55,9 @@ export type ComandaNoua = {
   // PSF dat de cineva fără dreptul de aprobare: se „lansează" în așteptarea unui responsabil.
   // Îl pune doar acțiunea de pe server, niciodată formularul.
   deAprobat?: boolean;
+  // Cine o dă: KAM-ul (implicit) sau croitul — mostră ori comandă de croit internă, fără KAM
+  // și fără perioadă de vânzare (nu intră în evaluarea KAM-ilor).
+  origine?: 'kam' | 'mostra' | 'croit';
   linii: LinieNoua[];
 };
 
@@ -95,8 +98,9 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
   }
   // La PSF și la PSC, KAM-ul își asumă și perioada în care se vinde stocul cerut: din
   // ea se măsoară, săptămânal, cât de bine a citit piața (evaluarea KAM-ilor).
-  if (cmd.tip === 'PSF' && !cmd.kamId) return { ok: false, eroare: 'La PSF, alege KAM-ul care îl dă.' };
-  if (linii.some((l) => !l.vanzareDeLa || !l.vanzarePanaLa)) {
+  const intern = cmd.origine === 'mostra' || cmd.origine === 'croit';
+  if (cmd.tip === 'PSF' && !cmd.kamId && !intern) return { ok: false, eroare: 'La PSF, alege KAM-ul care îl dă.' };
+  if (!intern && linii.some((l) => !l.vanzareDeLa || !l.vanzarePanaLa)) {
     return { ok: false, eroare: 'Fiecare linie are nevoie de perioada în care estimezi că se vinde stocul cerut.' };
   }
   if (linii.some((l) => l.vanzarePanaLa < l.vanzareDeLa)) {
@@ -117,11 +121,11 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
         `SELECT $1 || (coalesce(max(substr(numar, length($1) + 1)::int), 0) + 1) AS numar
            FROM comanda WHERE numar LIKE $1 || '%' AND substr(numar, length($1) + 1) ~ '^[0-9]+$'`, [prefix]);
       const { rows: [{ id }] } = await c.query<{ id: string }>(
-        `INSERT INTO comanda (firma_id, numar, tip, brand_id, data_lansare, prioritate, stare, observatii, kam_id)
-         VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, '')::uuid)
+        `INSERT INTO comanda (firma_id, numar, tip, brand_id, data_lansare, prioritate, stare, observatii, kam_id, origine)
+         VALUES (firma_curenta(), $1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, '')::uuid, $9)
          RETURNING id`,
         [numar, cmd.tip, cmd.brandId, cmd.dataLansare, cmd.prioritate,
-         cmd.lanseaza ? (cmd.deAprobat ? 'de_aprobat' : 'lansata') : 'ciorna', cmd.observatii.trim(), cmd.kamId],
+         cmd.lanseaza ? (cmd.deAprobat ? 'de_aprobat' : 'lansata') : 'ciorna', cmd.observatii.trim(), cmd.kamId, cmd.origine ?? 'kam'],
       );
       for (const l of linii) {
         const { rows: [linie] } = await c.query<{ id: string }>(

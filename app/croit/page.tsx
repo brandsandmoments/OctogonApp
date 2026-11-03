@@ -1,6 +1,7 @@
 import { Stadiu, Termen } from '../Insigne';
 import Link from 'next/link';
 import { CineCroieste, OameniCroit } from './OameniCroit';
+import Mostre from './Mostre';
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
 import { croiesteDirect, inchideComanda, loturiCroite, oameniCroit, OPERATII, ramasDeCroit, taieriLaCroit, type LotCroit, type Operatie, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
@@ -19,21 +20,22 @@ const VEDERI: [string, string][] = [
   ['toate', 'Toate'],
   ['croite', 'Croite'],
   ['ramas', 'Rămas de croit'],
+  ['mostre', 'Mostre'],
 ];
 
 
 /**
  * Ce vede croitul:
- *   toate · croite · rămas de croit · taieri
+ *   toate · croite · rămas de croit · mostre (mostre și comenzi de croit date chiar de aici)
  * „Rămas de croit" e ce a trimis planificarea și n-a intrat încă în nicio taiere,
  * pe model și pe mărimi; de aici șefa de croit face taierile — ce se taie odată —
  * și tot de aici stinge, cu observații, o comandă care nu se mai croiește.
  * O taiere se face abia la croire, deci „Croite" sunt taierile: pe taieri (grupate pe
  * săptămâni, luni, trimestre, ani), pe comenzi sau pe modele.
  */
-export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; eroare?: string; cauta?: string; pe?: string }> }) {
+export default async function Croit({ searchParams }: { searchParams: Promise<{ vedere?: string; grupare?: string; eroare?: string; cauta?: string; pe?: string; ok?: string }> }) {
   await cere('croit');
-  const { vedere = 'toate', grupare, eroare, cauta, pe } = await searchParams;
+  const { vedere = 'toate', grupare, eroare, cauta, pe, ok } = await searchParams;
   // Croitul pornește pe săptămâni, strâns: altfel sunt sute de taieri de derulat.
   const g = grupareDinAdresa(grupare, 'saptamana');
 
@@ -55,7 +57,7 @@ export default async function Croit({ searchParams }: { searchParams: Promise<{ 
           ))}
         </div>
       )}
-      {vedere === 'croite' && (pe === 'comenzi' || pe === 'modele') ? <CroitePe pe={pe} cauta={cauta} /> : vedere === 'ramas' ? <Ramas cauta={cauta} /> : (
+      {vedere === 'mostre' ? <Mostre cauta={cauta} ok={ok} /> : vedere === 'croite' && (pe === 'comenzi' || pe === 'modele') ? <CroitePe pe={pe} cauta={cauta} /> : vedere === 'ramas' ? <Ramas cauta={cauta} /> : (
         <>
           {/* La Croite, taierile stau sub PSF-ul sau PSC-ul din care au venit (/T1, /T2…). */}
           {vedere === 'toate' && <DeCroitPeScurt cauta={cauta} />}
