@@ -7,6 +7,12 @@ import { dataRo } from '../lib/timp';
 /** Fazele obișnuite din atelier, sugerate când modelul n-are încă procesul tehnologic trecut. */
 const FAZE_OBISNUITE = ['Cusut', 'Surfilat', 'Tighel', 'Butoniere', 'Nasturi', 'Călcat interfazic', 'Control interfazic', 'Călcat final', 'CTC și ambalat'];
 
+/** Posturile fără mașină, cu oamenii lor sub fazele de cusut: întâi cine calcă, apoi cine controlează. */
+const POSTURI: [faza: string, titlu: string, functii: string[]][] = [
+  ['Călcat', 'Cine calcă', ['calcator_interfazic', 'calcator_final']],
+  ['Control', 'Cine controlează', ['control_interfazic', 'ctc_ambalat']],
+];
+
 const culoare = (produs: string, model: string) => {
   const m = new Set(model.toLowerCase().split(/[\s,]+/));
   return produs.split(/\s+/).slice(1).filter((w) => !m.has(w.toLowerCase())).join(' ') || produs;
@@ -42,11 +48,11 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
       <table className="marimi-comanda alocari-comanda">
         <thead><tr><th>Fază</th><th>Mașină</th><th>Om</th><th /></tr></thead>
         <tbody>
-          {c.alocari.map((a) => (
+          {c.alocari.filter((a) => !POSTURI.some(([f]) => f === a.faza)).map((a) => (
             <tr key={a.id}>
               <td className="ce">{a.faza}</td><td className="ce slab">{a.utilaj ?? '—'}</td><td className="ce">{a.om}</td>
               <td>{m && (
-                <form action={sterge}><input type="hidden" name="id" value={a.id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} /><input type="hidden" name="inapoi" value={aici} />
+                <form action={sterge}><input type="hidden" name="id" value={a.id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
                   <button className="secundar" aria-label={`Scoate ${a.om} de la ${a.faza}`}>×</button></form>
               )}</td>
             </tr>
@@ -75,6 +81,10 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
           )}
         </tbody>
       </table>
+
+      {POSTURI.map(([faza, titlu, functii]) => (
+        <Post key={faza} c={c} m={m} aici={aici} faza={faza} titlu={titlu} oameni={oameni} functii={functii} aloca={aloca} sterge={sterge} />
+      ))}
 
       {transe.length > 0 && (
         <>
@@ -105,5 +115,50 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Un post fără mașină (călcat, control): cine e pus pe el la comanda asta, cu „×", și „+ Adaugă".
+ * În listă, întâi oamenii cu funcția postului (din Oameni producție), apoi ceilalți.
+ */
+function Post({ c, m, aici, faza, titlu, oameni, functii, aloca, sterge }: {
+  c: ComandaProd; m: boolean; aici: string; faza: string; titlu: string; oameni: { id: string; nume: string; functii: string[] }[];
+  functii: string[]; aloca: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>;
+}) {
+  const pusi = c.alocari.filter((a) => a.faza === faza);
+  const potriviti = oameni.filter((o) => o.functii.some((f) => functii.includes(f)));
+  const ceilalti = oameni.filter((o) => !potriviti.includes(o));
+  return (
+    <div className="post-lucru">
+      <h4>{titlu}</h4>
+      <div className="in-rand">
+        {pusi.length === 0 && <span className="slab">nimeni încă</span>}
+        {pusi.map((a) => (
+          <span key={a.id} className="om-pus">
+            {a.om}
+            {m && (
+              <form action={sterge}>
+                <input type="hidden" name="id" value={a.id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
+                <button className="secundar" aria-label={`Scoate ${a.om} de la ${faza.toLowerCase()}`}>×</button>
+              </form>
+            )}
+          </span>
+        ))}
+        {m && (
+          <form action={aloca} className="in-rand">
+            <input type="hidden" name="comanda" value={c.comanda_id} />
+            <input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
+            <input type="hidden" name="faza" value={faza} />
+            <select name="om" defaultValue="" required aria-label={titlu}>
+              <option value="">cine?</option>
+              {potriviti.length > 0 && <optgroup label={titlu.replace('Cine ', 'Cei care ')}>{potriviti.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>}
+              <optgroup label="Alți oameni din producție">{ceilalti.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>
+            </select>
+            <button className="secundar">+ Adaugă</button>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }

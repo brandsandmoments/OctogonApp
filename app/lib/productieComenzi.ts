@@ -202,6 +202,7 @@ export type ComandaPlan = {
   data_ceruta: string; culori: CuloarePlan[];
   cerut: number; croit: number; dat: number; gata: number; depozit: number; de_dat: number;
   ramas_de_intrat: number;      // din comandă, încă neintrat în lucru (croit sau nu)
+  externalizare: string | null; // atelierul de afară unde e dată în producție (null: în atelierul propriu)
   stadiu: StadiuPlan;
 };
 
@@ -233,7 +234,7 @@ const stadiulComenzii = (st: StadiuPlan[]): StadiuPlan => {
 export async function planPeSaptamani(de: string, pana: string, curenta: string, luniDe: (zi: string) => string, doarLinie: string | null = null): Promise<ComandaPlan[]> {
   const sfarsit = new Date(`${pana}T12:00:00Z`); sfarsit.setUTCDate(sfarsit.getUTCDate() + 6);
   const panaLa = sfarsit.toISOString().slice(0, 10);
-  const randuri = await interogare<Rand & { depozit: number; inchisa: boolean; urgent: string | null }>(
+  const randuri = await interogare<Rand & { depozit: number; inchisa: boolean; urgent: string | null; externalizare: string | null }>(
     `WITH croit AS (
          SELECT pl.linie_id, le.marime_id, sum(le.cantitate)::int AS q
            FROM planificare pl JOIN lot_croit lc ON lc.planificare_id = pl.id
@@ -247,7 +248,7 @@ export async function planPeSaptamani(de: string, pana: string, curenta: string,
      depozit AS (
          SELECT e.linie_id, e.marime_id, sum(r.cantitate)::int AS q, bool_or(r.inchide_pozitia) AS inchisa
            FROM eticheta e JOIN receptie r ON r.eticheta_id = e.id GROUP BY 1, 2)
-     SELECT c.id AS comanda_id, c.numar, c.tip::text AS tip, b.nume AS brand, c.prioritate, k.nume AS kam, c.oameni_productie AS oameni,
+     SELECT c.id AS comanda_id, c.numar, c.tip::text AS tip, b.nume AS brand, c.prioritate, k.nume AS kam, c.oameni_productie AS oameni, c.externalizare,
             cl.id AS linie_id, p.denumire AS produs, p.model_id, coalesce(mo.denumire, p.denumire) AS model,
             mo.timp_min_buc::float AS timp_min_buc, to_char(cl.data_ceruta, 'YYYY-MM-DD') AS data_ceruta,
             cc.marime_id, m.cod AS marime, cc.cantitate AS cerut,
@@ -276,7 +277,7 @@ export async function planPeSaptamani(de: string, pana: string, curenta: string,
       ORDER BY cl.data_ceruta, c.prioritate, c.numar, p.denumire`, [de, panaLa, curenta, doarLinie]);
 
   const linii = new Map<string, CuloarePlan & { comanda_id: string }>();
-  const info = new Map<string, Rand>();
+  const info = new Map<string, Rand & { externalizare: string | null }>();
   const modelLinie = new Map<string, string>();
   const urgentLinie = new Map<string, string | null>();
   for (const r of randuri) {
@@ -311,7 +312,7 @@ export async function planPeSaptamani(de: string, pana: string, curenta: string,
     if (!c) {
       c = { comanda_id: r.comanda_id, numar: r.numar, tip: r.tip, brand: r.brand, prioritate: r.prioritate, kam: r.kam, model: modelLinie.get(l.linie_id)!,
             saptamana, intarziata: false, urgenta: false, data_ceruta: l.data_ceruta, culori: [], cerut: 0, croit: 0, dat: 0, gata: 0, depozit: 0,
-            de_dat: 0, ramas_de_intrat: 0, stadiu: 'terminat' };
+            de_dat: 0, ramas_de_intrat: 0, stadiu: 'terminat', externalizare: r.externalizare };
       pe.set(cheie, c);
     }
     const { comanda_id: _, ...culoare } = l;
@@ -437,4 +438,20 @@ export async function inapoiInLucruCuloare(linieId: string, inDepozit: number): 
   if (!r.length) return 'Ce a ieșit din lucru din culoarea asta a trecut deja de CTC; nu se mai poate întoarce în lucru.';
   await interogare(`UPDATE alocare_operatie SET gata_la = NULL WHERE alimentare_id = ANY($1::uuid[])`, [r.map((x) => x.id)]);
   return null;
+}
+
+/** Dă comanda în producție la externalizare (numele atelierului de afară) sau o aduce înapoi în atelier (null). */
+export async function externalizeaza(comandaId: string, nume: string | null): Promise<string | null> {
+  const n = nume?.trim() || null;
+  if (nume !== null && !n) return 'Scrie numele atelierului unde se dă la externalizare.';
+  await interogare(
+    `UPDATE comanda SET externalizare = $2, externalizata_la = CASE WHEN $2::text IS NULL THEN NULL ELSE coalesce(externalizata_la, now()) END
+      WHERE id = $1`, [comandaId, n]);
+  return null;
+}
+
+/** Atelierele de externalizare folosite până acum, pentru sugestii. */
+export async function ateliereExternalizare(): Promise<string[]> {
+  const r = await interogare<{ nume: string }>(`SELECT DISTINCT externalizare AS nume FROM comanda WHERE externalizare IS NOT NULL ORDER BY 1`);
+  return r.map((x) => x.nume);
 }

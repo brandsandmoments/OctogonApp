@@ -9,7 +9,7 @@ import Cauta from '../Cauta';
 import { adaugaZile, luni } from '../lib/perioade';
 import {
   adaugaAlocareComanda, aduLaUrgenta, cautaComenziDeschise, comenziInProductie, daInLucruCuloare, planPeSaptamani,
-  iesitDinLucruCuloare, iesitPartialCuloare, inapoiInLucruCuloare, salveazaTimpOameni, scoateUrgenta, stergeAlocareComanda, STADII_PLAN,
+  iesitDinLucruCuloare, iesitPartialCuloare, inapoiInLucruCuloare, ateliereExternalizare, externalizeaza, salveazaTimpOameni, scoateUrgenta, stergeAlocareComanda, STADII_PLAN,
   type ComandaPlan, type CuloarePlan, type StadiuPlan,
 } from '../lib/productieComenzi';
 import { iesitGata, transeSimple } from '../lib/banda';
@@ -80,6 +80,7 @@ export default async function Productie({ searchParams }: { searchParams: Promis
     f.deschis ? comenziInProductie() : [], f.deschis ? transeSimple(false) : [], f.deschis ? personal() : [],
     f.deschis ? utilaje() : [], f.deschis ? parametriTimp() : { orePeZi: 8 },
   ]);
+  const ateliere = f.deschis ? await ateliereExternalizare() : [];
   const prod = new Map(inProductie.map((c) => [c.comanda_id, c]));
   const toate = plan
     .filter((c) => potriveste(f.cauta, c.numar, c.model, ...c.culori.map((l) => l.produs)));
@@ -151,6 +152,16 @@ export default async function Productie({ searchParams }: { searchParams: Promis
     const linie = String(date.get('linie'));
     const [c] = await planPeSaptamani('2000-01-03', '2100-01-04', luni(azi()), luni, linie);
     inapoiLaComanda(date, await inapoiInLucruCuloare(linie, c?.culori[0]?.depozit ?? 0));
+  }
+  async function laExternalizare(date: FormData) {
+    'use server';
+    await cere(['planificare', 'banda'], 'modifica');
+    inapoiLaComanda(date, await externalizeaza(String(date.get('comanda')), String(date.get('atelier') ?? '')));
+  }
+  async function inAtelier(date: FormData) {
+    'use server';
+    await cere(['planificare', 'banda'], 'modifica');
+    inapoiLaComanda(date, await externalizeaza(String(date.get('comanda')), null));
   }
   async function timp(date: FormData) {
     'use server';
@@ -285,7 +296,8 @@ export default async function Productie({ searchParams }: { searchParams: Promis
                     </summary>
                     {g.comenzi.map((c) => (
                       <ComandaInPlan key={`${c.comanda_id}${s}`} c={c} m={m} deschis={f.deschis === c.numar} da={da} aici={aici} faraUrgenta={faraUrgenta}
-                        lucru={f.deschis === c.numar ? lucru(c) : null} st={st} stadiul={{ iesit: iesitDinLucru, partial: iesitAcum, inapoi: inapoiInLucru }} />
+                        lucru={f.deschis === c.numar ? lucru(c) : null} st={st} stadiul={{ iesit: iesitDinLucru, partial: iesitAcum, inapoi: inapoiInLucru }}
+                        externalizare={{ la: laExternalizare, inapoi: inAtelier, ateliere }} />
                     ))}
                   </details>
                 ))}
@@ -319,9 +331,10 @@ function grupePlan(lista: ComandaPlan[], s: string) {
 }
 
 /** O comandă din plan: stadiul, termenul, ce a rămas de intrat în lucru; deschisă, culorile cu „Intră acum". */
-function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiul }: {
+function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiul, externalizare }: {
   c: ComandaPlan; m: boolean; deschis: boolean; da: (d: FormData) => Promise<void>; aici: string; faraUrgenta: (d: FormData) => Promise<void>;
   lucru: React.ReactNode; st: boolean; stadiul: ActiuniStadiu;
+  externalizare: { la: (d: FormData) => Promise<void>; inapoi: (d: FormData) => Promise<void>; ateliere: string[] };
 }) {
   return (
     <ComandaPliabila id={`c-${c.numar}`} deschis={deschis} href={`${aici}${aici.includes('?') ? '&' : '?'}deschis=${encodeURIComponent(c.numar)}`} sumar={<>
@@ -335,12 +348,14 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiu
         <span className="p-stadiu">
           <span className={`insigna ${TON[c.stadiu]}`}>{STADII_PLAN[c.stadiu]}</span>
           {c.urgenta && <span className="insigna rosu" title="Adusă la urgență în săptămâna asta, peste plan">⚡ urgentă</span>}
+          {c.externalizare && <span className="insigna albastru" title="Dată în producție la externalizare">extern: {c.externalizare}</span>}
           {c.dat > 0 && c.ramas_de_intrat > 0 && <span className="insigna galben">rămas de intrat: {c.ramas_de_intrat}</span>}
         </span>
         <span>{m && c.de_dat > 0 && <span className="buton buton-da">Dă în lucru ({c.de_dat})</span>}</span>
       </>}>
       {/* Conținutul doar pentru comanda deschisă: altfel ar pleca la browser cu fiecare rând. */}
       {deschis && <>
+      <Externalizare c={c} m={m} aici={aici} {...externalizare} />
       <div className="culori-plan">
         {c.culori.map((l) => <CuloareInPlan key={l.linie_id} c={c} l={l} m={m} da={da} aici={aici} st={st} stadiul={stadiul} />)}
       </div>
@@ -354,6 +369,35 @@ function ComandaInPlan({ c, m, deschis, da, aici, faraUrgenta, lucru, st, stadiu
       )}
       </>}
     </ComandaPliabila>
+  );
+}
+
+/**
+ * Externalizarea comenzii: în producție la un atelier de afară, cu numele lui (sugerat din
+ * cele folosite înainte), sau înapoi în atelierul propriu. Culorile se dau tot cu „Dă în
+ * lucru", ca să se vadă ce a plecat și ce s-a întors.
+ */
+function Externalizare({ c, m, aici, la, inapoi, ateliere }: {
+  c: ComandaPlan; m: boolean; aici: string; la: (d: FormData) => Promise<void>; inapoi: (d: FormData) => Promise<void>; ateliere: string[];
+}) {
+  const ascunse = <><input type="hidden" name="comanda" value={c.comanda_id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} /></>;
+  return (
+    <section className={`externalizare ${c.externalizare ? 'activa' : ''}`}>
+      <form action={la} className="in-rand">
+        {ascunse}
+        <strong>{c.externalizare ? 'La externalizare:' : 'Producție în atelierul propriu.'}</strong>
+        {m && <>
+          <input name="atelier" list={`ateliere-${c.comanda_id}`} defaultValue={c.externalizare ?? ''} required
+                 placeholder="numele atelierului de externalizare" aria-label="Atelierul de externalizare" />
+          <datalist id={`ateliere-${c.comanda_id}`}>{ateliere.map((x) => <option key={x} value={x} />)}</datalist>
+          <button className={c.externalizare ? 'secundar' : 'principal'}>{c.externalizare ? 'Schimbă atelierul' : 'Dă la externalizare'}</button>
+        </>}
+        {!m && c.externalizare && <span>{c.externalizare}</span>}
+      </form>
+      {m && c.externalizare && (
+        <form action={inapoi}>{ascunse}<button className="secundar">Adu înapoi în atelier</button></form>
+      )}
+    </section>
   );
 }
 

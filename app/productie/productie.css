@@ -137,3 +137,19 @@ tr.iese-acum input.bucati { width: 3.2rem; }
 .culoare-productie button.implicit { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 .culoare-productie { position: relative; }
 details.comanda-productie > p.se-incarca { padding: .6rem .9rem; margin: 0; }
+
+/* Cine calcă, cine controlează: sub fazele de cusut, cu oamenii puși ca etichete. */
+section.cine-lucreaza .post-lucru { margin: .8rem 0 0; padding-top: .6rem; border-top: 1px solid var(--linie); }
+section.cine-lucreaza .post-lucru h4 { margin: 0 0 .35rem; }
+section.cine-lucreaza .om-pus { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .2rem .1rem .6rem; border: 1px solid var(--linie);
+  border-radius: 1rem; background: var(--card); }
+section.cine-lucreaza .om-pus form { display: inline; }
+section.cine-lucreaza .om-pus button { padding: 0 .45rem; border-radius: 1rem; }
+
+/* Externalizarea comenzii, sus în comanda deschisă. */
+section.externalizare { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin: .7rem .8rem 0; padding: .55rem .7rem;
+  border: 1px solid var(--linie); border-radius: .45rem; }
+section.externalizare.activa { background: var(--albastru-fundal); border-color: var(--albastru); }
+section.externalizare input[name="atelier"] { min-width: 16rem; }
+section.externalizare .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
+section.cine-lucreaza .post-lucru + h4 { margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--linie); }
