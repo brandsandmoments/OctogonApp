@@ -269,12 +269,22 @@ export async function produseNoi(c: PoolClient, magazinId: string): Promise<numb
     if (!p.brand_id) continue;
     const titlu = p.titlu.trim().replace(/\s+/g, ' ');
     const cuv = titlu.split(' ');
-    // Culoarea: ultimele două sau ultimul cuvânt, dacă sunt o culoare cunoscută; altfel ultimul cuvânt.
-    const cunoscuta = (n: number) => cuv.length > n ? culori.find((x) => x.nume.toLowerCase() === cuv.slice(-n).join(' ').toLowerCase()) : undefined;
-    const potrivita = cunoscuta(2) ?? cunoscuta(1);
-    const nCul = potrivita ? potrivita.nume.split(' ').length : cuv.length > 1 ? 1 : 0;
-    const culoare = nCul ? cuv.slice(-nCul).join(' ') : null;
-    const numeModel = cuv.slice(1, cuv.length - nCul).join(' ') || cuv[0];
+    // Culoarea: o culoare cunoscută (din două cuvinte sau din unul) oriunde după felul hainei, cea mai
+    // din dreapta („Rochie Seraphyne Negru Paiete" → Negru); altfel ultimul cuvânt. Modelul: restul,
+    // fără felul hainei („Seraphyne Paiete").
+    let poz = -1, nCul = 0;
+    // De la dreapta, la fiecare capăt cea mai lungă culoare întâi („Alb cu Negru" înaintea lui „Negru").
+    for (let e = cuv.length - 1; e >= 1 && poz < 0; e--) {
+      for (const n of [3, 2, 1]) {
+        const i = e - n + 1;
+        if (i < 1) continue;
+        if (culori.some((x) => x.nume.toLowerCase() === cuv.slice(i, e + 1).join(' ').toLowerCase())) { poz = i; nCul = n; break; }
+      }
+    }
+    if (poz < 0 && cuv.length > 1) { poz = cuv.length - 1; nCul = 1; }
+    const culoare = poz >= 0 ? cuv.slice(poz, poz + nCul).join(' ') : null;
+    const fara = poz >= 0 ? [...cuv.slice(0, poz), ...cuv.slice(poz + nCul)] : cuv;
+    const numeModel = fara.slice(1).join(' ') || cuv[0];
     // Codul: prefixul comun al SKU-urilor (fără mărime); fără SKU, prefixul brandului + titlul.
     let cod = '';
     if (p.skus.length) {
@@ -284,7 +294,7 @@ export async function produseNoi(c: PoolClient, magazinId: string): Promise<numb
     if (!cod) {
       const { rows: [pre] } = await c.query<{ prefix: string | null }>(
         `SELECT split_part(cod_sku, '-', 1) AS prefix FROM produs WHERE brand_id = $1 AND NOT din_aplicatie GROUP BY 1 ORDER BY count(*) DESC LIMIT 1`, [p.brand_id]);
-      cod = [pre?.prefix ?? 'SHOP', slug(cuv.slice(0, cuv.length - nCul).join('')), culoare ? slug(culoare).replace(/-/g, '') : ''].filter(Boolean).join('-');
+      cod = [pre?.prefix ?? 'SHOP', slug(fara.join('')), culoare ? slug(culoare).replace(/-/g, '') : ''].filter(Boolean).join('-');
     }
     const { rows: [dublu] } = await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM produs WHERE upper(cod_sku) = upper($1)`, [cod]);
     if (dublu.n) cod = `${cod}-${dublu.n + 1}`;
@@ -723,6 +733,8 @@ export async function primesteWebhook(domeniu: string, subiect: string, corp: Re
       for (const v of d.product?.variants.nodes ?? []) await scrieVarianta(c, m.id, cat, v);
       await c.query(`DELETE FROM magazin_varianta WHERE magazin_id = $1 AND produs_gid = $2 AND NOT (varianta_gid = ANY($3))`,
         [m.id, gid, vazute]);
+      // Un produs nou (sau încă necatalogat) apare în aplicație imediat, nu abia la sincronizarea de noapte.
+      await produseNoi(c, m.id);
     }
   });
 }
