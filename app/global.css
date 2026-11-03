@@ -277,3 +277,6 @@ form.formular-mostra .marimi-mostra { display: flex; flex-wrap: wrap; align-item
 form.formular-mostra .marimi-mostra input.bucati { width: 3.6rem; }
 form.formular-mostra .actiuni { display: flex; flex-wrap: wrap; gap: .5rem; }
 form.formular-mostra .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
+form.formular-mostra .variatii-mostra { display: grid; gap: .4rem; justify-items: start; margin-top: .3rem; }
+form.formular-mostra .variatii-mostra input.bucati { width: 3.4rem; }
+form.formular-mostra .variatii-mostra td.ce input { min-width: 12rem; }

@@ -6,6 +6,7 @@ import { azi, numarDinFormular, potriveste } from '../lib/format';
 import { daMostraLaCroit, mostreSiComenziCroit, nomenclatoareMostre, ORIGINI, type OrigineCroit } from '../lib/mostre';
 import { poate, type Cine } from '../lib/acces';
 import { cere, utilizatorCurent } from '../lib/sesiune';
+import VariatiiMostra from './VariatiiMostra';
 
 /** Cine dă mostre și comenzi de croit: cine modifică la croit (șefa de croit) sau la dezvoltare produs. */
 const poateDa = (u: Cine) => poate(u, 'croit', 'modifica') || poate(u, 'dezvoltare', 'modifica');
@@ -31,12 +32,18 @@ export default async function Mostre({ cauta, ok }: { cauta?: string; ok?: strin
       origine: (date.get('origine') === 'croit' ? 'croit' : 'mostra') as OrigineCroit,
       brandId: String(date.get('brand') ?? ''),
       produs: String(date.get('produs') ?? ''),
-      culoare: String(date.get('culoare') ?? ''),
+      // Fiecare rând de culoare: cul:N și q:N:mărime.
+      variatii: [...date.keys()].filter((k) => k.startsWith('cul:')).map((k) => {
+        const n = k.slice(4);
+        return {
+          culoare: String(date.get(k) ?? ''),
+          cantitati: Object.fromEntries([...date.keys()].filter((q) => q.startsWith(`q:${n}:`))
+            .map((q) => [q.slice(`q:${n}:`.length), numarDinFormular(date.get(q)) ?? 0])),
+        };
+      }),
       dataCeruta: String(date.get('data') ?? ''),
       prioritate: numarDinFormular(date.get('prioritate')) ?? 2,
       observatii: String(date.get('observatii') ?? ''),
-      cantitati: Object.fromEntries([...date.keys()].filter((k) => k.startsWith('q:'))
-        .map((k) => [k.slice(2), numarDinFormular(date.get(k)) ?? 0])),
     });
     if ('eroare' in rez) redirect(`/croit?vedere=mostre&eroare=${encodeURIComponent(rez.eroare)}`);
     if (date.get('dupa') === 'croieste') redirect(`/croit?vedere=ramas&cauta=${encodeURIComponent(rez.numar)}`);
@@ -64,23 +71,20 @@ export default async function Mostre({ cauta, ok }: { cauta?: string; ok?: strin
               </select>
             </label>
             <label className="lat"><span>Produs</span>
-              <input name="produs" list="produse-mostra" required placeholder="alege din listă sau scrie denumirea (ex. Rochie Test Sofia)" />
+              <input name="produs" list="produse-mostra" required placeholder="alege din listă sau scrie denumirea fără culoare (ex. Rochie Sofia)" />
               <datalist id="produse-mostra">{produse.map((p) => <option key={p} value={p} />)}</datalist>
             </label>
-            <label><span>Culoare</span><input name="culoare" placeholder="ex. Roșu (dacă nu e în denumire)" /></label>
             <label><span>Gata până la</span><input type="date" name="data" required defaultValue={adaugaZile(azi(), 7)} /></label>
             <label><span>Prioritate</span>
               <select name="prioritate" defaultValue="2">{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select>
             </label>
           </div>
-          <div className="marimi-mostra">
-            <span className="slab">Bucăți pe mărimi</span>
-            {marimi.map((x) => (
-              <label key={x.id}><span>{x.cod}</span><input name={`q:${x.id}`} inputMode="numeric" className="bucati" placeholder="0" aria-label={`Bucăți ${x.cod}`} /></label>
-            ))}
+          <div>
+            <span className="slab">Culori și bucăți pe mărimi — același produs în mai multe culori: „+ Adaugă culoare"</span>
+            <VariatiiMostra marimi={marimi} />
           </div>
           <label className="lat"><span>Observații</span><input name="observatii" placeholder="opțional: material, pentru cine e mostra…" /></label>
-          <p className="slab">Un produs care nu e în listă (încă nu e în Shopify) se creează din denumire și culoare. Comanda pleacă direct în „Rămas de croit", apoi în producție, ca orice PSF.</p>
+          <p className="slab">Un produs care nu e în listă (încă nu e în Shopify) se creează din denumire și culoare — câte unul pe fiecare culoare. Comanda pleacă direct în „Rămas de croit"; croită, mostra apare în Producție → Mostre.</p>
           <div className="actiuni">
             <button className="secundar">Dă la croit</button>
             <button name="dupa" value="croieste" className="principal">Dă la croit și croiește acum</button>
@@ -111,7 +115,7 @@ export default async function Mostre({ cauta, ok }: { cauta?: string; ok?: strin
                   <td>
                     {x.croit < x.cerut
                       ? <Link href={`/croit?vedere=ramas&cauta=${encodeURIComponent(x.numar)}`} className="buton">Croiește</Link>
-                      : <Link href={`/productie?cauta=${encodeURIComponent(x.numar)}`} className="buton">În plan</Link>}
+                      : <Link href={`/productie/mostre?cauta=${encodeURIComponent(x.numar)}`} className="buton">În producție</Link>}
                   </td>
                 </tr>
               ))}

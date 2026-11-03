@@ -17,10 +17,11 @@ export type MostraNoua = {
   origine: OrigineCroit;
   brandId: string;
   produs: string;          // denumirea, aleasă din listă sau scrisă de mână
-  culoare: string;         // pentru un produs nou; la unul existent, culoarea e în denumire
+  // Variațiile: aceeași denumire în mai multe culori, fiecare cu bucățile ei (marime_id → bucăți).
+  // Culoarea se adaugă la denumire (la un produs existent cu culoarea în nume, rămâne goală).
+  variatii: { culoare: string; cantitati: Record<string, number> }[];
   dataCeruta: string;
   prioritate: number;
-  cantitati: Record<string, number>;   // marime_id → bucăți
   observatii: string;
 };
 
@@ -64,9 +65,18 @@ async function produsul(brandId: string, produs: string, culoare: string): Promi
     const { rows: [{ cod }] } = await c.query<{ cod: string }>(
       `SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM produs WHERE cod_sku = $1) THEN $1
                    ELSE $1 || '-' || (SELECT count(*) + 1 FROM produs WHERE cod_sku LIKE $1 || '%') END AS cod`, [baza]);
+    // Modelul: denumirea fără primul cuvânt (felul hainei: „Rochie Test Sofia" → „Test Sofia"), ca la
+    // modelele existente; găsit sau creat, ca toate culorile mostrei să se poată tăia împreună.
+    const numeModel = nume.split(' ').length > 1 ? nume.split(' ').slice(1).join(' ') : nume;
+    const { rows: [mod] } = await c.query<{ id: string }>(
+      `SELECT id FROM model WHERE brand_id = $1 AND (lower(denumire) = lower($2) OR lower(denumire) = lower($3)) LIMIT 1`, [brandId, numeModel, nume]);
+    const modelId = mod?.id ?? (await c.query<{ id: string }>(
+      `INSERT INTO model (firma_id, brand_id, cod, denumire) VALUES (firma_curenta(), $1, $2, $3)
+       ON CONFLICT (firma_id, brand_id, cod) DO UPDATE SET denumire = model.denumire RETURNING id`,
+      [brandId, slug(numeModel).toLowerCase(), numeModel])).rows[0].id;
     const { rows: [nou] } = await c.query<{ id: string }>(
-      `INSERT INTO produs (firma_id, cod_sku, denumire, brand_id, culoare_id, din_aplicatie)
-       VALUES (firma_curenta(), $1, $2, $3, $4, true) RETURNING id`, [cod, intreg, brandId, culoareId]);
+      `INSERT INTO produs (firma_id, cod_sku, denumire, brand_id, culoare_id, model_id, din_aplicatie)
+       VALUES (firma_curenta(), $1, $2, $3, $4, $5, true) RETURNING id`, [cod, intreg, brandId, culoareId, modelId]);
     return nou.id;
   });
 }
@@ -76,14 +86,21 @@ export async function daMostraLaCroit(m: MostraNoua): Promise<{ numar: string } 
   if (!m.brandId) return { eroare: 'Alege brandul.' };
   if (!m.produs.trim()) return { eroare: 'Scrie denumirea produsului (sau alege-l din listă).' };
   if (!m.dataCeruta) return { eroare: 'Alege data până când trebuie gata.' };
-  const cantitati = Object.entries(m.cantitati).filter(([, q]) => q > 0);
-  if (cantitati.some(([, q]) => !Number.isInteger(q))) return { eroare: 'Bucățile trebuie să fie numere întregi.' };
-  if (!cantitati.length) return { eroare: 'Scrie câte bucăți, pe mărimi.' };
-  const produsId = await produsul(m.brandId, m.produs, m.culoare);
+  const variatii = m.variatii
+    .map((v) => ({ culoare: v.culoare.trim(), cantitati: Object.entries(v.cantitati).filter(([, q]) => q > 0) }))
+    .filter((v) => v.cantitati.length > 0);
+  if (variatii.some((v) => v.cantitati.some(([, q]) => !Number.isInteger(q)))) return { eroare: 'Bucățile trebuie să fie numere întregi.' };
+  if (!variatii.length) return { eroare: 'Scrie câte bucăți, pe mărimi (măcar la o culoare).' };
+  if (new Set(variatii.map((v) => v.culoare.toLowerCase())).size !== variatii.length) return { eroare: 'Aceeași culoare e scrisă de două ori: pune bucățile pe un singur rând.' };
+  if (variatii.length > 1 && variatii.some((v) => !v.culoare)) return { eroare: 'Cu mai multe variații, scrie culoarea la fiecare.' };
+  const linii = [];
+  for (const v of variatii) {
+    linii.push({ produsId: await produsul(m.brandId, m.produs, v.culoare), dataCeruta: m.dataCeruta, vanzareDeLa: '', vanzarePanaLa: '',
+                 cantitati: Object.fromEntries(v.cantitati) });
+  }
   const rez = await creeazaComanda({
     tip: 'PSF', brandId: m.brandId, kamId: '', dataLansare: azi(), prioritate: m.prioritate, lanseaza: true, origine: m.origine,
-    observatii: [ORIGINI[m.origine], m.observatii.trim()].filter(Boolean).join(' · '),
-    linii: [{ produsId, dataCeruta: m.dataCeruta, vanzareDeLa: '', vanzarePanaLa: '', cantitati: Object.fromEntries(cantitati) }],
+    observatii: [ORIGINI[m.origine], m.observatii.trim()].filter(Boolean).join(' · '), linii,
   });
   return rez.ok ? { numar: rez.numar } : { eroare: rez.eroare };
 }

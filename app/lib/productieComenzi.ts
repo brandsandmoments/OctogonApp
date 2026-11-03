@@ -231,7 +231,11 @@ const stadiulComenzii = (st: StadiuPlan[]): StadiuPlan => {
  * de acum, ca întârziat. Fiecare culoare își are stadiul și mărimile — cerut, croit, dat
  * în lucru, ieșit, în depozit — ca să se dea în lucru exact ce intră.
  */
-export async function planPeSaptamani(de: string, pana: string, curenta: string, luniDe: (zi: string) => string, doarLinie: string | null = null): Promise<ComandaPlan[]> {
+export async function planPeSaptamani(
+  de: string, pana: string, curenta: string, luniDe: (zi: string) => string, doarLinie: string | null = null,
+  // Mostrele au fila lor („Mostre"), nu stau în planul pe săptămâni; null: amândouă (căutarea unei culori).
+  mostre: boolean | null = false,
+): Promise<ComandaPlan[]> {
   const sfarsit = new Date(`${pana}T12:00:00Z`); sfarsit.setUTCDate(sfarsit.getUTCDate() + 6);
   const panaLa = sfarsit.toISOString().slice(0, 10);
   const randuri = await interogare<Rand & { depozit: number; inchisa: boolean; urgent: string | null; externalizare: string | null }>(
@@ -274,7 +278,8 @@ export async function planPeSaptamani(de: string, pana: string, curenta: string,
           OR ($3::date BETWEEN $1::date AND $2::date AND c.stare <> 'inchisa'
               AND EXISTS (SELECT 1 FROM plan_linie x WHERE x.linie_id = cl.id AND x.saptamana < $3::date)))
         AND ($4::uuid IS NULL OR cl.id = $4::uuid)
-      ORDER BY cl.data_ceruta, c.prioritate, c.numar, p.denumire`, [de, panaLa, curenta, doarLinie]);
+        AND ($5::boolean IS NULL OR (c.origine = 'mostra') = $5::boolean)
+      ORDER BY cl.data_ceruta, c.prioritate, c.numar, p.denumire`, [de, panaLa, curenta, doarLinie, mostre]);
 
   const linii = new Map<string, CuloarePlan & { comanda_id: string }>();
   const info = new Map<string, Rand & { externalizare: string | null }>();

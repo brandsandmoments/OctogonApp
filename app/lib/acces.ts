@@ -124,6 +124,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     nume: 'Dezvoltare produs',
     ecrane: [
       { href: '/dezvoltare', nume: 'Dezvoltare produs', ce: 'tipare de făcut, în lucru, mostre gata de aprobat', zona: ['dezvoltare', 'comenzi'] },
+      { href: '/productie/mostre', nume: 'Mostre în producție', ce: 'mostrele croite: date în lucru, cine lucrează, ce a ieșit', zona: ['dezvoltare', 'planificare', 'banda'] },
     ],
   },
   {
