@@ -198,9 +198,22 @@ export type ComandaPlan = {
 
 const stadiulCulorii = (l: { cerut: number; croit: number; dat: number; gata: number; depozit: number; inchisa: boolean }): StadiuPlan =>
   l.inchisa || l.depozit >= l.cerut ? 'terminat'
-    : l.dat > 0 && l.gata >= l.dat ? 'iesit'
+    : l.dat > 0 && l.gata >= l.dat && l.dat >= l.croit ? 'iesit'   // ieșit tot ce s-a dat, și nimic croit nu mai așteaptă
     : l.dat > 0 ? 'in_lucru'
     : l.croit > 0 ? 'croit' : 'necroit';
+
+/**
+ * Stadiul comenzii, din al culorilor: terminată când toate sunt terminate; ieșită din lucru
+ * când tot ce n-e terminat a ieșit; intrată în lucru de cum a intrat în lucru măcar o
+ * culoare (chiar dacă altele sunt doar croite); altfel, stadiul celei mai puțin înaintate.
+ */
+const stadiulComenzii = (st: StadiuPlan[]): StadiuPlan => {
+  const deschise = st.filter((x) => x !== 'terminat');
+  if (!deschise.length) return 'terminat';
+  if (deschise.every((x) => x === 'iesit')) return 'iesit';
+  if (st.some((x) => x === 'in_lucru' || x === 'iesit' || x === 'terminat')) return 'in_lucru';
+  return deschise.reduce((a, b) => (ORDINE_PLAN.indexOf(b) < ORDINE_PLAN.indexOf(a) ? b : a));
+};
 
 /**
  * Planul pe săptămâni se face singur, după termen: în fiecare săptămână intră comenzile
@@ -297,8 +310,8 @@ export async function planPeSaptamani(de: string, pana: string, curenta: string,
     c.urgenta = c.urgenta || (urgent !== null && urgent !== luniDe(l.data_ceruta));
     c.cerut += l.cerut; c.croit += l.croit; c.dat += l.dat; c.gata += l.gata; c.depozit += l.depozit; c.de_dat += l.de_dat;
     if (l.stadiu !== 'terminat') c.ramas_de_intrat += Math.max(0, l.cerut - l.dat);
-    if (ORDINE_PLAN.indexOf(l.stadiu) < ORDINE_PLAN.indexOf(c.stadiu)) c.stadiu = l.stadiu;
   }
+  for (const c of pe.values()) c.stadiu = stadiulComenzii(c.culori.map((l) => l.stadiu));
   return [...pe.values()].sort((a, b) => a.saptamana.localeCompare(b.saptamana) || a.data_ceruta.localeCompare(b.data_ceruta)
     || a.prioritate - b.prioritate || a.numar.localeCompare(b.numar));
 }
