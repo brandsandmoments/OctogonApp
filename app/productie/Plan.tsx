@@ -285,6 +285,11 @@ export default async function Plan({ searchParams, mostre = false }: { searchPar
         return (
           <section key={s}>
             {nr > 1 && <h3>{numeSaptamana(s)}{s === curenta && <span className="slab"> · săptămâna asta</span>}<span className="slab"> · {lista.length} comenzi · {buc(lista, 'cerut')} buc</span></h3>}
+            <p className="filtre printeaza-plan">
+              <a href={`/productie/fisa-saptamana?s=${s}`} target="_blank" rel="noopener" className="buton">
+                Printează săptămâna{nr > 1 ? ` ${numeSaptamana(s)}` : ''} (A4)
+              </a>
+            </p>
             {m && (
               <details className="reprioritizare" open={f.us === s}>
                 <summary><span className="buton">⚡ Reprioritizare{nr > 1 ? ` · ${numeSaptamana(s)}` : ''}</span> <span className="slab">adu la urgență un PSF/PSC în săptămâna asta</span></summary>

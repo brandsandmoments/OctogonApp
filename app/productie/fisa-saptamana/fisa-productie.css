@@ -1,0 +1,16 @@
+/* Planul de producție pe săptămână (pe aceeași bază ca foaia de croit): coloane în plus și mai înguste. */
+main.fisa-productie { font-size: 9pt; }
+main.fisa-productie col.c-model { width: 9%; }
+main.fisa-productie col.c-culoare { width: 8%; }
+main.fisa-productie col.c-comanda { width: 9%; }
+main.fisa-productie col.c-termen { width: 4%; }
+main.fisa-productie col.c-marime { width: 3.1%; }
+main.fisa-productie col.c-total { width: 4%; }
+main.fisa-productie col.c-cifra { width: 3.6%; }
+main.fisa-productie col.c-stadiu { width: 6%; }
+main.fisa-productie col.c-cine { width: 10%; }
+main.fisa-productie col.c-obs { width: auto; }
+main.fisa-productie th { font-size: 7.5pt; }
+main.fisa-productie td.intarziat { font-weight: 700; text-decoration: underline; }
+main.fisa-productie th { white-space: normal; line-height: 1.05; padding: .15rem .1rem; }
+main.fisa-productie td { padding: .1rem .2rem; }
