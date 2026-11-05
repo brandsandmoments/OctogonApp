@@ -256,7 +256,7 @@ export async function scoateDinTaiere(taiereId: string, lotId: string): Promise<
  * mai multe bucăți, /T1, /T2. Ce nu s-a tăiat rămâne de croit. Doar comenzi de pe
  * același model se taie împreună.
  */
-export async function croiesteDirect(alocari: Alocare[], oameni: Map<Operatie, string[]>): Promise<{ id: string } | string> {
+export async function croiesteDirect(alocari: Alocare[], oameni: Map<Operatie, string[]>, dificultate: 1 | 2 | 3 = 2): Promise<{ id: string } | string> {
   if (!(oameni.get('intins')?.length)) return 'Alege cine a întins.';
   if (!(oameni.get('taiat')?.length)) return 'Alege cine a tăiat.';
   const alese = alocari
@@ -279,6 +279,7 @@ export async function croiesteDirect(alocari: Alocare[], oameni: Map<Operatie, s
 
   return cuOprire(() => caFirma(firmaCurenta(), async (c) => {
     const id = await taiereNoua(c);
+    await c.query(`UPDATE taiere SET dificultate = $2 WHERE id = $1`, [id, dificultate]);
     const croit = new Map<string, Map<string, number>>();
     for (const a of alese) {
       await blocheazaSiVerifica(c, a);
@@ -493,7 +494,7 @@ export type LotInTaiere = {
 };
 
 export type FisaTaiere = {
-  taiere: { id: string; cod: string; model: string; model_cheie: string; facuta_la: string | null };
+  taiere: { id: string; cod: string; model: string; model_cheie: string; facuta_la: string | null; dificultate: 1 | 2 | 3 };
   componente: { id: string; nume: string; principal: boolean }[];
   operatii: OperatieScrisa[];
   culori: CuloareInTaiere[];
@@ -506,7 +507,7 @@ export type FisaTaiere = {
 export async function fisaTaiere(id: string): Promise<FisaTaiere | null> {
   return caFirma(firmaCurenta(), async (c) => {
     const { rows: [taiere] } = await c.query<FisaTaiere['taiere'] & { model_id: string | null }>(
-      `SELECT t.id, t.cod AS cod, to_char(coalesce(t.trimis_la, t.creat_la), 'YYYY-MM-DD HH24:MI') AS facuta_la,
+      `SELECT t.id, t.cod AS cod, to_char(coalesce(t.trimis_la, t.creat_la), 'YYYY-MM-DD HH24:MI') AS facuta_la, t.dificultate,
               x.model, x.model_cheie, x.model_id
          FROM taiere t
          LEFT JOIN LATERAL (
@@ -846,4 +847,9 @@ export async function salveazaMaterialCroit(taiereId: string, material: string, 
 
 export async function stergeMaterialCroit(taiereId: string, material: string): Promise<void> {
   await interogare(`DELETE FROM taiere_material_croit WHERE taiere_id = $1 AND material = $2`, [taiereId, material]);
+}
+
+/** Gradul de dificultate al taierii (1 ușor, 2 mediu, 3 greu): contează în clasament, la toate operațiile ei. */
+export async function schimbaDificultateTaiere(taiereId: string, dificultate: 1 | 2 | 3): Promise<void> {
+  await interogare(`UPDATE taiere SET dificultate = $2 WHERE id = $1`, [taiereId, dificultate]);
 }

@@ -2,6 +2,7 @@ import { Stadiu, Termen } from '../Insigne';
 import Link from 'next/link';
 import { CineCroieste, OameniCroit } from './OameniCroit';
 import Mostre from './Mostre';
+import { DIFICULTATI, dificultateDin } from '../lib/dificultate';
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
 import { croiesteDirect, inchideComanda, loturiCroite, oameniCroit, OPERATII, ramasDeCroit, taieriLaCroit, type LotCroit, type Operatie, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
@@ -272,7 +273,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
     }));
     const oameni = new Map((['intins', 'taiat', 'separat', 'termocolat'] as const)
       .map((op) => [op, date.getAll(`om:${op}`).map(String).filter(Boolean)] as [Operatie, string[]]));
-    const rez = await croiesteDirect(alocari, oameni);
+    const rez = await croiesteDirect(alocari, oameni, dificultateDin(date.get('dificultate')));
     if (typeof rez === 'string') redirect(`/croit?vedere=ramas&eroare=${encodeURIComponent(rez)}`);
     redirect(`/croit/taiere/${rez.id}`);
   }
@@ -398,6 +399,12 @@ async function Ramas({ cauta }: { cauta?: string }) {
                         <strong>Cine a lucrat</strong>
                         <CineCroieste formular={formular} dezactivat={!m}
                           operatii={(['intins', 'taiat', 'separat', 'termocolat'] as const).map((op) => [op, OPERATII[op], op === 'intins' || op === 'taiat'])} />
+                        <label className="dificultate-croit">
+                          <span>Dificultate</span>
+                          <select name="dificultate" form={formular} defaultValue="2" disabled={!m} aria-label="Gradul de dificultate al taierii">
+                            {([1, 2, 3] as const).map((d) => <option key={d} value={d}>{DIFICULTATI[d].nume}</option>)}
+                          </select>
+                        </label>
                         <button form={formular} className="principal" disabled={!m}>Salvează croitul</button>
                         <span className="slab"> — devine taierea (deja croită); ce nu tai rămâne aici.</span>
                       </td>

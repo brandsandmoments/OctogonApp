@@ -13,7 +13,7 @@ import { adaugaZileLucratoare } from './timp';
 
 export type MarimeProd = { marime_id: string; marime: string; cerut: number; croit: number; dat: number; gata: number; de_dat: number };
 export type CuloareProd = { linie_id: string; produs: string; data_ceruta: string; marimi: MarimeProd[]; cerut: number; croit: number; dat: number; gata: number; de_dat: number };
-export type AlocareProd = { id: string; faza: string; utilaj: string | null; om: string };
+export type AlocareProd = { id: string; faza: string; utilaj: string | null; om: string; dificultate: 1 | 2 | 3 };
 export type ComandaProd = {
   comanda_id: string; numar: string; tip: string; brand: string; prioritate: number; kam: string | null;
   model: string; model_ids: string[]; timp_min_buc: number | null; oameni: number | null; data_ceruta: string;
@@ -65,7 +65,7 @@ export async function comenziInProductie(): Promise<ComandaProd[]> {
   const ids = [...new Set(randuri.map((r) => r.comanda_id))];
   const [alocari, faze] = await Promise.all([
     interogare<AlocareProd & { comanda_id: string }>(
-      `SELECT x.id, x.comanda_id, x.faza, x.utilaj, a.nume AS om FROM alocare_comanda x JOIN angajat a ON a.id = x.angajat_id
+      `SELECT x.id, x.comanda_id, x.faza, x.utilaj, a.nume AS om, x.dificultate FROM alocare_comanda x JOIN angajat a ON a.id = x.angajat_id
         WHERE x.comanda_id = ANY ($1::uuid[]) ORDER BY x.creat_la`, [ids]),
     interogare<{ model_id: string; denumire: string }>(
       `SELECT model_id, denumire FROM model_operatie WHERE model_id = ANY ($1::uuid[]) ORDER BY ordine`,
@@ -166,13 +166,18 @@ export async function salveazaTimpOameni(comandaId: string, minute: number | nul
   return null;
 }
 
-export async function adaugaAlocareComanda(comandaId: string, faza: string, utilaj: string, angajatId: string): Promise<string | null> {
+export async function adaugaAlocareComanda(comandaId: string, faza: string, utilaj: string, angajatId: string, dificultate: 1 | 2 | 3 = 2): Promise<string | null> {
   if (!faza.trim()) return 'Scrie faza (sau alege-o din listă).';
   if (!angajatId) return 'Alege omul.';
   await interogare(
-    `INSERT INTO alocare_comanda (firma_id, comanda_id, faza, utilaj, angajat_id) VALUES (firma_curenta(), $1, $2, nullif($3, ''), $4)`,
-    [comandaId, faza.trim(), utilaj.trim(), angajatId]);
+    `INSERT INTO alocare_comanda (firma_id, comanda_id, faza, utilaj, angajat_id, dificultate) VALUES (firma_curenta(), $1, $2, nullif($3, ''), $4, $5)`,
+    [comandaId, faza.trim(), utilaj.trim(), angajatId, dificultate]);
   return null;
+}
+
+/** Gradul de dificultate al omului pe faza comenzii (1 ușor, 2 mediu, 3 greu), pentru clasament. */
+export async function schimbaDificultateAlocare(id: string, dificultate: 1 | 2 | 3): Promise<void> {
+  await interogare(`UPDATE alocare_comanda SET dificultate = $2 WHERE id = $1`, [id, dificultate]);
 }
 
 export async function stergeAlocareComanda(id: string): Promise<void> {

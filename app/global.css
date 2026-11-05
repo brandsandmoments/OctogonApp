@@ -292,3 +292,11 @@ p.sus-comanda { max-width: 72rem; margin: .8rem auto 0; padding: 0 1rem; }
 details.schimba-brand { margin-top: .2rem; }
 details.schimba-brand > summary { cursor: pointer; font-size: .8rem; text-decoration: underline dotted; }
 details.schimba-brand form { margin-top: .3rem; gap: .3rem; }
+/* Dificultatea (ușor / mediu / greu): la croit lângă „Salvează croitul", pe pagina taierii, la Cine lucrează. */
+.dificultate-croit { display: inline-flex; align-items: center; gap: .35rem; margin: 0 .5rem; }
+.dificultate-croit span { font-size: .8rem; color: var(--slab); }
+form.dificultate-taiere { margin: .2rem 0 .6rem; gap: .4rem; align-items: center; flex-wrap: wrap; }
+form.dificultate-om { gap: .2rem; }
+form.dificultate-om select { font-size: .8rem; padding: .1rem .3rem; }
+form.dificultate-om.mic select { font-size: .75rem; }
+form.dificultate-om button { padding: 0 .4rem; }

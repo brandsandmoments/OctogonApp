@@ -3,6 +3,7 @@ import { durata } from '../lib/format';
 import type { transeSimple } from '../lib/banda';
 import { gataEstimat, type ComandaProd } from '../lib/productieComenzi';
 import { dataRo } from '../lib/timp';
+import { DIFICULTATI } from '../lib/dificultate';
 
 /** Fazele obișnuite din atelier, sugerate când modelul n-are încă procesul tehnologic trecut. */
 const FAZE_OBISNUITE = ['Cusut', 'Surfilat', 'Tighel', 'Butoniere', 'Nasturi', 'Călcat interfazic', 'Control interfazic', 'Călcat final', 'CTC și ambalat'];
@@ -19,10 +20,11 @@ const culoare = (produs: string, model: string) => {
 };
 
 /** Comanda deschisă: minute pe bucată, câți oameni (ziua estimată), fazele cu mașina și omul, tranșele în lucru. */
-export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi, zi, transe, timp, aloca, sterge, aIesit }: {
+export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi, zi, transe, timp, aloca, sterge, aIesit, dificultate }: {
   c: ComandaProd; iese: boolean; aici: string; m: boolean; oameni: { id: string; nume: string; functii: string[] }[]; masini: string[];
   orePeZi: number; zi: string; transe: Awaited<ReturnType<typeof transeSimple>>;
   timp: (d: FormData) => Promise<void>; aloca: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>; aIesit: (d: FormData) => Promise<void>;
+  dificultate: (d: FormData) => Promise<void>;
 }) {
   const estimat = gataEstimat(c, orePeZi, zi);
   const faze = [...new Set([...c.faze_model, ...FAZE_OBISNUITE])];
@@ -46,11 +48,12 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
       </form>
 
       <table className="marimi-comanda alocari-comanda">
-        <thead><tr><th>Fază</th><th>Mașină</th><th>Om</th><th /></tr></thead>
+        <thead><tr><th>Fază</th><th>Mașină</th><th>Om</th><th>Dificultate</th><th /></tr></thead>
         <tbody>
           {c.alocari.filter((a) => !POSTURI.some(([f]) => f === a.faza)).map((a) => (
             <tr key={a.id}>
               <td className="ce">{a.faza}</td><td className="ce slab">{a.utilaj ?? '—'}</td><td className="ce">{a.om}</td>
+              <td className="ce"><Dificultate a={a} c={c} m={m} aici={aici} actiune={dificultate} /></td>
               <td>{m && (
                 <form action={sterge}><input type="hidden" name="id" value={a.id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
                   <button className="secundar" aria-label={`Scoate ${a.om} de la ${a.faza}`}>×</button></form>
@@ -59,7 +62,7 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
           ))}
           {m && (
             <tr>
-              <td colSpan={4}>
+              <td colSpan={5}>
                 <form action={aloca} className="in-rand">
                   <input type="hidden" name="comanda" value={c.comanda_id} />
                   <input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
@@ -74,6 +77,7 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
                     <optgroup label="Producție">{dinBanda.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>
                     <optgroup label="Croit">{altii.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>
                   </select>
+                  <AlegereDificultate />
                   <button className="secundar">+ Adaugă</button>
                 </form>
               </td>
@@ -83,7 +87,7 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
       </table>
 
       {POSTURI.map(([faza, titlu, functii]) => (
-        <Post key={faza} c={c} m={m} aici={aici} faza={faza} titlu={titlu} oameni={oameni} functii={functii} aloca={aloca} sterge={sterge} />
+        <Post key={faza} c={c} m={m} aici={aici} faza={faza} titlu={titlu} oameni={oameni} functii={functii} aloca={aloca} sterge={sterge} dificultate={dificultate} />
       ))}
 
       {transe.length > 0 && (
@@ -122,9 +126,9 @@ export default function CineLucreaza({ c, m, iese, aici, oameni, masini, orePeZi
  * Un post fără mașină (călcat, control): cine e pus pe el la comanda asta, cu „×", și „+ Adaugă".
  * În listă, întâi oamenii cu funcția postului (din Oameni producție), apoi ceilalți.
  */
-function Post({ c, m, aici, faza, titlu, oameni, functii, aloca, sterge }: {
+function Post({ c, m, aici, faza, titlu, oameni, functii, aloca, sterge, dificultate }: {
   c: ComandaProd; m: boolean; aici: string; faza: string; titlu: string; oameni: { id: string; nume: string; functii: string[] }[];
-  functii: string[]; aloca: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>;
+  functii: string[]; aloca: (d: FormData) => Promise<void>; sterge: (d: FormData) => Promise<void>; dificultate: (d: FormData) => Promise<void>;
 }) {
   const pusi = c.alocari.filter((a) => a.faza === faza);
   const potriviti = oameni.filter((o) => o.functii.some((f) => functii.includes(f)));
@@ -137,6 +141,7 @@ function Post({ c, m, aici, faza, titlu, oameni, functii, aloca, sterge }: {
         {pusi.map((a) => (
           <span key={a.id} className="om-pus">
             {a.om}
+            <Dificultate a={a} c={c} m={m} aici={aici} actiune={dificultate} mic />
             {m && (
               <form action={sterge}>
                 <input type="hidden" name="id" value={a.id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
@@ -155,10 +160,37 @@ function Post({ c, m, aici, faza, titlu, oameni, functii, aloca, sterge }: {
               {potriviti.length > 0 && <optgroup label={titlu.replace('Cine ', 'Cei care ')}>{potriviti.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>}
               <optgroup label="Alți oameni din producție">{ceilalti.map((o) => <option key={o.id} value={o.id}>{o.nume}</option>)}</optgroup>
             </select>
+            <AlegereDificultate />
             <button className="secundar">+ Adaugă</button>
           </form>
         )}
       </div>
     </div>
+  );
+}
+
+/** Gradul de dificultate la adăugarea unui om pe fază (pornește de la mediu). */
+function AlegereDificultate() {
+  return (
+    <select name="dificultate" defaultValue="2" aria-label="Gradul de dificultate">
+      {([1, 2, 3] as const).map((d) => <option key={d} value={d}>{DIFICULTATI[d].nume}</option>)}
+    </select>
+  );
+}
+
+/** Dificultatea omului pe fază: insigna, iar cine poate modifica o schimbă pe loc. */
+function Dificultate({ a, c, m, aici, actiune, mic = false }: {
+  a: ComandaProd['alocari'][number]; c: ComandaProd; m: boolean; aici: string; actiune: (d: FormData) => Promise<void>; mic?: boolean;
+}) {
+  const d = DIFICULTATI[a.dificultate];
+  if (!m) return <span className={`insigna ${d.ton}`}>{d.nume}</span>;
+  return (
+    <form action={actiune} className={`in-rand dificultate-om ${mic ? 'mic' : ''}`}>
+      <input type="hidden" name="id" value={a.id} /><input type="hidden" name="numar" value={c.numar} /><input type="hidden" name="inapoi" value={aici} />
+      <select name="dificultate" defaultValue={String(a.dificultate)} aria-label={`Dificultatea pentru ${a.om} la ${a.faza}`} className={`ton-${d.ton}`}>
+        {([1, 2, 3] as const).map((x) => <option key={x} value={x}>{DIFICULTATI[x].nume}</option>)}
+      </select>
+      <button className="secundar" aria-label="Salvează dificultatea">✓</button>
+    </form>
   );
 }

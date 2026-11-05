@@ -1,13 +1,36 @@
-/* Clasamentul: un tabel pe operație / fază, cu podium și o bară cât de departe e fiecare de primul. */
-main.clasament .clasamente { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem; align-items: start; }
-main.clasament .tabel-clasament { border: 1px solid var(--linie); border-radius: .5rem; padding: .6rem .7rem; background: var(--card); }
+/* Clasamentul: un card pe operație / fază, cu podium și o bară cât de departe e fiecare de primul.
+   Desktop: trei coloane; tabletă: două; telefon: una, cu perioadele derulabile pe orizontală. */
+main.clasament .regula { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; margin: .4rem 0 .8rem; }
+main.clasament .clasamente { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+main.clasament .tabel-clasament { border: 1px solid var(--linie); border-radius: .5rem; padding: .6rem .7rem; background: var(--card); min-width: 0; }
 main.clasament .tabel-clasament h3 { margin: 0 0 .4rem; }
-main.clasament .tabel-clasament table { width: 100%; border-collapse: collapse; }
+main.clasament .tabel-clasament table { width: 100%; border-collapse: collapse; table-layout: auto; }
 main.clasament .tabel-clasament th, main.clasament .tabel-clasament td { padding: .3rem .4rem; border-bottom: 1px solid var(--linie); vertical-align: top; }
-main.clasament .tabel-clasament td.loc, main.clasament .tabel-clasament th.loc { width: 2.2rem; text-align: center; }
+main.clasament .tabel-clasament td.loc, main.clasament .tabel-clasament th.loc { width: 2rem; text-align: center; padding-left: 0; padding-right: 0; }
 main.clasament .tabel-clasament tr.podium td { font-weight: 600; }
-main.clasament .tabel-clasament .nr { text-align: right; font-variant-numeric: tabular-nums; }
+main.clasament .tabel-clasament .nr { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+main.clasament .tabel-clasament td:nth-child(2) { overflow-wrap: anywhere; }
 main.clasament .bara { height: 4px; margin-top: .25rem; background: color-mix(in srgb, var(--linie) 60%, transparent); border-radius: 2px; }
 main.clasament .bara span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
 main.clasament .fara-oameni { margin-top: 1.5rem; border: 1px dashed var(--galben, #c9a227); border-radius: .5rem; padding: .6rem .8rem; }
 main.clasament .fara-oameni ul { margin: .3rem 0 0; padding-left: 1.1rem; columns: 2 18rem; }
+main.clasament .perioada-aleasa input[type="date"] { min-width: 0; }
+
+@media (max-width: 1100px) {
+  main.clasament .clasamente { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  main.clasament h1 { font-size: 1.5rem; }
+  main.clasament .clasamente { grid-template-columns: 1fr; gap: .75rem; }
+  main.clasament .filtre.perioade { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: .3rem; }
+  main.clasament .filtre.perioade .buton { flex: 0 0 auto; }
+  main.clasament .perioada-aleasa { display: grid; grid-template-columns: auto 1fr; gap: .4rem .5rem; align-items: center; }
+  main.clasament .perioada-aleasa button { grid-column: 1 / -1; }
+  main.clasament .tabel-clasament { padding: .5rem; }
+  main.clasament .tabel-clasament th, main.clasament .tabel-clasament td { padding: .35rem .3rem; font-size: .92rem; }
+  main.clasament .fara-oameni ul { columns: 1; }
+}
+@media (max-width: 420px) {
+  /* Pe telefoanele înguste, coloana „din câte" se ascunde: rămân locul, omul, punctele și bucățile. */
+  main.clasament .tabel-clasament .cate { display: none; }
+}

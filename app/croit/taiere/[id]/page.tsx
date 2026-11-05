@@ -4,12 +4,13 @@ import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import {
   corecteaza, fisaTaiere, incepe, materialeCroite, OPERATII, salveazaMaterialCroit, salveazaTaierea, scoateDinTaiere, scrieMetri,
-  stergeMaterialCroit, termina, type FisaTaiere, type MaterialCroit, type Operatie, type OperatieScrisa,
+  schimbaDificultateTaiere, stergeMaterialCroit, termina, type FisaTaiere, type MaterialCroit, type Operatie, type OperatieScrisa,
 } from '../../../lib/croitTaiere';
 import { cantitate, numarDinFormular } from '../../../lib/format';
 import { motiveCroit } from '../../../lib/planificare';
 import { cere, cereOperatorCroit, lucreazaLaCroit } from '../../../lib/sesiune';
 import { poate } from '../../../lib/acces';
+import { DIFICULTATI, dificultateDin } from '../../../lib/dificultate';
 import '../../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -118,6 +119,13 @@ export default async function FisaTaierePagina({
     await stergeMaterialCroit(id, String(date.get('material')));
     laMateriale(id);
   }
+  async function dificultate(date: FormData) {
+    'use server';
+    await cereOperatorCroit();
+    await schimbaDificultateTaiere(id, dificultateDin(date.get('dificultate')));
+    revalidatePath(`/croit/taiere/${id}`);
+    inapoi(id);
+  }
   async function scoate(date: FormData) {
     'use server';
     await cere('croit', 'modifica');
@@ -182,6 +190,14 @@ export default async function FisaTaierePagina({
         <strong>{deschise.length ? 'în lucru' : 'croită'}</strong>
         {' · '}<a href={`/croit/fisa?taiere=${id}`} target="_blank" rel="noopener">Printează foaia de croit</a>
       </p>
+      <form action={dificultate} className="in-rand dificultate-taiere">
+        <span className="slab">Dificultate (contează în clasament):</span>
+        <select name="dificultate" defaultValue={String(f.taiere.dificultate)} disabled={!lucreaza} aria-label="Gradul de dificultate al taierii">
+          {([1, 2, 3] as const).map((d) => <option key={d} value={d}>{DIFICULTATI[d].nume}</option>)}
+        </select>
+        {lucreaza && <button className="secundar">Salvează</button>}
+        <span className={`insigna ${DIFICULTATI[f.taiere.dificultate].ton}`}>{DIFICULTATI[f.taiere.dificultate].nume} · ×{DIFICULTATI[f.taiere.dificultate].pondere}</span>
+      </form>
       {eroare && <p className="eroare">{eroare}</p>}
 
       {deschise.length > 0 ? (

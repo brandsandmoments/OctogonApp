@@ -9,7 +9,7 @@ import Cauta from '../Cauta';
 import { adaugaZile, luni } from '../lib/perioade';
 import {
   adaugaAlocareComanda, aduLaUrgenta, cautaComenziDeschise, comenziInProductie, daInLucruCuloare, planPeSaptamani,
-  iesitDinLucruCuloare, iesitPartialCuloare, inapoiInLucruCuloare, ateliereExternalizare, externalizeaza, salveazaTimpOameni, scoateUrgenta, stergeAlocareComanda, STADII_PLAN,
+  iesitDinLucruCuloare, iesitPartialCuloare, inapoiInLucruCuloare, ateliereExternalizare, externalizeaza, salveazaTimpOameni, schimbaDificultateAlocare, scoateUrgenta, stergeAlocareComanda, STADII_PLAN,
   type ComandaPlan, type CuloarePlan, type StadiuPlan,
 } from '../lib/productieComenzi';
 import { iesitGata, transeSimple } from '../lib/banda';
@@ -18,6 +18,7 @@ import { parametriTimp } from '../lib/parametriTimp';
 import './productie.css';
 import FileProductie from './FileProductie';
 import CineLucreaza from './CineLucreaza';
+import { dificultateDin } from '../lib/dificultate';
 import ComandaPliabila from './ComandaPliabila';
 
 const zi = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', timeZone: 'UTC' });
@@ -173,7 +174,13 @@ export default async function Plan({ searchParams, mostre = false }: { searchPar
     'use server';
     await cere(['planificare', 'banda'], 'modifica');
     inapoiLaComanda(date, await adaugaAlocareComanda(String(date.get('comanda')), String(date.get('faza') ?? ''),
-      String(date.get('utilaj') ?? ''), String(date.get('om') ?? '')));
+      String(date.get('utilaj') ?? ''), String(date.get('om') ?? ''), dificultateDin(date.get('dificultate'))));
+  }
+  async function dificultateOm(date: FormData) {
+    'use server';
+    await cere(['planificare', 'banda'], 'modifica');
+    await schimbaDificultateAlocare(String(date.get('id')), dificultateDin(date.get('dificultate')));
+    inapoiLaComanda(date);
   }
   async function sterge(date: FormData) {
     'use server';
@@ -193,7 +200,7 @@ export default async function Plan({ searchParams, mostre = false }: { searchPar
     const p = prod.get(c.comanda_id);
     return p && (
       <CineLucreaza c={p} m={m} iese={st} aici={aici} oameni={oameni} masini={masini.map((x) => x.nume)} orePeZi={param.orePeZi} zi={azi()}
-        transe={inLucru.filter((t) => t.comanda === c.numar)} timp={timp} aloca={aloca} sterge={sterge} aIesit={aIesit} />
+        transe={inLucru.filter((t) => t.comanda === c.numar)} timp={timp} aloca={aloca} sterge={sterge} aIesit={aIesit} dificultate={dificultateOm} />
     );
   };
 
