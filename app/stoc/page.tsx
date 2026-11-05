@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { cere, poateModifica } from '../lib/sesiune';
 import { redirect } from 'next/navigation';
 import { cantitate, numarDinFormular } from '../lib/format';
-import { adaugaMiscare, familii, listaStoc, materialeSelect, modelePentruRezervare } from '../lib/stoc';
+import { adaugaMiscare, familii, listaStoc, materialeSelect } from '../lib/stoc';
 import '../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -17,10 +17,6 @@ async function intrare(date: FormData) {
     materialId: s('material'), tip: 'intrare', cantitate: numarDinFormular(date.get('cantitate')) ?? 0,
     data: s('data'), furnizor: s('furnizor'), document: s('document'),
     pret: numarDinFormular(date.get('pret')), observatii: s('observatii'),
-    // Materialul scris de mână, dacă nu e în listă.
-    nou: { tip: s('nou_tip') === 'accesoriu' ? 'accesoriu' : 'materie_prima', familie: s('nou_familie'), culoare: s('nou_culoare'), unitate: s('nou_unitate') },
-    rezervaModelId: s('model') || undefined,
-    rezervaCantitate: s('rezerva').trim() ? numarDinFormular(date.get('rezerva')) ?? -1 : null,
   });
   redirect(eroare ? `/stoc?eroare=${encodeURIComponent(eroare)}` : `/stoc?ok=1`);
 }
@@ -34,8 +30,8 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('materiale');
   const f = await searchParams;
-  const [randuri, fam, materiale, modele] = await Promise.all([
-    listaStoc({ ...f, lipsa: f.lipsa === '1' }), familii(), materialeSelect(), modelePentruRezervare(),
+  const [randuri, fam, materiale] = await Promise.all([
+    listaStoc({ ...f, lipsa: f.lipsa === '1' }), familii(), materialeSelect(),
   ]);
   const deCumparat = randuri.filter((r) => Number(r.de_aprovizionat) > 0).length;
 
@@ -52,46 +48,19 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
         <form action={intrare} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
           <label className="lat">
             <span>Material</span>
-            <select name="material" defaultValue="">
-              <option value="">— alege din listă sau scrie-l mai jos —</option>
+            <select name="material" required defaultValue="">
+              <option value="">—</option>
               {materiale.map((m) => (
                 <option key={m.id} value={m.id}>{m.denumire} · {m.cod} ({m.unitate})</option>
               ))}
             </select>
           </label>
-          <details className="lat material-nou">
-            <summary>Materialul nu e în listă? Scrie-l de mână</summary>
-            <div className="campuri-material-nou">
-              <label><span>Tip</span>
-                <select name="nou_tip" defaultValue="materie_prima">
-                  <option value="materie_prima">Materie primă</option>
-                  <option value="accesoriu">Accesoriu</option>
-                </select>
-              </label>
-              <label><span>Familie</span><input name="nou_familie" list="familii-material" placeholder="ex. Catifea, Captuseala, Nasturi" /></label>
-              <datalist id="familii-material">{fam.map((x) => <option key={x} value={x} />)}</datalist>
-              <label><span>Culoare</span><input name="nou_culoare" placeholder="ex. Bordo" /></label>
-              <label><span>Unitate</span>
-                <select name="nou_unitate" defaultValue="m">
-                  {['m', 'kg', 'buc', 'set', 'm2'].map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </label>
-            </div>
-            <p className="slab">Se creează „FAMILIE · CULOARE" (ex. CATIFEA · BORDO), cu cod MP-/AC-, și intră în stoc cu cantitatea de mai jos.</p>
-          </details>
           <label><span>Cantitate</span><input name="cantitate" inputMode="decimal" required /></label>
           <label><span>Data</span><input name="data" type="date" /></label>
           <label><span>Furnizor</span><input name="furnizor" required /></label>
           <label><span>Document</span><input name="document" placeholder="factură / aviz" /></label>
           <label><span>Preț unitar (RON)</span><input name="pret" inputMode="decimal" /></label>
           <label className="lat"><span>Observații</span><input name="observatii" /></label>
-          <label><span>Pune deoparte pentru modelul</span>
-            <select name="model" defaultValue="">
-              <option value="">— pentru oricine (liber) —</option>
-              {modele.map((x) => <option key={x.id} value={x.id}>{x.nume}</option>)}
-            </select>
-          </label>
-          <label><span>Cât pui deoparte</span><input name="rezerva" inputMode="decimal" placeholder="gol = toată intrarea" /></label>
           <div className="actiuni"><button className="principal">Înregistrează intrarea</button></div>
         </fieldset></form>
       </details>
@@ -121,16 +90,15 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
             <tr>
               <th>Material</th>
               <th className="nr">Stoc</th>
-              <th className="nr" title="Ce mai e de croit din planificările active">Rezervat</th>
-              <th className="nr" title="Pus deoparte pentru modele (scade cu ce se croiește din el)">Pe modele</th>
-              <th className="nr" title="Stoc minus rezervat minus pus deoparte pe modele">Disponibil</th>
+              <th className="nr">Rezervat</th>
+              <th className="nr">Disponibil</th>
               <th className="nr">Neplanificat</th>
               <th className="nr">De aprovizionat</th>
             </tr>
           </thead>
           <tbody>
             {randuri.map((r) => {
-              const disponibil = Number(r.stoc) - Number(r.rezervat) - Number(r.pe_modele);
+              const disponibil = Number(r.stoc) - Number(r.rezervat);
               return (
                 <tr key={r.id}>
                   <td>
@@ -140,7 +108,6 @@ export default async function Stoc({ searchParams }: { searchParams: Promise<Cau
                   </td>
                   <td className="nr">{cantitate(r.stoc)} <span className="slab">{r.unitate}</span></td>
                   <td className="nr">{Number(r.rezervat) ? cantitate(r.rezervat) : '—'}</td>
-                  <td className="nr">{Number(r.pe_modele) ? <Link href={`/stoc/${r.id}#pe-modele`}>{cantitate(r.pe_modele)}</Link> : '—'}</td>
                   <td className={`nr ${disponibil < 0 ? 'lipsa' : ''}`}>{cantitate(disponibil)}</td>
                   <td className="nr">{Number(r.neplanificat) ? cantitate(r.neplanificat) : '—'}</td>
                   <td className="nr">

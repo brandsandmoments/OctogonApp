@@ -13,7 +13,6 @@ export type RandStoc = {
   rezervat: string;
   neplanificat: string;
   de_aprovizionat: string;
-  pe_modele: string;       // ce rămâne pus deoparte pentru modele (rezervare_model, minus consumul lor)
 };
 
 export type FiltreStoc = { tip?: string; familie?: string; cauta?: string; lipsa?: boolean };
@@ -26,30 +25,10 @@ export type FiltreStoc = { tip?: string; familie?: string; cauta?: string; lipsa
  *   neplanificat  — ce cer comenzile deschise și încă n-a intrat în planificare × consum
  *   de aprovizionat — rezervat + neplanificat, minus stocul
  */
-/**
- * Rezervările pe modele, cu ce a rămas din fiecare: cantitatea pusă deoparte minus ce s-a consumat
- * la croit din materialul ăla pe produsele modelului, de la rezervare încoace.
- */
-const REZERVARI_MODEL = `
-  SELECT rm.id, rm.material_id, rm.model_id, rm.cantitate, rm.observatii, rm.creat_la, rm.creat_de,
-         coalesce((SELECT -sum(ms.cantitate) FROM miscare_stoc ms
-                     JOIN lot_croit lc ON lc.id = ms.lot_id JOIN planificare pl ON pl.id = lc.planificare_id
-                     JOIN comanda_linie cl ON cl.id = pl.linie_id JOIN produs p ON p.id = cl.produs_id
-                    WHERE ms.material_id = rm.material_id AND ms.tip = 'consum_croit' AND p.model_id = rm.model_id
-                      AND ms.creat_la >= rm.creat_la), 0) AS consumat,
-         greatest(rm.cantitate - coalesce((SELECT -sum(ms.cantitate) FROM miscare_stoc ms
-                     JOIN lot_croit lc ON lc.id = ms.lot_id JOIN planificare pl ON pl.id = lc.planificare_id
-                     JOIN comanda_linie cl ON cl.id = pl.linie_id JOIN produs p ON p.id = cl.produs_id
-                    WHERE ms.material_id = rm.material_id AND ms.tip = 'consum_croit' AND p.model_id = rm.model_id
-                      AND ms.creat_la >= rm.creat_la), 0), 0) AS ramas
-    FROM rezervare_model rm`;
-
 export async function listaStoc(f: FiltreStoc): Promise<RandStoc[]> {
   return interogare<RandStoc>(
     `WITH rezervat AS (
          SELECT material_id, sum(rezervat) AS q FROM rezervare_material GROUP BY material_id),
-     pe_modele AS (
-         SELECT material_id, sum(ramas) AS q FROM (${REZERVARI_MODEL}) x GROUP BY material_id),
      planificat AS (
          SELECT linie_id, marime_id, cantitate AS q FROM planificat_pe_pozitie),
      neplanificat AS (
@@ -68,13 +47,11 @@ export async function listaStoc(f: FiltreStoc): Promise<RandStoc[]> {
             coalesce(r.q, 0)::numeric(12,3)::text AS rezervat,
             coalesce(n.q, 0)::numeric(12,3)::text AS neplanificat,
             greatest(coalesce(r.q, 0) + coalesce(n.q, 0) - s.stoc, 0)
-              ::numeric(12,3)::text AS de_aprovizionat,
-            coalesce(pm.q, 0)::numeric(12,3)::text AS pe_modele
+              ::numeric(12,3)::text AS de_aprovizionat
        FROM material m
        JOIN stoc_material s  ON s.material_id = m.id
        LEFT JOIN rezervat r  ON r.material_id = m.id
        LEFT JOIN neplanificat n ON n.material_id = m.id
-       LEFT JOIN pe_modele pm ON pm.material_id = m.id
       WHERE m.activ
         AND ($1::text IS NULL OR m.tip::text = $1)
         AND ($2::text IS NULL OR m.familie = $2)
@@ -162,15 +139,8 @@ export async function fisaMaterial(id: string): Promise<FisaMaterial | null> {
   });
 }
 
-/** Un material scris de mână la intrare, când nu e în listă: se creează odată cu intrarea. */
-export type MaterialNou = { tip: 'materie_prima' | 'accesoriu'; familie: string; culoare: string; unitate: string };
-
 export type IntrareNoua = {
   materialId: string;
-  nou?: MaterialNou;
-  // Pus deoparte pentru un model, din cantitatea intrată (toată, dacă nu se spune alta).
-  rezervaModelId?: string;
-  rezervaCantitate?: number | null;
   tip: 'intrare' | 'iesire' | 'retur_furnizor';
   cantitate: number;
   data: string;
@@ -187,14 +157,10 @@ export type IntrareNoua = {
  * o intrare, și e mai ușor de găsit acum decât la inventar.
  */
 export async function adaugaMiscare(m: IntrareNoua): Promise<string | null> {
-  const nou = m.tip === 'intrare' && !m.materialId && m.nou && (m.nou.familie.trim() || m.nou.culoare.trim()) ? m.nou : null;
-  if (!m.materialId && !nou) return 'Alege materialul (sau scrie unul nou: familia și culoarea).';
+  if (!m.materialId) return 'Alege materialul.';
   if (!(m.cantitate > 0)) return 'Cantitatea trebuie să fie mai mare ca zero.';
   if (m.tip === 'intrare' && !m.furnizor.trim()) return 'Scrie furnizorul.';
-  if (m.rezervaModelId && m.rezervaCantitate != null && !(m.rezervaCantitate > 0)) return 'Cantitatea pusă deoparte trebuie să fie mai mare ca zero.';
-  if (m.rezervaModelId && (m.rezervaCantitate ?? m.cantitate) > m.cantitate) return 'Nu se poate pune deoparte mai mult decât a intrat.';
   return caFirma(firmaCurenta(), async (c) => {
-    if (nou) m.materialId = await creeazaMaterial(c, nou);
     if (m.tip !== 'intrare') {
       // Blocăm materialul cât verificăm stocul, ca două ieșiri simultane să nu treacă amândouă.
       await c.query(`SELECT 1 FROM material WHERE id = $1 FOR UPDATE`, [m.materialId]);
@@ -209,80 +175,8 @@ export async function adaugaMiscare(m: IntrareNoua): Promise<string | null> {
       [m.materialId, m.tip, m.tip === 'intrare' ? m.cantitate : -m.cantitate, m.data,
        m.furnizor.trim(), m.document.trim(), m.pret, m.observatii.trim()],
     );
-    if (m.tip === 'intrare' && m.rezervaModelId) {
-      await c.query(
-        `INSERT INTO rezervare_model (firma_id, material_id, model_id, cantitate, observatii) VALUES (firma_curenta(), $1, $2, $3, $4)`,
-        [m.materialId, m.rezervaModelId, m.rezervaCantitate ?? m.cantitate, `la intrarea din ${m.data || 'azi'}${m.document.trim() ? `, ${m.document.trim()}` : ''}`]);
-    }
     return null;
   });
-}
-
-const slugCod = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
-
-/**
- * Creează materialul scris de mână, după obiceiul nomenclatorului: denumirea „FAMILIE · CULOARE",
- * codul MP- (materie primă) sau AC- (accesoriu) cu familia și culoarea, culoarea din nomenclator.
- */
-async function creeazaMaterial(c: import('pg').PoolClient, n: MaterialNou): Promise<string> {
-  const familie = n.familie.trim().replace(/\s+/g, ' ');
-  const culoare = n.culoare.trim().replace(/\s+/g, ' ');
-  const denumire = [familie.toUpperCase(), culoare.toUpperCase()].filter(Boolean).join(' · ');
-  const { rows: [existent] } = await c.query<{ id: string }>(`SELECT id FROM material WHERE lower(denumire) = lower($1) AND tip = $2 LIMIT 1`, [denumire, n.tip]);
-  if (existent) return existent.id;
-  const baza = `${n.tip === 'accesoriu' ? 'AC' : 'MP'}-${slugCod([familie, culoare].filter(Boolean).join(' '))}`.slice(0, 50);
-  const { rows: [{ cod }] } = await c.query<{ cod: string }>(
-    `SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM material WHERE cod = $1) THEN $1
-                 ELSE $1 || '-' || (SELECT count(*) + 1 FROM material WHERE cod LIKE $1 || '%') END AS cod`, [baza]);
-  let culoareId: string | null = null;
-  if (culoare) {
-    culoareId = (await c.query<{ id: string }>(`SELECT id FROM culoare WHERE lower(nume) = lower($1) LIMIT 1`, [culoare])).rows[0]?.id
-      ?? (await c.query<{ id: string }>(`INSERT INTO culoare (firma_id, nume) VALUES (firma_curenta(), $1) RETURNING id`, [culoare])).rows[0].id;
-  }
-  const unitate = ['m', 'kg', 'buc', 'set', 'm2'].includes(n.unitate) ? n.unitate : 'm';
-  const { rows: [mat] } = await c.query<{ id: string }>(
-    `INSERT INTO material (firma_id, tip, cod, denumire, culoare_id, unitate, familie)
-     VALUES (firma_curenta(), $1, $2, $3, $4, $5, nullif($6, '')) RETURNING id`,
-    [n.tip, cod, denumire, culoareId, unitate, familie]);
-  return mat.id;
-}
-
-export type RezervareModel = { id: string; model: string; brand: string; cantitate: number; consumat: number; ramas: number; observatii: string | null; creat_la: string; creat_de: string | null };
-
-/** Rezervările pe modele ale unui material, cu ce s-a consumat și ce a rămas pus deoparte. */
-export async function rezervariMaterial(materialId: string): Promise<RezervareModel[]> {
-  return interogare<RezervareModel>(
-    `SELECT r.id, mo.denumire AS model, b.nume AS brand, r.cantitate::float AS cantitate, r.consumat::float AS consumat, r.ramas::float AS ramas,
-            r.observatii, to_char(r.creat_la AT TIME ZONE 'Europe/Bucharest', 'DD.MM.YYYY') AS creat_la, u.nume AS creat_de
-       FROM (${REZERVARI_MODEL}) r JOIN model mo ON mo.id = r.model_id JOIN brand b ON b.id = mo.brand_id
-       LEFT JOIN utilizator u ON u.id = r.creat_de
-      WHERE r.material_id = $1 ORDER BY r.creat_la DESC`, [materialId]);
-}
-
-/** Pune deoparte, din stocul materialului, o cantitate pentru un model (cât e liber în stoc). */
-export async function rezervaPentruModel(materialId: string, modelId: string, q: number, observatii: string): Promise<string | null> {
-  if (!modelId) return 'Alege modelul.';
-  if (!(q > 0)) return 'Cantitatea trebuie să fie mai mare ca zero.';
-  return caFirma(firmaCurenta(), async (c) => {
-    await c.query(`SELECT 1 FROM material WHERE id = $1 FOR UPDATE`, [materialId]);
-    const { rows: [{ stoc, pus }] } = await c.query<{ stoc: number; pus: number }>(
-      `SELECT (SELECT stoc FROM stoc_material WHERE material_id = $1)::float AS stoc,
-              coalesce((SELECT sum(ramas) FROM (${REZERVARI_MODEL}) x WHERE x.material_id = $1), 0)::float AS pus`, [materialId]);
-    if (q > stoc - pus) return `Liber în stoc sunt doar ${cantitate(String(Math.max(stoc - pus, 0)))}: restul e deja pus deoparte pentru alte modele.`;
-    await c.query(`INSERT INTO rezervare_model (firma_id, material_id, model_id, cantitate, observatii) VALUES (firma_curenta(), $1, $2, $3, nullif($4, ''))`,
-      [materialId, modelId, q, observatii.trim()]);
-    return null;
-  });
-}
-
-export async function stergeRezervareModel(id: string): Promise<void> {
-  await interogare(`DELETE FROM rezervare_model WHERE id = $1`, [id]);
-}
-
-/** Modelele, cu brandul, pentru alegerea celui pentru care se pune deoparte materialul. */
-export async function modelePentruRezervare(): Promise<{ id: string; nume: string }[]> {
-  return interogare<{ id: string; nume: string }>(
-    `SELECT mo.id, b.nume || ' · ' || mo.denumire AS nume FROM model mo JOIN brand b ON b.id = mo.brand_id WHERE mo.activ ORDER BY b.nume, mo.denumire`);
 }
 
 export async function materialeSelect(): Promise<{ id: string; tip: string; cod: string; denumire: string; unitate: string }[]> {
