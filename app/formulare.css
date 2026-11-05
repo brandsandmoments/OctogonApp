@@ -209,3 +209,13 @@ section.materiale-croite .sterge-material { margin-top: .5rem; }
 section.materiale-croite details.material-nou > summary { display: inline-block; cursor: pointer; list-style: none; margin-bottom: .6rem; }
 section.materiale-croite details.material-nou > summary::-webkit-details-marker { display: none; }
 section.materiale-croite table.grila-material .marimi-croit label { position: relative; }
+
+/* Stoc: material scris de mână la intrare; pus deoparte pe modele. */
+details.material-nou { border: 1px dashed var(--linie); border-radius: .4rem; padding: .4rem .6rem; }
+details.material-nou > summary { cursor: pointer; font-size: .9rem; }
+details.material-nou .campuri-material-nou { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-top: .4rem; }
+section.pe-modele { margin: 1rem 0; }
+section.pe-modele h2 { margin-top: 0; }
+section.pe-modele table { width: 100%; margin-bottom: .6rem; }
+form.rezerva-model { align-items: center; }
+form.rezerva-model .principal { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
