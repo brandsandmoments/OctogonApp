@@ -87,6 +87,7 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
       { href: '/productie', nume: 'Producție', ce: 'planul pe săptămâni: ce intră în lucru, reprioritizare, cine lucrează, ce a ieșit gata', zona: ['planificare', 'banda'], alte: ['/banda'] },
       { href: '/calculator', nume: 'Calculator timp', ce: 'cât durează un lot: din minutele pe bucată și câți operatori, zile lucrătoare și ziua de gata', zona: ['comenzi', 'planificare', 'banda', 'centralizator', 'kam', 'croit'] },
       { href: '/banda/oameni', nume: 'Oameni producție', ce: 'personalul pe funcții: operatori, alimentator, control, călcat, CTC, croit', zona: 'banda' },
+      { href: '/banda/clasament', nume: 'Clasament', ce: 'cine ce a făcut, în bucăți: croit pe operații, producție pe faze', zona: ['banda', 'planificare', 'croit'] },
     ],
     si: ['/necesar', '/planificare'],
   },
