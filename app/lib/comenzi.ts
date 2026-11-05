@@ -109,12 +109,12 @@ export async function creeazaComanda(cmd: ComandaNoua): Promise<RezultatComanda>
 
   try {
     return await caFirma(firmaCurenta(), async (c) => {
-      // Numărul îl dă aplicația: psf-ms-26-noi-4 — tip, brand, anul și luna lansării,
+      // Numărul îl dă aplicația: psf-ms-26-noi-4 — tip (mst la mostre), brand, anul și luna lansării,
       // nr. de ordine în luna aceea, pe tip și brand. Blocarea ține pe loc a doua
       // comandă salvată în aceeași clipă, ca să nu primească același număr.
       const { rows: [{ prefix }] } = await c.query<{ prefix: string }>(
         `SELECT lower($1) || '-' || b.cod || '-' || to_char($3::date, 'YY') || '-' || luna_scurta($3::date) || '-' AS prefix
-           FROM brand b WHERE b.id = $2`, [cmd.tip, cmd.brandId, cmd.dataLansare]);
+           FROM brand b WHERE b.id = $2`, [cmd.origine === 'mostra' ? 'MST' : cmd.tip, cmd.brandId, cmd.dataLansare]);
       if (!prefix) throw new FaraCodBrand();
       await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [prefix]);
       const { rows: [{ numar }] } = await c.query<{ numar: string }>(

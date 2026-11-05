@@ -74,6 +74,8 @@ export const SECTIUNI: { nume: string; ecrane: Ecran[]; si?: string[] }[] = [
     ecrane: [
       { href: '/comenzi', nume: 'PSF și PSC', ce: 'comenzile date: punere pe stoc din forecast și din comanda clientului', zona: 'comenzi' },
       { href: '/comenzi/noua', nume: 'Comandă nouă', ce: 'PSF sau PSC, cu grila de mărimi', zona: 'comenzi', nivel: 'modifica' },
+      // Mostrele le vede oricine lucrează în aplicație, în orice zonă.
+      { href: '/mostre', nume: 'Mostre', ce: 'toate mostrele, de la croit până în depozit (mst-…)', zona: ['comenzi', 'centralizator', 'kam', 'necesar', 'planificare', 'croit', 'banda', 'receptie', 'materiale', 'dezvoltare', 'expediere', 'aprobare', 'retete', 'financiar'] },
       { href: '/comenzi/aprobare', nume: 'De aprobat', ce: 'PSF-urile și PSC-urile date de KAM-i: aprobă sau respinge', zona: 'aprobare', nivel: 'modifica' },
     ],
   },

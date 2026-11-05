@@ -132,6 +132,7 @@ export async function centralizator(f: Filtre): Promise<RandCentralizator[]> {
         AND ($3::text IS NULL OR c.numar ILIKE '%' || $3 || '%' OR p.denumire ILIKE '%' || $3 || '%'
                               OR p.cod_sku ILIKE '%' || $3 || '%')
         AND ($4 OR c.stare NOT IN ('inchisa', 'anulata'))
+        AND c.origine <> 'mostra'   -- mostrele nu sunt stoc: au pagina lor (Mostre)
       ORDER BY CASE WHEN $5 THEN coalesce(mo.denumire, p.denumire) END, c.prioritate, c.data_lansare, c.numar, p.denumire, m.ordine`,
     [f.tip || null, f.brand || null, f.cauta?.trim() || null, Boolean(f.toate), Boolean(f.peModel)],
   );

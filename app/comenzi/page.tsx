@@ -75,6 +75,7 @@ export default async function Comenzi({ searchParams }: { searchParams: Promise<
         {(Object.keys(TIPURI) as (keyof typeof TIPURI)[]).map((t) => (
           <Link key={t} href={`/comenzi?tip=${t}${f.grupare ? `&grupare=${f.grupare}` : ''}`} className={t === tip ? 'activ' : ''}>{t}</Link>
         ))}
+        <Link href="/mostre">Mostre</Link>
       </nav>
       <p className="sumar">
         {TIPURI[tip]} · {lista.length} comenzi{f.toate === '1' ? '' : ' deschise'} ·{' '}

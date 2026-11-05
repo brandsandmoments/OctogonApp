@@ -288,3 +288,7 @@ details.schimba-termen form { margin-top: .3rem; gap: .3rem; }
 .adu-din-shopify { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .adu-din-shopify .mesaj-ok, .adu-din-shopify .eroare { margin: 0; font-size: .85rem; }
 p.sus-comanda { max-width: 72rem; margin: .8rem auto 0; padding: 0 1rem; }
+/* Mostre: mutarea pe alt brand, sub numele brandului. */
+details.schimba-brand { margin-top: .2rem; }
+details.schimba-brand > summary { cursor: pointer; font-size: .8rem; text-decoration: underline dotted; }
+details.schimba-brand form { margin-top: .3rem; gap: .3rem; }

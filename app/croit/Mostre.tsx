@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Termen } from '../Insigne';
 import { adaugaZile } from '../lib/perioade';
 import { azi, numarDinFormular, potriveste } from '../lib/format';
 import { daMostraLaCroit, mostreSiComenziCroit, nomenclatoareMostre, ORIGINI, type OrigineCroit } from '../lib/mostre';
 import { poate, type Cine } from '../lib/acces';
 import { cere, utilizatorCurent } from '../lib/sesiune';
 import VariatiiMostra from './VariatiiMostra';
+import ListaMostre from '../mostre/ListaMostre';
 
 /** Cine dă mostre și comenzi de croit: cine modifică la croit (șefa de croit) sau la dezvoltare produs. */
 const poateDa = (u: Cine) => poate(u, 'croit', 'modifica') || poate(u, 'dezvoltare', 'modifica');
@@ -14,7 +14,7 @@ const poateDa = (u: Cine) => poate(u, 'croit', 'modifica') || poate(u, 'dezvolta
 /**
  * „Mostre": șefa de croit și dezvoltarea produsului își dau singure la croit o mostră sau
  * o comandă de croit (ceva ce nu era pe listă) — produsul ales din listă sau scris de mână,
- * cu culoarea și mărimile. Devine o comandă PSF internă, fără KAM: apare în „Rămas de croit"
+ * cu culoarea și mărimile. Mostra are numărul ei (mst-…), comanda de croit e un PSF intern, fără KAM: apar în „Rămas de croit"
  * (cu „Dă la croit și croiește acum" se deschide direct acolo) și apoi în producție.
  * Dedesubt, mostrele și comenzile date așa, cu cât s-a croit și cât a ieșit din lucru.
  */
@@ -93,36 +93,8 @@ export default async function Mostre({ cauta, ok }: { cauta?: string; ok?: strin
       )}
 
       <h2>Mostre și comenzi de croit</h2>
-      {lista.length === 0 ? <p className="slab">Nicio mostră dată încă.</p> : (
-        <div className="tabel-derulant">
-          <table className="centralizator">
-            <thead><tr><th>Comandă</th><th>Ce</th><th>Produs</th><th>Mărimi</th><th className="nr">Cerut</th><th className="nr">Croit</th>
-              <th className="nr">În lucru</th><th className="nr">Ieșit</th><th>Gata până la</th><th>Dată de</th><th /></tr></thead>
-            <tbody>
-              {lista.map((x) => (
-                <tr key={x.comanda_id}>
-                  <td><strong>{x.numar}</strong></td>
-                  <td><span className={`insigna ${x.origine === 'mostra' ? 'violet' : 'albastru'}`}>{ORIGINI[x.origine]}</span></td>
-                  <td>{x.produs}{x.din_aplicatie && <> <span className="insigna galben" title="Scris în aplicație, încă nu e în Shopify">nou, nu e în Shopify</span></>}
-                    {x.observatii && <div className="slab">{x.observatii}</div>}</td>
-                  <td className="slab">{x.marimi}</td>
-                  <td className="nr"><strong>{x.cerut}</strong></td>
-                  <td className="nr">{x.croit || '—'}</td>
-                  <td className="nr">{Math.max(0, x.dat - x.gata) || '—'}</td>
-                  <td className="nr">{x.gata || '—'}</td>
-                  <td><Termen data={x.data_ceruta} gata={x.gata >= x.cerut} /></td>
-                  <td className="slab">{x.creat_de ?? '—'} · {x.creat_la}</td>
-                  <td>
-                    {x.croit < x.cerut
-                      ? <Link href={`/croit?vedere=ramas&cauta=${encodeURIComponent(x.numar)}`} className="buton">Croiește</Link>
-                      : <Link href={`/productie/mostre?cauta=${encodeURIComponent(x.numar)}`} className="buton">În producție</Link>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <p className="slab">Toate mostrele, pentru toată lumea: <Link href="/mostre">Mostre</Link>.</p>
+      <ListaMostre lista={lista} branduri={branduri} schimba={m} aici="/croit?vedere=mostre" />
     </>
   );
 }
