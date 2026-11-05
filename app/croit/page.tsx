@@ -5,14 +5,14 @@ import Mostre from './Mostre';
 import { DIFICULTATI, dificultateDin } from '../lib/dificultate';
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
-import { croiesteDirect, inchideComanda, loturiCroite, oameniCroit, OPERATII, ramasDeCroit, taieriLaCroit, type LotCroit, type Operatie, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
-import { numarDinFormular } from '../lib/format';
+import { croiesteDirect, inchideComanda, loturiCroite, oameniCroit, OPERATII, ramasDeCroit, saptamanaDeCroit, taieriLaCroit, type LotCroit, type Operatie, type RamasDeCroit, type TaiereLaCroit, type VedereCroit } from '../lib/croitTaiere';
+import { azi, numarDinFormular } from '../lib/format';
 import { motiveCroit } from '../lib/planificare';
 import Cauta from '../Cauta';
 import Grupare from '../Grupare';
 import { potriveste } from '../lib/format';
 import Pliere from '../Pliere';
-import { grupareDinAdresa, perioada, type TipPerioada } from '../lib/perioade';
+import { grupareDinAdresa, luni, numeSaptamanaLucru, perioada, type TipPerioada } from '../lib/perioade';
 import { cere, poateModifica } from '../lib/sesiune';
 
 export const dynamic = 'force-dynamic';
@@ -244,10 +244,22 @@ async function Ramas({ cauta }: { cauta?: string }) {
   const lista = toate.filter((r) => potriveste(cauta, r.cod, r.comanda, r.produs, r.model));
   // Ce e pus deja într-o taiere, dar încă necroit: tot de croit, doar că se croiește din taierea lui.
   const puse = inTaieri.filter((t) => potriveste(cauta, t.cod, t.comenzi, t.model));
-  const peModel = new Map<string, RamasDeCroit[]>();
-  for (const r of lista) peModel.set(r.model_cheie, [...(peModel.get(r.model_cheie) ?? []), r]);
-  // În fiecare model, pe culori: comenzile aceleiași culori stau una lângă alta.
-  for (const [k, v] of peModel) peModel.set(k, [...v].sort((a, b) => a.produs.localeCompare(b.produs, 'ro') || (a.ordine ?? 0) - (b.ordine ?? 0)));
+  // Pe săptămâni, ca în Producție → Plan pe săptămâni (urgența, altfel termenul; ce a rămas din urmă e în
+  // săptămâna de acum), apoi, în fiecare săptămână, pe modele și, în model, pe culori.
+  const curenta = luni(azi());
+  const peSaptamani = new Map<string, RamasDeCroit[]>();
+  for (const r of lista) {
+    const { saptamana } = saptamanaDeCroit(r, curenta);
+    peSaptamani.set(saptamana, [...(peSaptamani.get(saptamana) ?? []), r]);
+  }
+  const saptamani = [...peSaptamani.keys()].sort();
+  const peModele = (randuri: RamasDeCroit[]) => {
+    const pm = new Map<string, RamasDeCroit[]>();
+    for (const r of randuri) pm.set(r.model_cheie, [...(pm.get(r.model_cheie) ?? []), r]);
+    for (const [k, v] of pm) pm.set(k, [...v].sort((a, b) => a.produs.localeCompare(b.produs, 'ro') || (a.ordine ?? 0) - (b.ordine ?? 0)));
+    return pm;
+  };
+  const modele = new Set(lista.map((r) => r.model_cheie)).size;
 
   async function stinge(date: FormData) {
     'use server';
@@ -281,7 +293,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
   return (
     <>
       <p className="sumar">
-        {lista.reduce((s, r) => s + r.disponibil, 0)} buc de croit · {lista.length} comenzi · {peModel.size} modele
+        {lista.reduce((s, r) => s + r.disponibil, 0)} buc de croit · {lista.length} comenzi · {modele} modele · {saptamani.length} {saptamani.length === 1 ? 'săptămână' : 'săptămâni'}
         {puse.length > 0 && <> · <strong>{puse.reduce((s, t) => s + t.cerut - t.croit, 0)} buc în {puse.length} {puse.length === 1 ? 'taiere începută' : 'taieri începute'}, încă necroite</strong></>}
       </p>
       {puse.length > 0 && (
@@ -318,12 +330,24 @@ async function Ramas({ cauta }: { cauta?: string }) {
       </p>
       {lista.length === 0 ? <p className="slab">{puse.length ? 'Tot ce e de croit e pus deja în taieri (mai sus).' : 'Nu a rămas nimic de croit.'}</p> : (
         <OameniCroit croit={om.oameni} altii={om.altii}>
+        {saptamani.map((sapt) => {
+          const dinSapt = peSaptamani.get(sapt)!;
+          const intarziate = dinSapt.filter((r) => saptamanaDeCroit(r, curenta).intarziata).length;
+          return (
+        <section key={sapt} className="saptamana-croit">
+          <h2>
+            {numeSaptamanaLucru(sapt)}
+            {sapt === curenta && <span className="slab"> · săptămâna asta</span>}
+            <span className="slab"> · {dinSapt.reduce((s, r) => s + r.disponibil, 0)} buc · {dinSapt.length} {dinSapt.length === 1 ? 'comandă' : 'comenzi'}</span>
+            {intarziate > 0 && <> <span className="insigna rosu">{intarziate} întârziate</span></>}
+            <a href={`/croit/fisa-saptamana?s=${sapt}`} target="_blank" rel="noopener" className="buton printeaza-saptamana">Printează săptămâna (A4)</a>
+          </h2>
         <div className="tabel-derulant">
           <table className="centralizator">
             <thead><tr><th>Comandă</th><th>Model</th><th>Termen</th><th>Produs</th><th>Rămas pe mărimi → tai acum</th><th className="nr">Rest</th><th /></tr></thead>
             <tbody>
-              {[...peModel].map(([cheie, randuri]) => {
-                const formular = `t-${cheie}`;
+              {[...peModele(dinSapt)].map(([cheie, randuri]) => {
+                const formular = `t-${sapt}-${cheie}`;
                 return (
                   <Fragment key={cheie}>
                     <tr className="grupa-model">
@@ -352,7 +376,7 @@ async function Ramas({ cauta }: { cauta?: string }) {
                         <td>
                           <Link href={`/planificare/${r.planificare_id}`}>{r.cod}</Link>{' '}
                           <span className="slab">{r.tip} · P{r.prioritate}</span>
-                          {r.saptamana && <> <span className="insigna albastru" title="săptămâna termenului, în planul din Producție">săpt. {r.saptamana.slice(5).split('-').reverse().join('.')}</span></>}
+                          {saptamanaDeCroit(r, curenta).intarziata && <> <span className="insigna rosu" title="Săptămâna lui din plan a trecut: e în săptămâna de acum">întârziată · săpt. {r.saptamana!.slice(5).split('-').reverse().join('.')}</span></>}
                           {r.stofa_lipsa && <> <span className="insigna galben" title="Stocul de stofă din aplicație nu ajunge, în ordinea priorității. Se poate croi oricum, dacă stofa e la croit.">stofă insuficientă</span></>}
                         </td>
                         <td>{r.model}</td>
@@ -415,6 +439,9 @@ async function Ramas({ cauta }: { cauta?: string }) {
             </tbody>
           </table>
         </div>
+        </section>
+          );
+        })}
         </OameniCroit>
       )}
     </>

@@ -1,0 +1,31 @@
+/* De croit pe săptămână: A4 culcat, pe modele, cu loc de scris observații. */
+main.fisa-saptamana { max-width: 297mm; margin: 0 auto; padding: 1rem; color: #000; background: #fff; font-size: 10pt; line-height: 1.2; }
+main.fisa-saptamana .bara-fisa { display: flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }
+main.fisa-saptamana .bara-fisa .principal { background: #1b1a17; color: #fff; border: 1px solid #1b1a17; border-radius: .35rem; padding: .4rem 1rem; font-weight: 600; cursor: pointer; }
+main.fisa-saptamana header { border: 2px solid #000; padding: .3rem .5rem; margin-bottom: .45rem; text-align: center; }
+main.fisa-saptamana h1 { margin: 0; font-size: 15pt; text-transform: uppercase; }
+main.fisa-saptamana header p { margin: .15rem 0 0; font-size: 9pt; }
+main.fisa-saptamana table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+main.fisa-saptamana th, main.fisa-saptamana td { border: 1px solid #000; padding: .15rem .3rem; text-align: center; vertical-align: middle; color: #000; height: 7.5mm; }
+main.fisa-saptamana th { background: #dbe9f2; font-size: 8.5pt; text-transform: uppercase; height: auto; }
+main.fisa-saptamana .st { text-align: left; }
+main.fisa-saptamana .mic { font-size: 8pt; }
+main.fisa-saptamana td.model-nume { font-weight: 700; font-size: 10.5pt; text-transform: uppercase; background: #f3f3f3; }
+main.fisa-saptamana tr.total-model td { font-weight: 700; background: #f0f0f0; }
+main.fisa-saptamana col.c-model { width: 12%; }
+main.fisa-saptamana col.c-culoare { width: 12%; }
+main.fisa-saptamana col.c-comanda { width: 11%; }
+main.fisa-saptamana col.c-marime { width: 4.2%; }
+main.fisa-saptamana col.c-total { width: 5.5%; }
+main.fisa-saptamana col.c-obs { width: auto; }
+main.fisa-saptamana .observatii-generale { border: 1px solid #000; min-height: 18mm; margin-top: .5rem; padding: .2rem .4rem; }
+main.fisa-saptamana .observatii-generale span { font-size: 9pt; font-weight: 700; text-transform: uppercase; }
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  .nu-print, .activitate, .banda-test { display: none !important; }
+  body { background: #fff; }
+  main.fisa-saptamana { max-width: none; padding: 0; }
+  main.fisa-saptamana th, main.fisa-saptamana td.model-nume, main.fisa-saptamana tr.total-model td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  main.fisa-saptamana tbody.model { break-inside: avoid; }
+  main.fisa-saptamana thead { display: table-header-group; }
+}

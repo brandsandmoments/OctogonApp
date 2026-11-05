@@ -300,3 +300,7 @@ form.dificultate-om { gap: .2rem; }
 form.dificultate-om select { font-size: .8rem; padding: .1rem .3rem; }
 form.dificultate-om.mic select { font-size: .75rem; }
 form.dificultate-om button { padding: 0 .4rem; }
+/* Croit · Rămas de croit pe săptămâni (ca în planul din Producție). */
+section.saptamana-croit { margin: 1.2rem 0 1.6rem; }
+section.saptamana-croit > h2 { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; border-bottom: 2px solid var(--accent-linie); padding-bottom: .3rem; }
+section.saptamana-croit > h2 .printeaza-saptamana { margin-left: auto; font-size: .85rem; font-weight: 600; }

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { cere, poateModifica } from '../../lib/sesiune';
 import { notFound, redirect } from 'next/navigation';
 import { cantitate, numarDinFormular } from '../../lib/format';
-import { adaugaMiscare, fisaMaterial } from '../../lib/stoc';
+import { adaugaMiscare, fisaMaterial, modelePentruRezervare, rezervaPentruModel, rezervariMaterial, stergeRezervareModel } from '../../lib/stoc';
 import '../../formulare.css';
 
 export const dynamic = 'force-dynamic';
@@ -28,10 +28,24 @@ export default async function FisaMagazie({
   // Cine doar vede are formularele, dar cu câmpurile și butoanele dezactivate.
   const m = await poateModifica('materiale');
   const [{ id }, { eroare }] = await Promise.all([params, searchParams]);
-  const fisa = await fisaMaterial(id);
+  const [fisa, peModele, modele] = await Promise.all([fisaMaterial(id), rezervariMaterial(id), modelePentruRezervare()]);
   if (!fisa) notFound();
   const { material, stoc, miscari, rezervari } = fisa;
   const rezervat = rezervari.reduce((s, r) => s + Number(r.rezervat), 0);
+  const pusDeoparte = peModele.reduce((s, r) => s + r.ramas, 0);
+  const disponibil = Number(stoc) - rezervat - pusDeoparte;
+
+  async function rezerva(date: FormData) {
+    'use server';
+    await cere('materiale', 'modifica');
+    inapoi(id, await rezervaPentruModel(id, String(date.get('model') ?? ''), numarDinFormular(date.get('cantitate')) ?? 0, String(date.get('observatii') ?? '')));
+  }
+  async function stergeRezervare(date: FormData) {
+    'use server';
+    await cere('materiale', 'modifica');
+    await stergeRezervareModel(String(date.get('id')));
+    inapoi(id, null);
+  }
 
   async function miscare(date: FormData) {
     'use server';
@@ -58,10 +72,48 @@ export default async function FisaMagazie({
       <dl className="cifre-birou">
         <div><dt>Stoc</dt><dd>{cantitate(stoc)} <span>{material.unitate}</span></dd></div>
         <div><dt>Rezervat</dt><dd>{cantitate(rezervat)}</dd></div>
-        <div className={Number(stoc) - rezervat < 0 ? 'lipsa' : ''}>
-          <dt>Disponibil</dt><dd>{cantitate(Number(stoc) - rezervat)}</dd>
+        <div><dt>Pe modele</dt><dd>{cantitate(pusDeoparte)}</dd></div>
+        <div className={disponibil < 0 ? 'lipsa' : ''}>
+          <dt>Disponibil</dt><dd>{cantitate(disponibil)}</dd>
         </div>
       </dl>
+
+      <section id="pe-modele" className="caseta pe-modele">
+        <h2>Pus deoparte pe modele</h2>
+        <p className="slab">O cantitate din stoc pusă deoparte pentru un model; restul rămâne liber. Ce rămâne scade singur cu ce se croiește din materialul ăsta pe modelul respectiv.</p>
+        {peModele.length > 0 && (
+          <table className="fara-fise">
+            <thead><tr><th>Model</th><th className="nr">Pus deoparte</th><th className="nr">Croit din el</th><th className="nr">Rămas</th><th>Când, cine</th><th /></tr></thead>
+            <tbody>
+              {peModele.map((r) => (
+                <tr key={r.id}>
+                  <td><strong>{r.model}</strong> <span className="slab">{r.brand}</span>{r.observatii && <div className="slab">{r.observatii}</div>}</td>
+                  <td className="nr">{cantitate(String(r.cantitate))} {material.unitate}</td>
+                  <td className="nr">{r.consumat ? cantitate(String(r.consumat)) : '—'}</td>
+                  <td className="nr"><strong>{cantitate(String(r.ramas))}</strong></td>
+                  <td className="slab">{r.creat_la}{r.creat_de && ` · ${r.creat_de}`}</td>
+                  <td>{m && (
+                    <form action={stergeRezervare}><input type="hidden" name="id" value={r.id} />
+                      <button className="secundar" aria-label={`Scoate rezervarea pentru ${r.model}`}>×</button></form>
+                  )}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {m && (
+          <form action={rezerva} className="filtre rezerva-model">
+            <select name="model" required defaultValue="" aria-label="Modelul">
+              <option value="">modelul</option>
+              {modele.map((x) => <option key={x.id} value={x.id}>{x.nume}</option>)}
+            </select>
+            <input name="cantitate" inputMode="decimal" required placeholder={`cât (${material.unitate})`} aria-label="Cantitatea pusă deoparte" />
+            <input name="observatii" placeholder="observații (opțional)" aria-label="Observații" />
+            <button className="principal">Pune deoparte</button>
+            <span className="slab">liber acum: {cantitate(String(Math.max(Number(stoc) - pusDeoparte, 0)))} {material.unitate}</span>
+          </form>
+        )}
+      </section>
 
       <form action={miscare} className="antet-comanda"><fieldset disabled={!m} className="fara-chenar">
         <label>

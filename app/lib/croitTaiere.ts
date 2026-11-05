@@ -853,3 +853,10 @@ export async function stergeMaterialCroit(taiereId: string, material: string): P
 export async function schimbaDificultateTaiere(taiereId: string, dificultate: 1 | 2 | 3): Promise<void> {
   await interogare(`UPDATE taiere SET dificultate = $2 WHERE id = $1`, [taiereId, dificultate]);
 }
+
+/**
+ * Săptămâna în care o comandă de croit e de intrat în lucru, ca în Producție → Plan pe săptămâni:
+ * a urgenței, altfel a termenului; ce a rămas din săptămâni trecute stă în săptămâna de acum.
+ */
+export const saptamanaDeCroit = (r: Pick<RamasDeCroit, 'saptamana'>, curenta: string): { saptamana: string; intarziata: boolean } =>
+  !r.saptamana || r.saptamana < curenta ? { saptamana: curenta, intarziata: Boolean(r.saptamana) } : { saptamana: r.saptamana, intarziata: false };

@@ -75,3 +75,10 @@ export function grupeaza<T>(lista: T[], zi: (r: T) => string | null, tip: TipPer
  */
 export const grupareDinAdresa = (g?: string, implicit: TipPerioada | '' = ''): TipPerioada | '' =>
   g === undefined || g === '' ? implicit : g in PERIOADE ? (g as TipPerioada) : '';
+
+const ziLuna = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+/** „2 – 6 noiembrie": săptămâna de lucru (luni – vineri) care începe în lunea dată. */
+export function numeSaptamanaLucru(l: string): string {
+  const v = adaugaZile(l, 4);
+  return l.slice(5, 7) === v.slice(5, 7) ? `${Number(l.slice(8))} – ${ziLuna(v)}` : `${ziLuna(l)} – ${ziLuna(v)}`;
+}
